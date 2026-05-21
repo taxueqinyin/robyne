@@ -55,12 +55,12 @@ class _MainPageState extends ConsumerState<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    final playerState = ref.watch(audioPlayerServiceProvider);
-
-    // Auto-show player when a song starts playing
-    if (playerState.currentSong != null) {
-      ref.read(playerVisibleProvider.notifier).state = true;
-    }
+    // Listen for song changes to auto-show player
+    ref.listen(audioPlayerServiceProvider, (prev, next) {
+      if (next.currentSong != null && prev?.currentSong?.id != next.currentSong?.id) {
+        ref.read(playerVisibleProvider.notifier).state = true;
+      }
+    });
 
     final pages = [
       const SearchPage(),
