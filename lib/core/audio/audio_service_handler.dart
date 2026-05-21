@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -66,11 +68,33 @@ class AudioServiceHandler extends BaseAudioHandler with SeekHandler {
       artUri: artUri != null ? Uri.parse(artUri) : null,
     ));
 
-    // Use Uri.file to properly encode the path (handles Chinese chars, spaces, etc.)
-    final uri = Uri.file(path);
-    final uriString = uri.toString();
-    print('Playing file URI: $uriString');
-    await _player.setUrl(uriString);
+    // Try playing with different URI formats
+    try {
+      // First try: use Uri.file which handles encoding
+      final uri = Uri.file(path, windows: true);
+      await _player.setUrl(uri.toString());
+    } catch (e) {
+      try {
+        // Second try: percent-encode the path manually
+        final encodedPath = path.split('').map((char) {
+          final code = char.codeUnitAt(0);
+          // Keep drive letter, colons, slashes as-is
+          if (code < 128) return char;
+          // Percent-encode non-ASCII characters
+          final bytes = char.codeUnits;
+          return bytes.map((b) => '%${b.toRadixString(16).padLeft(2, '0')}').join();
+        }).join();
+        final uri = 'file:///$encodedPath';
+        await _player.setUrl(uri);
+      } catch (e2) {
+        // Third try: copy file to temp with ASCII name
+        final tempDir = Directory.systemTemp;
+        final ext = path.split('.').last;
+        final tempFile = File('${tempDir.path}\\robyne_temp.$ext');
+        await File(path).copy(tempFile.path);
+        await _player.setFilePath(tempFile.path);
+      }
+    }
   }
 
   @override
