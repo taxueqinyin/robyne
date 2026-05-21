@@ -1,0 +1,59 @@
+name: robyne
+description: "Robyne - Multi-platform local music player with plugin support"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # Local Database
+  drift: ^2.24.0
+  sqlite3_flutter_libs: ^0.5.28
+  path_provider: ^2.1.5
+  path: ^1.9.1
+
+  # Audio Playback
+  just_audio: ^0.9.43
+  audio_service: ^0.18.17
+
+  # JS Engine
+  flutter_js: ^0.8.1
+
+  # Network
+  dio: ^5.7.0
+
+  # Metadata
+  audio_metadata_reader: ^0.0.5
+
+  # Utils
+  collection: ^1.19.1
+  uuid: ^4.5.1
+  file_picker: ^8.1.7
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # Code Generation
+  build_runner: ^2.4.15
+  riverpod_generator: ^2.6.2
+  drift_dev: ^2.24.0
+  freezed: ^2.5.7
+  json_serializable: ^6.9.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/js/
