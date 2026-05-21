@@ -4,12 +4,12 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   flutter_js
+  just_audio_windows
   sqlite3_flutter_libs
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
   jni
-  smtc_windows
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

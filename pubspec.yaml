@@ -22,8 +22,8 @@ dependencies:
 
   # Audio Playback
   just_audio: ^0.9.40
+  just_audio_windows: ^0.2.3
   audio_service: ^0.18.17
-  smtc_windows: ^1.0.0
 
   # JS Engine
   flutter_js: ^0.8.1

@@ -65,7 +65,14 @@ class AudioServiceHandler extends BaseAudioHandler with SeekHandler {
       artist: artist ?? 'Unknown',
       artUri: artUri != null ? Uri.parse(artUri) : null,
     ));
-    await _player.setFilePath(path);
+    // Try setFilePath first, fallback to setUrl with file URI
+    try {
+      await _player.setFilePath(path);
+    } catch (e) {
+      // Fallback: use file:// URI
+      final uri = Uri.file(path);
+      await _player.setUrl(uri.toString());
+    }
   }
 
   @override

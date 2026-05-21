@@ -111,6 +111,10 @@ class PluginManager extends _$PluginManager {
 
     await _pluginRepo.updatePlugin(PluginsCompanion(
       id: Value(pluginId),
+      name: Value(plugin.name),
+      author: Value(plugin.author),
+      version: Value(plugin.version),
+      localPath: Value(plugin.localPath),
       isEnabled: const Value(true),
     ));
     await _loadInstalledPlugins();
@@ -123,6 +127,10 @@ class PluginManager extends _$PluginManager {
     ref.read(sandboxManagerProvider.notifier).unloadPlugin(plugin.name);
     await _pluginRepo.updatePlugin(PluginsCompanion(
       id: Value(pluginId),
+      name: Value(plugin.name),
+      author: Value(plugin.author),
+      version: Value(plugin.version),
+      localPath: Value(plugin.localPath),
       isEnabled: const Value(false),
     ));
     await _loadInstalledPlugins();

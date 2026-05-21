@@ -39,11 +39,18 @@ add_definitions(-DUNICODE -D_UNICODE)
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_17)
-  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
+  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100" /wd"4819")
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
 endfunction()
+
+# Use local SQLite source to avoid download issues
+set(SQLITE3_LOCAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sqlite3/sqlite-amalgamation-3520000")
+if(EXISTS "${SQLITE3_LOCAL_DIR}/sqlite3.c")
+  set(FETCHCONTENT_FULLY_DISCONNECTED ON)
+  set(sqlite3_SOURCE_DIR "${SQLITE3_LOCAL_DIR}")
+endif()
 
 # Flutter library and tool build rules.
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")

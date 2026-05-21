@@ -69,6 +69,8 @@ class SandboxManager extends _$SandboxManager {
   void _injectAxios() {
     final axiosJs = _axiosBridge.generateAxiosJs();
     _runtime!.evaluate(axiosJs);
+    // Initialize plugins object
+    _runtime!.evaluate('var plugins = {};');
   }
 
   void _setupMessageHandler() {
