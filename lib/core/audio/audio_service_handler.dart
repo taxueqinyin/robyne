@@ -68,32 +68,28 @@ class AudioServiceHandler extends BaseAudioHandler with SeekHandler {
       artUri: artUri != null ? Uri.parse(artUri) : null,
     ));
 
-    // Try playing with different URI formats
+    // Check if path contains non-ASCII characters
+    final hasNonAscii = path.codeUnits.any((code) => code > 127);
+
+    if (!hasNonAscii) {
+      // Simple ASCII path - use directly
+      await _player.setFilePath(path);
+      return;
+    }
+
+    // For paths with Chinese/special characters, copy to temp with ASCII name
+    print('Path contains non-ASCII chars, copying to temp...');
+    final tempDir = Directory.systemTemp;
+    final ext = path.split('.').last;
+    final tempFile = File('${tempDir.path}\\robyne_temp_${DateTime.now().millisecondsSinceEpoch}.$ext');
+
     try {
-      // First try: use Uri.file which handles encoding
-      final uri = Uri.file(path, windows: true);
-      await _player.setUrl(uri.toString());
+      await File(path).copy(tempFile.path);
+      print('Copied to temp: ${tempFile.path}');
+      await _player.setFilePath(tempFile.path);
     } catch (e) {
-      try {
-        // Second try: percent-encode the path manually
-        final encodedPath = path.split('').map((char) {
-          final code = char.codeUnitAt(0);
-          // Keep drive letter, colons, slashes as-is
-          if (code < 128) return char;
-          // Percent-encode non-ASCII characters
-          final bytes = char.codeUnits;
-          return bytes.map((b) => '%${b.toRadixString(16).padLeft(2, '0')}').join();
-        }).join();
-        final uri = 'file:///$encodedPath';
-        await _player.setUrl(uri);
-      } catch (e2) {
-        // Third try: copy file to temp with ASCII name
-        final tempDir = Directory.systemTemp;
-        final ext = path.split('.').last;
-        final tempFile = File('${tempDir.path}\\robyne_temp.$ext');
-        await File(path).copy(tempFile.path);
-        await _player.setFilePath(tempFile.path);
-      }
+      print('Error copying/playing temp file: $e');
+      rethrow;
     }
   }
 
