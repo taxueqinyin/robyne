@@ -2,55 +2,71 @@ import 'package:flutter/services.dart';
 
 class CommonJsRuntime {
   final Map<String, String> _modules = {};
-  final Map<String, dynamic> _moduleCache = {};
 
   void registerModule(String name, String code) {
     _modules[name] = code;
   }
 
   String generateRequireJs() {
-    final buffer = StringBuffer();
-    buffer.writeln('const module = { exports: {} };');
-    buffer.writeln('const exports = module.exports;');
+    // Build modules object as JSON-like string
+    final moduleEntries = _modules.entries.map((e) {
+      // Store module code as a function string to avoid escaping issues
+      return "'${_escapeJs(e.key)}': ${_wrapModuleCode(e.value)}";
+    }).join(',\n');
 
-    buffer.writeln('''
-      const _moduleCache = {};
+    return '''
+      // CommonJS Module System
+      var _moduleCache = {};
+      var _modules = {
+        $moduleEntries
+      };
+
       function require(name) {
         if (_moduleCache[name]) {
           return _moduleCache[name].exports;
         }
 
-        const module = { exports: {} };
-        const exports = module.exports;
-
-        const modules = ${_generateModulesMap()};
-        if (modules[name]) {
-          const fn = new Function('module', 'exports', modules[name]);
-          fn(module, exports);
-          _moduleCache[name] = module;
-          return module.exports;
-        }
+        var module = { exports: {} };
+        var exports = module.exports;
 
         if (name === 'axios') {
           return axios;
         }
 
+        if (_modules[name]) {
+          var fn = _modules[name];
+          fn(module, exports);
+          _moduleCache[name] = module;
+          return module.exports;
+        }
+
         throw new Error('Module not found: ' + name);
       }
-    ''');
 
-    return buffer.toString();
+      // Make require global
+      if (typeof globalThis !== 'undefined') {
+        globalThis.require = require;
+      }
+      if (typeof window !== 'undefined') {
+        window.require = require;
+      }
+    ''';
   }
 
-  String _generateModulesMap() {
-    final entries = _modules.entries
-        .map((e) => "'${e.key}': ${_escapeJs(e.value)}")
-        .join(', ');
-    return '{ $entries }';
+  String _wrapModuleCode(String code) {
+    // Wrap module code in a function to avoid variable conflicts
+    // and handle escaping properly
+    final escapedCode = code
+        .replaceAll('\\', '\\\\')
+        .replaceAll("'", "\\'")
+        .replaceAll('\n', '\\n')
+        .replaceAll('\r', '\\r');
+
+    return "function(module, exports) { eval('$escapedCode'); }";
   }
 
-  String _escapeJs(String code) {
-    return code
+  String _escapeJs(String str) {
+    return str
         .replaceAll('\\', '\\\\')
         .replaceAll("'", "\\'")
         .replaceAll('\n', '\\n')
@@ -59,9 +75,5 @@ class CommonJsRuntime {
 
   Future<String> loadAsset(String assetPath) async {
     return await rootBundle.loadString(assetPath);
-  }
-
-  void registerBuiltinModules() {
-    // These will be loaded from assets at initialization
   }
 }

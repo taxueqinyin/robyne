@@ -65,14 +65,12 @@ class AudioServiceHandler extends BaseAudioHandler with SeekHandler {
       artist: artist ?? 'Unknown',
       artUri: artUri != null ? Uri.parse(artUri) : null,
     ));
-    // Try setFilePath first, fallback to setUrl with file URI
-    try {
-      await _player.setFilePath(path);
-    } catch (e) {
-      // Fallback: use file:// URI
-      final uri = Uri.file(path);
-      await _player.setUrl(uri.toString());
-    }
+
+    // Use Uri.file to properly encode the path (handles Chinese chars, spaces, etc.)
+    final uri = Uri.file(path);
+    final uriString = uri.toString();
+    print('Playing file URI: $uriString');
+    await _player.setUrl(uriString);
   }
 
   @override
