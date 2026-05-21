@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:robyne/core/audio/audio_player_service.dart';
 import 'package:robyne/core/js_sandbox/sandbox_manager.dart';
 import 'package:robyne/features/local_scan/local_scan_page.dart';
 import 'package:robyne/features/player/player_controls.dart';
@@ -54,6 +55,13 @@ class _MainPageState extends ConsumerState<MainPage> {
 
   @override
   Widget build(BuildContext context) {
+    final playerState = ref.watch(audioPlayerServiceProvider);
+
+    // Auto-show player when a song starts playing
+    if (playerState.currentSong != null) {
+      ref.read(playerVisibleProvider.notifier).state = true;
+    }
+
     final pages = [
       const SearchPage(),
       const LocalScanPage(),

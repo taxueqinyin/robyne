@@ -36,20 +36,39 @@ class PluginManager extends _$PluginManager {
     state = state.copyWith(installedPlugins: plugins);
   }
 
-  Future<PluginMetadata?> parsePluginMetadata(String jsCode) async {
+  Future<PluginMetadata?> parsePluginMetadata(String jsCode, {String? filePath}) async {
+    // Try standard metadata format with @name/@author/@version
     final metaRegex = RegExp(
       r'/\*\*[\s\S]*?@name\s+(.+?)[\s\S]*?@author\s+(.+?)[\s\S]*?@version\s+(.+?)[\s\S]*?\*/',
       caseSensitive: false,
     );
 
     final match = metaRegex.firstMatch(jsCode);
-    if (match == null) return null;
+    if (match != null) {
+      return PluginMetadata(
+        name: match.group(1)!.trim(),
+        author: match.group(2)!.trim(),
+        version: match.group(3)!.trim(),
+      );
+    }
 
-    return PluginMetadata(
-      name: match.group(1)!.trim(),
-      author: match.group(2)!.trim(),
-      version: match.group(3)!.trim(),
-    );
+    // Try to detect if it's a valid MusicFree plugin (has module.exports with required methods)
+    if (jsCode.contains('module.exports') &&
+        (jsCode.contains('getMediaSource') || jsCode.contains('search'))) {
+      // Extract name from filename or use default
+      String pluginName = 'Unknown Plugin';
+      if (filePath != null) {
+        pluginName = filePath.split(RegExp(r'[/\\]')).last.replaceAll('.js', '');
+      }
+
+      return PluginMetadata(
+        name: pluginName,
+        author: 'MusicFree Community',
+        version: '1.0.0',
+      );
+    }
+
+    return null;
   }
 
   Future<int> installPlugin(String filePath) async {
@@ -59,10 +78,10 @@ class PluginManager extends _$PluginManager {
     }
 
     final jsCode = await file.readAsString();
-    final metadata = await parsePluginMetadata(jsCode);
+    final metadata = await parsePluginMetadata(jsCode, filePath: filePath);
 
     if (metadata == null) {
-      throw Exception('Invalid plugin format: missing metadata');
+      throw Exception('Invalid plugin format: missing metadata or invalid plugin structure');
     }
 
     final pluginId = await _pluginRepo.insertPlugin(PluginsCompanion(

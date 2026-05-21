@@ -155,6 +155,11 @@ class AudioPlayerService extends _$AudioPlayerService {
     await _handler.seek(position);
   }
 
+  Future<void> setVolume(double volume) async {
+    await _handler.player.setVolume(volume.clamp(0.0, 1.0));
+    state = state.copyWith(volume: volume.clamp(0.0, 1.0));
+  }
+
   Future<void> skipToNext() async {
     final nextSong = _queue.next();
     if (nextSong != null) {
@@ -267,6 +272,7 @@ class AudioPlayerState {
   final Duration duration;
   final AudioProcessingState processingState;
   final PlaybackMode playbackMode;
+  final double volume;
   final String? error;
 
   const AudioPlayerState({
@@ -278,6 +284,7 @@ class AudioPlayerState {
     this.duration = Duration.zero,
     this.processingState = AudioProcessingState.idle,
     this.playbackMode = PlaybackMode.sequential,
+    this.volume = 1.0,
     this.error,
   });
 
@@ -290,6 +297,7 @@ class AudioPlayerState {
     Duration? duration,
     AudioProcessingState? processingState,
     PlaybackMode? playbackMode,
+    double? volume,
     String? error,
   }) {
     return AudioPlayerState(
@@ -301,6 +309,7 @@ class AudioPlayerState {
       duration: duration ?? this.duration,
       processingState: processingState ?? this.processingState,
       playbackMode: playbackMode ?? this.playbackMode,
+      volume: volume ?? this.volume,
       error: error,
     );
   }

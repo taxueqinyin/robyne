@@ -6,7 +6,7 @@ part of 'plugin_manager.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$pluginManagerHash() => r'685dcdccdc1df45f400522fb4d2609c093b2c683';
+String _$pluginManagerHash() => r'594268e4d7ebeb13faf02e7dd1d5fe9bd8570e69';
 
 /// See also [PluginManager].
 @ProviderFor(PluginManager)

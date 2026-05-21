@@ -3,14 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:robyne/core/audio/audio_player_service.dart';
 import 'package:robyne/core/audio/playback_queue.dart';
 
+final playerVisibleProvider = StateProvider<bool>((ref) => true);
+
 class PlayerControls extends ConsumerWidget {
   const PlayerControls({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final playerState = ref.watch(audioPlayerServiceProvider);
+    final isVisible = ref.watch(playerVisibleProvider);
 
-    if (playerState.currentSong == null) {
+    if (playerState.currentSong == null || !isVisible) {
       return const SizedBox.shrink();
     }
 
@@ -20,7 +23,7 @@ class PlayerControls extends ConsumerWidget {
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),
@@ -29,7 +32,7 @@ class PlayerControls extends ConsumerWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Song info
+          // Song info with close button
           ListTile(
             leading: playerState.currentSong!.coverUrl != null
                 ? Image.network(
@@ -49,6 +52,12 @@ class PlayerControls extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+            trailing: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                ref.read(playerVisibleProvider.notifier).state = false;
+              },
+            ),
           ),
           // Progress bar
           Slider(
@@ -62,7 +71,7 @@ class PlayerControls extends ConsumerWidget {
                   );
             },
           ),
-          // Controls
+          // Controls row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -110,6 +119,32 @@ class PlayerControls extends ConsumerWidget {
                 onPressed: () {
                   ref.read(audioPlayerServiceProvider.notifier).stop();
                 },
+              ),
+            ],
+          ),
+          // Volume control
+          Row(
+            children: [
+              IconButton(
+                icon: Icon(
+                  playerState.volume > 0
+                      ? Icons.volume_up
+                      : Icons.volume_off,
+                ),
+                onPressed: () {
+                  final newVolume = playerState.volume > 0 ? 0.0 : 1.0;
+                  ref.read(audioPlayerServiceProvider.notifier).setVolume(newVolume);
+                },
+              ),
+              Expanded(
+                child: Slider(
+                  value: playerState.volume,
+                  min: 0.0,
+                  max: 1.0,
+                  onChanged: (value) {
+                    ref.read(audioPlayerServiceProvider.notifier).setVolume(value);
+                  },
+                ),
               ),
             ],
           ),
