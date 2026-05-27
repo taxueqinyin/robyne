@@ -32,7 +32,6 @@ class SearchPage extends ConsumerWidget {
           Row(
             children: <Widget>[
               Expanded(
-                flex: 3,
                 child: TextField(
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
@@ -45,32 +44,6 @@ class SearchPage extends ConsumerWidget {
                   onSubmitted: (_) => ref
                       .read(search_state.searchControllerProvider.notifier)
                       .search(plugins),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedPluginId(
-                    state.selectedPluginId,
-                    plugins,
-                  ),
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Plugin',
-                  ),
-                  items: plugins
-                      .where((plugin) => plugin.enabled)
-                      .map(
-                        (plugin) => DropdownMenuItem<String>(
-                          value: plugin.id,
-                          child: Text(plugin.platform),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: ref
-                      .read(search_state.searchControllerProvider.notifier)
-                      .selectPlugin,
                 ),
               ),
               const SizedBox(width: 12),
@@ -97,10 +70,24 @@ class SearchPage extends ConsumerWidget {
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ],
-          const SizedBox(height: 16),
+          if (state.pluginResults.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 16),
+            _PluginTabs(
+              state: state,
+              onSelected: ref
+                  .read(search_state.searchControllerProvider.notifier)
+                  .selectPlugin,
+            ),
+          ],
+          const SizedBox(height: 12),
           Expanded(
             child: _SearchResults(
               state: state,
+              onLoadMore: () {
+                ref
+                    .read(search_state.searchControllerProvider.notifier)
+                    .loadMoreSelected(plugins);
+              },
               onPlay: (item) {
                 ref
                     .read(playerControllerProvider.notifier)
@@ -112,31 +99,84 @@ class SearchPage extends ConsumerWidget {
       ),
     );
   }
+}
 
-  String? _selectedPluginId(
-    String? selectedPluginId,
-    List<PluginDefinition> plugins,
-  ) {
-    final enabled = plugins.where((plugin) => plugin.enabled).toList();
-    if (enabled.isEmpty) {
-      return null;
-    }
-    if (enabled.any((plugin) => plugin.id == selectedPluginId)) {
-      return selectedPluginId;
-    }
-    return enabled.first.id;
+class _PluginTabs extends StatelessWidget {
+  const _PluginTabs({required this.state, required this.onSelected});
+
+  final search_state.SearchState state;
+  final void Function(String pluginId) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: state.pluginResults.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final result = state.pluginResults[index];
+          final selected =
+              result.pluginId ==
+              (state.selectedPluginId ?? state.pluginResults.first.pluginId);
+          final loading = result.isSearching || result.isLoadingMore;
+          final label = loading
+              ? '${result.platform} ...'
+              : result.error != null
+              ? '${result.platform} !'
+              : '${result.platform} ${result.resultCount}';
+          return ChoiceChip(
+            selected: selected,
+            avatar: loading
+                ? const SizedBox.square(
+                    dimension: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : result.error != null
+                ? const Icon(Icons.error_outline, size: 18)
+                : null,
+            label: Text(label),
+            onSelected: (_) => onSelected(result.pluginId),
+          );
+        },
+      ),
+    );
   }
 }
 
 class _SearchResults extends StatelessWidget {
-  const _SearchResults({required this.state, required this.onPlay});
+  const _SearchResults({
+    required this.state,
+    required this.onLoadMore,
+    required this.onPlay,
+  });
 
   final search_state.SearchState state;
+  final VoidCallback onLoadMore;
   final void Function(MusicItem item) onPlay;
 
   @override
   Widget build(BuildContext context) {
-    final result = state.result;
+    final pluginResult = state.selectedPluginResult;
+    if (pluginResult == null) {
+      return const Center(child: Text('Import a plugin, then search music.'));
+    }
+
+    if (pluginResult.isSearching) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (pluginResult.error != null && pluginResult.result == null) {
+      return Center(
+        child: Text(
+          '${pluginResult.error!.code}: ${pluginResult.error!.message}',
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+      );
+    }
+
+    final result = pluginResult.result;
     if (result == null) {
       return const Center(child: Text('Import a plugin, then search music.'));
     }
@@ -145,28 +185,79 @@ class _SearchResults extends StatelessWidget {
       return const Center(child: Text('No results.'));
     }
 
-    return ListView.separated(
-      itemCount: result.items.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final item = result.items[index];
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.music_note),
-          title: Text(item.title),
-          subtitle: Text(
-            <String?>[item.artist, item.album, item.platform]
-                .whereType<String>()
-                .where((value) => value.isNotEmpty)
-                .join(' - '),
-          ),
-          trailing: IconButton(
-            tooltip: 'Play',
-            icon: const Icon(Icons.play_arrow),
-            onPressed: () => onPlay(item),
-          ),
-        );
+    final showFooter = pluginResult.isLoadingMore || pluginResult.error != null;
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification.metrics.extentAfter < 600 &&
+            !pluginResult.isLoadingMore &&
+            pluginResult.error == null &&
+            !result.isEnd) {
+          onLoadMore();
+        }
+        return false;
       },
+      child: ListView.separated(
+        itemCount: result.items.length + (showFooter ? 1 : 0),
+        separatorBuilder: (context, index) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          if (index >= result.items.length) {
+            return _SearchResultFooter(pluginResult: pluginResult);
+          }
+
+          final item = result.items[index];
+          return ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.music_note),
+            title: Text(item.title),
+            subtitle: Text(
+              <String?>[item.artist, item.album, item.platform]
+                  .whereType<String>()
+                  .where((value) => value.isNotEmpty)
+                  .join(' - '),
+            ),
+            trailing: IconButton(
+              tooltip: 'Play',
+              icon: const Icon(Icons.play_arrow),
+              onPressed: () => onPlay(item),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SearchResultFooter extends StatelessWidget {
+  const _SearchResultFooter({required this.pluginResult});
+
+  final search_state.PluginSearchState pluginResult;
+
+  @override
+  Widget build(BuildContext context) {
+    if (pluginResult.isLoadingMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: SizedBox.square(
+            dimension: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    final error = pluginResult.error;
+    if (error == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Text(
+        '${error.code}: ${error.message}',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: Theme.of(context).colorScheme.error),
+      ),
     );
   }
 }

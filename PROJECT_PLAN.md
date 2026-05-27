@@ -52,6 +52,7 @@ Robyne 是一个基于 Flutter 的多端本地音乐播放器。项目优先支�
 
 2. 插件管理
    - 从本地文件导入 JavaScript 插件
+   - 从网络 URL 下载并导入 JavaScript 插件
    - 展示已安装插件列表
    - 启用或禁用插件
    - 删除插件
@@ -66,10 +67,11 @@ Robyne 是一个基于 Flutter 的多端本地音乐播放器。项目优先支�
 
 4. 搜索与播放
    - 输入关键词
-   - 选择一个启用插件搜索
-   - 展示 music 类型搜索结果
+   - 对所有已启用插件并发搜索
+   - 以插件标签/TAB 切换展示各插件的 music 类型搜索结果
    - 点击歌曲后调用 getMediaSource
    - 使用返回的 url 和 headers 播放
+   - 新播放请求必须使旧播放请求失效；旧请求即使晚返回也不能顶掉当前播放
 
 5. 本地持久化
    - 保存插件文件或插件引用路径
@@ -86,7 +88,6 @@ Robyne 是一个基于 Flutter 的多端本地音乐播放器。项目优先支�
 - 下载缓存
 - 播放历史
 - 收藏夹
-- 多音源聚合搜索
 - 插件市场
 - 插件自动更新
 - Web 端完整支持
@@ -269,11 +270,11 @@ MusicFreeCompatAdapter
 职责：
 
 - 接收用户搜索请求。
-- 选择插件或聚合多个插件。
+- 对所有已启用插件并发搜索。
 - 调用插件 search。
-- 管理分页和搜索状态。
+- 管理每个插件独立的加载、失败、结果和当前选中标签状态。
 
-MVP 阶段只做单插件搜索。
+当前 MVP 已从原计划的单插件搜索调整为多插件并发搜索，但不做跨插件结果合并、排序和去重。每个插件结果保留在独立标签页中，便于定位单个插件失败或接口波动。
 
 #### 5.2.3 Player 模块
 
@@ -283,6 +284,7 @@ MVP 阶段只做单插件搜索。
 - 调用插件 getMediaSource。
 - 将 MediaSource 交给音频播放服务。
 - 管理播放、暂停、进度、错误状态。
+- 保证播放请求具有“最后一次点击优先”语义：用户点击新的播放后，旧的解析和播放请求必须失效，不能在晚返回时覆盖当前播放。
 
 播放器模块只理解内部模型，不理解 MusicFree 原始返回结构。
 
@@ -485,7 +487,7 @@ network.request_failed
 
 ## 10. 建议开发阶段
 
-### 阶段 0：项目初始化
+### 阶段 0：项目初始化（Windows 已完成，Android 构建与启动已验证）
 
 目标：建立 Flutter 工程、基本工程规范和 Windows/Android 优先的原生构建环境。阶段 0 不追求完整业务功能，但必须尽早暴露原生编译、播放器初始化和 Android 网络策略问题。
 
@@ -504,19 +506,19 @@ network.request_failed
 - Android 网络验证必须覆盖 `http://` 音频链接，因为部分音源插件解析出的播放地址不是 `https://`。
 - macOS 后续适配时预留 App Sandbox 网络权限检查项，尤其是 Outgoing Connections (Client)。
 
-验收标准：
+验收标准与当前状态：
 
-- Windows 应用能启动。
-- Android debug 构建能启动到空页面。
-- lint 和 test 命令可运行。
-- 目录结构符合规划。
-- media_kit 最小播放服务能完成初始化，不要求阶段 0 实现真实播放 UI。
-- Windows 端已确认 Flutter 能正常调用原生构建链，不出现缺少 Visual Studio、CMake、MSVC 或 Windows SDK 的错误。
-- Android 端已确认 NDK Side by side 和 CMake 可用，不出现原生依赖无法编译为 `.so` 的错误。
-- AndroidManifest.xml 已包含 `android:usesCleartextTraffic="true"`，并确认应用具备访问 http 音源链接的基础条件。
-- 原生依赖编译环境问题有明确记录。
+- Windows 应用能启动：已通过 `flutter build windows --debug`。
+- Android debug 构建能启动到空页面：已通过 `flutter build apk --debug`、`flutter install --debug -d 9b234798` 和 `adb shell am start -n com.robyne.robyne/.MainActivity` 验证。
+- lint 和 test 命令可运行：已通过 `flutter analyze` 和 `flutter test`。
+- 目录结构符合规划：已完成。
+- media_kit 播放服务能完成初始化并进入真实播放链路：Windows 已验证，Android 待验证。
+- Windows 端已确认 Flutter 能正常调用原生构建链，不出现缺少 Visual Studio、CMake、MSVC 或 Windows SDK 的错误：已完成。
+- Android 端已确认 NDK Side by side 和 CMake 可用，不出现原生依赖无法编译为 `.so` 的错误：已通过 debug APK 构建验证。
+- AndroidManifest.xml 已包含 `android:usesCleartextTraffic="true"`，并确认应用具备访问 http 音源链接的基础条件：配置已复核，真机 HTTP 播放待验证。
+- 当前 Android 注意项：本机直连 `https://storage.googleapis.com/` 存在 TLS 握手失败，构建时需要设置 `FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn`；详见 `docs/android_validation.md`。
 
-### 阶段 1：QuickJS 插件运行时 Spike
+### 阶段 1：QuickJS 插件运行时 Spike（Windows 已完成）
 
 目标：在 Windows 上优先跑通 `test_files/网易云.js` 和 `test_files/bilibili.js` 的 music 搜索与播放地址获取，验证 QuickJS + 受控 CommonJS 兼容层路线可行。
 
@@ -537,60 +539,65 @@ network.request_failed
 - 将插件返回的 url、headers、quality 转换为内部 MediaSource。
 - 为插件加载、搜索、获取播放地址增加超时和结构化错误。
 
-验收标准：
+验收标准与当前状态：
 
-- Dart 可以通过 QuickJS 加载两个测试插件。
-- 可以读取两个插件的 platform、version、supportedSearchType。
-- 网易云插件可以执行 `search("周杰伦", 1, "music")` 并返回可解析列表。
-- Bilibili 插件可以执行 `search("周杰伦", 1, "music")` 并返回可解析列表。
-- 两个插件的搜索结果都保留 raw 数据。
-- 可以对至少一条网易云搜索结果调用 getMediaSource 并得到 MediaSource 或明确的业务失败结果。
-- 可以对至少一条 Bilibili 搜索结果调用 getMediaSource 并得到包含 url 和 headers 的 MediaSource。
-- axios shim 支持 config、get、post 三种调用形态。
-- crypto-js 的 MD5、AES、HmacSHA256 能被插件正常调用。
-- cheerio 的 load 能被 Bilibili 插件正常调用。
-- dayjs.unix(...).format(...) 能被插件正常调用。
-- he.decode 能被 Bilibili 插件正常调用。
-- 插件运行异常、网络异常、超时都能被捕获并转换为 AppError。
-- 插件不能访问文件系统和系统命令。
+- Dart 可以通过 QuickJS 加载两个测试插件：已完成。
+- 可以读取两个插件的 platform、version、supportedSearchType：已完成。
+- 网易云插件可以执行 `search("周杰伦", 1, "music")` 并返回可解析列表：已完成。
+- Bilibili 插件可以执行 `search("周杰伦", 1, "music")` 并返回可解析列表：已完成。
+- 两个插件的搜索结果都保留 raw 数据：已完成。
+- 可以对至少一条网易云搜索结果调用 getMediaSource 并得到 MediaSource 或明确的业务失败结果：已完成。
+- 可以对至少一条 Bilibili 搜索结果调用 getMediaSource 并得到包含 url 和 headers 的 MediaSource：已完成。
+- axios shim 支持 config、get、post 三种调用形态：已完成。
+- crypto-js 的 MD5、AES、HmacSHA256 能被插件正常调用：已完成。
+- cheerio 的 load 能被 Bilibili 插件正常调用：已完成。
+- dayjs.unix(...).format(...) 能被插件正常调用：已完成。
+- he.decode 能被 Bilibili 插件正常调用：已完成。
+- 插件运行异常、网络异常、超时都能被捕获并转换为 AppError：已实现基础能力，并补充了 QuickJS Promise/HTTP bridge 超时和释放竞态保护。
+- 插件不能访问文件系统和系统命令：当前 QuickJS 运行时未暴露文件系统和系统命令能力，仍需在阶段 5 兼容矩阵中记录安全边界。
 
-### 阶段 2：插件管理 MVP
+### 阶段 2：插件管理 MVP（已完成基础版本）
 
 目标：用户可以导入和启用插件。
 
 任务：
 
 - 插件文件导入。
+- 插件 URL 下载导入。
 - 插件元信息解析。
 - 插件列表页。
 - 启用、禁用、删除。
 - 插件状态持久化。
 
-验收标准：
+验收标准与当前状态：
 
-- 重启应用后插件列表仍存在。
-- 禁用插件不会参与搜索。
-- 插件加载失败有错误提示。
+- 重启应用后插件列表仍存在：已通过本地文件保存和 SharedPreferences 持久化实现。
+- 禁用插件不会参与搜索：已实现。
+- 插件加载失败有错误提示：已有基础错误提示。
+- 插件 URL 导入：已实现基础版本，仅允许 `http://` 和 `https://`，下载后先做 QuickJS 元信息验证，验证成功才写入本地插件目录。
+- 插件元信息展示：已展示 platform、version、author、supportedSearchTypes；description 仍未做完整 UI。
+- 插件用户变量配置：已实现基础版本，支持声明了 `userVariables` 的插件在插件页配置文本/开关值，并在搜索和播放时注入 `env.getUserVariables()`。
 
-### 阶段 3：搜索 MVP
+### 阶段 3：搜索 MVP（已调整为多插件并发搜索）
 
 目标：用户可以通过插件搜索歌曲。
 
 任务：
 
 - 搜索输入框。
-- 插件选择。
-- 调用 search。
-- 展示歌曲列表。
+- 对所有已启用插件并发调用 search。
+- 用插件标签/TAB 展示各插件搜索状态和结果数量。
+- 点击标签切换歌曲列表。
 - 支持下一页或简单分页。
 
-验收标准：
+验收标准与当前状态：
 
-- 至少一个测试插件搜索可用。
-- 空结果、失败、加载中状态正确显示。
-- 搜索结果保留 raw 数据。
+- 两个测试插件搜索可用：已通过 spike 测试。
+- 空结果、失败、加载中状态正确显示：已实现基础状态；插件级错误会显示在对应标签和面板中。
+- 搜索结果保留 raw 数据：已完成。
+- 下一页或分页：已实现当前选中插件的自动加载下一页；列表接近底部时触发，成功后追加结果，失败时保留已有结果并在底部显示错误。
 
-### 阶段 4：播放 MVP
+### 阶段 4：播放 MVP（Windows 已完成基础版本）
 
 目标：用户可以点击搜索结果播放。
 
@@ -602,30 +609,35 @@ network.request_failed
 - 实现播放、暂停、停止。
 - 展示当前歌曲和基础进度。
 
-验收标准：
+验收标准与当前状态：
 
-- 测试插件返回的音频地址可播放。
-- 播放失败不会崩溃。
-- 切歌时旧播放状态正确释放。
+- 测试插件返回的音频地址可播放：Windows 已跑通，真实可播性仍受第三方接口和网络状态影响。
+- 播放失败不会崩溃：已实现错误状态返回。
+- 切歌时旧播放状态正确释放：已实现“最后一次点击优先”，旧解析请求晚返回也不能顶掉当前播放；底层 media_kit Player 会在新 play/stop 时替换以隔离旧 open 的副作用。
 
-### 阶段 5：插件兼容矩阵与扩展验证
+### 阶段 5：插件兼容矩阵与扩展验证（已开始）
 
 目标：在两个验收插件跑通后，沉淀 QuickJS 兼容层能力清单，并为后续接入更多 MusicFree 插件建立可重复的验证流程。
 
 任务：
 
 - 整理 `test_files/网易云.js` 和 `test_files/bilibili.js` 已使用到的 CommonJS、axios、vendor、env、headers、MediaSource 能力。
-- 形成插件 API 兼容矩阵，标记已支持、部分支持、未支持。
+- 形成插件 API 兼容矩阵，标记已支持、部分支持、未支持：已创建 `docs/plugin_compatibility_matrix.md`，覆盖当前 `test_files` 中 10 个插件的静态依赖、风险标记和元信息加载状态。
 - 选择新的 1 到 2 个社区插件作为扩展验证样本。
-- 按需补齐必要 shim，但不得破坏已有两个验收插件。
+- 按需补齐必要 shim，但不得破坏已有两个验收插件：已补 `exports.default` 导出解包和受控 `setTimeout` / `clearTimeout`。
 - 记录不兼容点、第三方接口业务失败、运行时缺失能力三类问题。
 
 验收标准：
 
-- 两个验收插件仍能完成 music 搜索和播放地址获取。
-- 至少新增一个真实插件能完成搜索，能否播放按插件实际接口和第三方服务情况记录。
-- 每个失败插件都能给出明确失败分类。
-- 形成兼容矩阵，为后续扩展开发提供依据。
+- 两个验收插件仍能完成 music 搜索和播放地址获取：保持为 spike 验证项。
+- 至少新增一个真实插件能完成搜索，能否播放按插件实际接口和第三方服务情况记录：已验证混淆后的元力KW 插件能完成 music 搜索和播放地址获取。
+- 每个失败插件都能给出明确失败分类：矩阵已记录第三方服务/网络失败、插件业务空数据、插件顶层副作用、歌词类非 music 插件等分类。
+- 形成兼容矩阵，为后续扩展开发提供依据：已完成初版。
+
+建议产出：
+
+- `docs/plugin_compatibility_matrix.md`：记录插件、平台、搜索、播放、用到的 API、失败类型和备注。
+- `docs/android_validation.md`：记录 Android 工具链、构建、真机运行、HTTP 播放、HTTPS 播放、headers 播放验证结果。
 
 ## 11. AI 编程工作方式建议
 
@@ -704,18 +716,19 @@ network.request_failed
 - 需要设计一套内部播放状态模型。
 - 阶段 0 必须验证 Windows 和 Android 的原生构建环境。
 
-### ADR-004：MVP 只做单插件搜索
+### ADR-004：MVP 搜索模式调整为多插件并发、按插件标签展示
 
-决定：第一版不做多插件聚合搜索，只允许用户选择一个启用插件搜索。
+决定：第一版不做跨插件合并、排序和去重，但会对所有已启用插件并发搜索，并按插件标签/TAB 展示结果。用户可以在标签之间切换查看单个插件的结果。
 
 原因：
 
-- 降低并发、排序、去重、错误合并复杂度。
+- 保留多音源搜索的实用性，同时避免跨插件合并、排序、去重、错误合并的复杂度。
 - 优先验证插件兼容和播放链路。
 
 代价：
 
-- 用户体验不如成熟播放器。
+- 结果不会自动去重，用户需要在插件标签之间切换。
+- 插件并发运行会增加网络请求数量，后续可能需要限制并发或提供插件级搜索开关。
 
 ### ADR-005：正式插件运行时采用 QuickJS + 受控 CommonJS 兼容层
 
@@ -821,6 +834,8 @@ module.exports = {
 
 ## 14. 当前最重要的下一步
 
-不要急着做 UI，也不要先接真实复杂插件。下一步应先做技术 Spike：Flutter/Dart 到 JS 插件运行时的闭环验证。
+当前 Windows 侧核心闭环已经成立：插件导入、多插件搜索、播放地址解析和 media_kit 播放均已跑通。下一步应优先做两件事：
 
-如果这个闭环成立，后续就是常规工程开发；如果这个闭环不稳定，需要尽早调整运行时方案，避免 UI 和业务都写完后才发现插件无法兼容。
+1. 继续扩展插件兼容矩阵，在不破坏 `test_files/网易云.js` 和 `test_files/bilibili.js` 的前提下，确认 `8AoRogfyKbdBA8ko0UhHw.js`、`cwWVJ4uUbdIM_5x6pcJG3.js`、`dyEokUdXPnyztXWVdT_z2.js` 是否需要不同查询词、用户变量或插件特定请求参数才能返回 music 结果。
+2. 增强搜索分页体验，例如分页失败后的手动重试、插件级并发数量限制、以及更清晰的错误提示。
+3. Android 真机播放验证延后到 URL 导入和插件配置体验稳定后再执行。

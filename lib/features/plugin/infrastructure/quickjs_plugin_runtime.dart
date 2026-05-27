@@ -7,6 +7,7 @@ import 'package:quickjs_engine/quickjs_engine.dart';
 import '../../../core/errors/app_error.dart';
 import '../../../core/network/plugin_http_client.dart';
 import '../../../core/result/result.dart';
+import '../application/plugin_runtime_config.dart';
 import '../domain/plugin_runtime.dart';
 
 class QuickJsPluginRuntimeFactory implements PluginRuntimeFactory {
@@ -40,7 +41,9 @@ class QuickJsPluginRuntime implements PluginRuntime {
     String? vendorSource,
   }) : _httpClient = httpClient {
     _runtime = getJavascriptRuntime(xhr: false);
-    _runtime.onMessage('robyneHttp', _handleHttpRequest);
+    _runtime.onMessage('robyneHttp', _trackHttpRequest);
+    _runtime.onMessage('robyneSetTimeout', _scheduleTimeout);
+    _runtime.onMessage('robyneClearTimeout', _clearTimeout);
     _runtime.evaluate(_bootstrapScript);
     if (vendorSource != null && vendorSource.trim().isNotEmpty) {
       _runtime.evaluate(vendorSource);
@@ -49,26 +52,46 @@ class QuickJsPluginRuntime implements PluginRuntime {
 
   final PluginHttpClient _httpClient;
   late final JavascriptRuntime _runtime;
+  final Set<Future<void>> _pendingBridgeCalls = <Future<void>>{};
+  final Set<Future<void>> _pendingMethodCalls = <Future<void>>{};
+  final Set<Future<void>> _pendingTimerCallbacks = <Future<void>>{};
+  final Map<int, Timer> _scheduledTimers = <int, Timer>{};
+  bool _disposing = false;
+  bool _disposed = false;
 
   @override
-  Future<Result<Map<String, Object?>>> loadPlugin(String source) async {
+  Future<Result<Map<String, Object?>>> loadPlugin(
+    String source, {
+    Map<String, String> userVariables = const <String, String>{},
+  }) async {
+    if (_disposing || _disposed) {
+      return const Failure(
+        AppError(
+          code: 'plugin.runtime_disposed',
+          message: 'Plugin runtime has already been disposed.',
+        ),
+      );
+    }
     try {
       final escapedSource = jsonEncode(source);
+      final encodedUserVariables = jsonEncode(userVariables);
       final result = _runtime.evaluate('''
         (() => {
+          globalThis.__robyneUserVariables = $encodedUserVariables;
           const module = { exports: {} };
           const exports = module.exports;
           const require = globalThis.__robyneRequire;
           const pluginFactory = new Function('module', 'exports', 'require', $escapedSource);
           pluginFactory(module, exports, require);
-          globalThis.__robynePlugin = module.exports;
+          const exported = globalThis.__robyneNormalizePluginExport(module.exports);
+          globalThis.__robynePlugin = exported;
           return JSON.stringify({
-            platform: module.exports.platform,
-            version: module.exports.version,
-            author: module.exports.author,
-            description: module.exports.description,
-            supportedSearchType: module.exports.supportedSearchType || [],
-            userVariables: module.exports.userVariables || []
+            platform: exported.platform,
+            version: exported.version,
+            author: exported.author,
+            description: exported.description,
+            supportedSearchType: exported.supportedSearchType || [],
+            userVariables: exported.userVariables || []
           });
         })()
       ''');
@@ -112,6 +135,14 @@ class QuickJsPluginRuntime implements PluginRuntime {
     List<Object?> arguments, {
     Duration timeout = const Duration(seconds: 15),
   }) async {
+    if (_disposing || _disposed) {
+      return const Failure(
+        AppError(
+          code: 'plugin.runtime_disposed',
+          message: 'Plugin runtime has already been disposed.',
+        ),
+      );
+    }
     try {
       final encodedMethod = jsonEncode(method);
       final encodedArgs = jsonEncode(arguments);
@@ -136,7 +167,9 @@ class QuickJsPluginRuntime implements PluginRuntime {
         );
       }
 
-      final resolved = await _runtime.handlePromise(result, timeout: timeout);
+      final resolved = await _trackMethodCall(
+        _resolveEvaluation(result),
+      ).timeout(timeout);
       if (resolved.isError) {
         return Failure(
           AppError(
@@ -170,19 +203,208 @@ class QuickJsPluginRuntime implements PluginRuntime {
 
   @override
   Future<void> dispose() async {
+    if (_disposed) {
+      return;
+    }
+    _disposing = true;
+    _cancelScheduledTimers();
+    _clearJavaScriptTimeoutCallbacks();
+    await _waitForPendingWork();
+    _disposed = true;
     _runtime.dispose();
   }
 
-  Future<String> _handleHttpRequest(dynamic args) async {
+  String _trackHttpRequest(dynamic args) {
+    if (_disposing || _disposed) {
+      return 'false';
+    }
+
     final payload = args is Map ? _objectMap(args) : <String, Object?>{};
-    try {
-      final response = await _httpClient.request(payload);
-      return jsonEncode(<String, Object?>{'ok': true, 'response': response});
-    } catch (error) {
-      return jsonEncode(<String, Object?>{
-        'ok': false,
-        'error': error.toString(),
+    final id = _intValue(payload['id']);
+    final config = payload['config'] is Map
+        ? _objectMap(payload['config'] as Map<dynamic, dynamic>)
+        : <String, Object?>{};
+    if (id == null) {
+      return 'false';
+    }
+
+    final request = _completeHttpRequest(id, config);
+    final pending = request.then<void>((_) {}, onError: (_, _) {});
+    _pendingBridgeCalls.add(pending);
+    unawaited(
+      pending.whenComplete(() {
+        _pendingBridgeCalls.remove(pending);
+      }),
+    );
+    return 'true';
+  }
+
+  Future<JsEvalResult> _trackMethodCall(Future<JsEvalResult> call) {
+    final pending = call.then<void>((_) {}, onError: (_, _) {});
+    _pendingMethodCalls.add(pending);
+    unawaited(
+      pending.whenComplete(() {
+        _pendingMethodCalls.remove(pending);
+      }),
+    );
+    return call;
+  }
+
+  Future<JsEvalResult> _resolveEvaluation(JsEvalResult result) async {
+    final rawResult = result.rawResult;
+    if (rawResult is Future) {
+      return _pumpQuickJsFuture(rawResult);
+    }
+    return _runtime.handlePromise(result);
+  }
+
+  Future<JsEvalResult> _pumpQuickJsFuture(Future<dynamic> future) async {
+    Object? value;
+    Object? error;
+    StackTrace? stackTrace;
+    var completed = false;
+
+    unawaited(
+      future.then<void>(
+        (resolved) {
+          value = resolved;
+          completed = true;
+        },
+        onError: (Object caughtError, StackTrace caughtStackTrace) {
+          error = caughtError;
+          stackTrace = caughtStackTrace;
+          completed = true;
+        },
+      ),
+    );
+
+    while (!completed) {
+      if (_disposing || _disposed) {
+        throw StateError('Plugin runtime is being disposed.');
+      }
+      _runtime.executePendingJob();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    _runtime.executePendingJob();
+
+    if (error != null) {
+      Error.throwWithStackTrace(error!, stackTrace ?? StackTrace.current);
+    }
+    return JsEvalResult(value?.toString() ?? 'null', value);
+  }
+
+  String _scheduleTimeout(dynamic args) {
+    if (_disposing || _disposed) {
+      return 'false';
+    }
+
+    final payload = args is Map ? _objectMap(args) : <String, Object?>{};
+    final id = _intValue(payload['id']);
+    if (id == null) {
+      return 'false';
+    }
+
+    final duration = Duration(
+      milliseconds: (_intValue(payload['timeout']) ?? 0).clamp(0, 0x7fffffff),
+    );
+    _scheduledTimers[id]?.cancel();
+    _scheduledTimers[id] = Timer(duration, () {
+      _scheduledTimers.remove(id);
+      if (_disposing || _disposed) {
+        return;
+      }
+
+      final callback = Future<void>.sync(() {
+        final result = _runtime.evaluate('globalThis.__robyneRunTimeout($id);');
+        if (!result.isError) {
+          _runtime.executePendingJob();
+        }
       });
+      _pendingTimerCallbacks.add(callback);
+      unawaited(
+        callback.whenComplete(() {
+          _pendingTimerCallbacks.remove(callback);
+        }),
+      );
+    });
+    return 'true';
+  }
+
+  String _clearTimeout(dynamic args) {
+    final payload = args is Map ? _objectMap(args) : <String, Object?>{};
+    final id = _intValue(payload['id']);
+    if (id != null) {
+      _scheduledTimers.remove(id)?.cancel();
+    }
+    return 'true';
+  }
+
+  Future<void> _completeHttpRequest(int id, Map<String, Object?> config) async {
+    late final Map<String, Object?> envelope;
+    try {
+      final response = await _httpClient.request(config);
+      envelope = <String, Object?>{'ok': true, 'response': response};
+    } catch (error) {
+      envelope = <String, Object?>{'ok': false, 'error': error.toString()};
+    }
+
+    if (_disposing || _disposed) {
+      return;
+    }
+
+    final encodedEnvelope = jsonEncode(envelope);
+    final result = _runtime.evaluate(
+      'globalThis.__robyneResolveHttp($id, $encodedEnvelope);',
+    );
+    if (!result.isError) {
+      _runtime.executePendingJob();
+    }
+  }
+
+  Future<void> _waitForPendingWork() async {
+    final deadline = DateTime.now().add(pluginMethodTimeout);
+    while (_pendingBridgeCalls.isNotEmpty ||
+        _pendingMethodCalls.isNotEmpty ||
+        _pendingTimerCallbacks.isNotEmpty) {
+      final remaining = deadline.difference(DateTime.now());
+      if (remaining <= Duration.zero) {
+        break;
+      }
+
+      var timedOut = false;
+      await Future.wait<void>(<Future<void>>[
+        ..._pendingBridgeCalls,
+        ..._pendingMethodCalls,
+        ..._pendingTimerCallbacks,
+      ]).timeout(
+        remaining,
+        onTimeout: () {
+          timedOut = true;
+          return <void>[];
+        },
+      );
+      _runtime.executePendingJob();
+      if (timedOut) {
+        break;
+      }
+    }
+  }
+
+  void _cancelScheduledTimers() {
+    for (final timer in _scheduledTimers.values) {
+      timer.cancel();
+    }
+    _scheduledTimers.clear();
+  }
+
+  void _clearJavaScriptTimeoutCallbacks() {
+    if (_disposed) {
+      return;
+    }
+    try {
+      _runtime.evaluate('globalThis.__robyneClearAllTimeouts();');
+    } catch (_) {
+      // Best-effort cleanup before releasing the QuickJS runtime.
     }
   }
 
@@ -191,20 +413,88 @@ class QuickJsPluginRuntime implements PluginRuntime {
       (key, dynamic mapValue) => MapEntry(key.toString(), mapValue as Object?),
     );
   }
+
+  static int? _intValue(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    return null;
+  }
 }
 
 const _bootstrapScript = r'''
   globalThis.__robyneModules = {};
-  globalThis.env = { getUserVariables: function() { return {}; } };
-
-  async function __robyneHttp(config) {
-    const payload = JSON.stringify(config || {});
-    const raw = await sendMessage('robyneHttp', payload);
-    const envelope = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (!envelope.ok) {
-      throw new Error(envelope.error || 'Network request failed');
+  globalThis.__robyneUserVariables = {};
+  globalThis.env = {
+    getUserVariables: function() {
+      return globalThis.__robyneUserVariables || {};
     }
-    return envelope.response;
+  };
+  globalThis.__robyneHttpSeq = 0;
+  globalThis.__robyneHttpCallbacks = {};
+  globalThis.__robyneTimeoutSeq = 0;
+  globalThis.__robyneTimeoutCallbacks = {};
+
+  globalThis.setTimeout = function(fnTimeout, timeout) {
+    if (typeof fnTimeout !== 'function') {
+      return undefined;
+    }
+    const timeoutId = ++globalThis.__robyneTimeoutSeq;
+    globalThis.__robyneTimeoutCallbacks[timeoutId] = fnTimeout;
+    sendMessage('robyneSetTimeout', JSON.stringify({
+      id: timeoutId,
+      timeout: Number(timeout) || 0
+    }));
+    return timeoutId;
+  };
+
+  globalThis.clearTimeout = function(timeoutId) {
+    const id = Number(timeoutId) || 0;
+    delete globalThis.__robyneTimeoutCallbacks[id];
+    sendMessage('robyneClearTimeout', JSON.stringify({ id: id }));
+  };
+
+  globalThis.__robyneRunTimeout = function(timeoutId) {
+    const callback = globalThis.__robyneTimeoutCallbacks[timeoutId];
+    if (!callback) {
+      return;
+    }
+    delete globalThis.__robyneTimeoutCallbacks[timeoutId];
+    callback();
+  };
+
+  globalThis.__robyneClearAllTimeouts = function() {
+    globalThis.__robyneTimeoutCallbacks = {};
+  };
+
+  function __robyneHttp(config) {
+    return new Promise((resolve, reject) => {
+      const id = ++globalThis.__robyneHttpSeq;
+      globalThis.__robyneHttpCallbacks[id] = { resolve, reject };
+      sendMessage('robyneHttp', JSON.stringify({
+        id: id,
+        config: config || {}
+      }));
+    });
+  }
+
+  globalThis.__robyneResolveHttp = function(id, envelope) {
+    const callbacks = globalThis.__robyneHttpCallbacks[id];
+    if (!callbacks) {
+      return;
+    }
+    delete globalThis.__robyneHttpCallbacks[id];
+    if (!envelope.ok) {
+      callbacks.reject(new Error(envelope.error || 'Network request failed'));
+      return;
+    }
+    callbacks.resolve(envelope.response);
   }
 
   function createAxios() {
@@ -227,5 +517,12 @@ const _bootstrapScript = r'''
       return globalThis.__robyneModules[name];
     }
     throw new Error('Unsupported module: ' + name);
+  };
+
+  globalThis.__robyneNormalizePluginExport = function(exported) {
+    if (exported && typeof exported === 'object' && !exported.platform && exported.default) {
+      return exported.default;
+    }
+    return exported;
   };
 ''';

@@ -9,32 +9,14 @@ import '../domain/media_source.dart';
 
 class MediaKitAudioPlayerService implements AudioPlayerService {
   MediaKitAudioPlayerService() : _player = media_kit.Player() {
-    _subscriptions.add(
-      _player.stream.playing.listen(
-        (playing) => _emit(_snapshot.copyWith(playing: playing)),
-      ),
-    );
-    _subscriptions.add(
-      _player.stream.buffering.listen(
-        (buffering) => _emit(_snapshot.copyWith(buffering: buffering)),
-      ),
-    );
-    _subscriptions.add(
-      _player.stream.position.listen(
-        (position) => _emit(_snapshot.copyWith(position: position)),
-      ),
-    );
-    _subscriptions.add(
-      _player.stream.duration.listen(
-        (duration) => _emit(_snapshot.copyWith(duration: duration)),
-      ),
-    );
+    _bindPlayer(_player);
   }
 
-  final media_kit.Player _player;
+  media_kit.Player _player;
   final _controller = StreamController<PlayerSnapshot>.broadcast();
-  final _subscriptions = <StreamSubscription<Object?>>[];
+  var _subscriptions = <StreamSubscription<Object?>>[];
   PlayerSnapshot _snapshot = const PlayerSnapshot();
+  int _operationId = 0;
 
   @override
   PlayerSnapshot get snapshot => _snapshot;
@@ -47,14 +29,23 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
 
   @override
   Future<Result<void>> play(MediaSource source) async {
+    final operationId = _operationId + 1;
+    _operationId = operationId;
     try {
+      final player = await _replacePlayer();
+      if (!_isCurrentOperation(operationId)) {
+        return const Ok(null);
+      }
       _emit(_snapshot.copyWith(currentSource: source));
-      await _player.open(
+      await player.open(
         media_kit.Media(source.url, httpHeaders: source.headers),
         play: true,
       );
       return const Ok(null);
     } catch (error, stackTrace) {
+      if (!_isCurrentOperation(operationId)) {
+        return const Ok(null);
+      }
       return Failure(
         AppError(
           code: 'player.play_failed',
@@ -70,6 +61,7 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
   Future<Result<void>> pause() async {
     try {
       await _player.pause();
+      _emit(_snapshot.copyWith(playing: false));
       return const Ok(null);
     } catch (error, stackTrace) {
       return Failure(
@@ -84,9 +76,33 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
   }
 
   @override
-  Future<Result<void>> stop() async {
+  Future<Result<void>> resume() async {
     try {
-      await _player.stop();
+      await _player.play();
+      _emit(_snapshot.copyWith(playing: true));
+      return const Ok(null);
+    } catch (error, stackTrace) {
+      return Failure(
+        AppError(
+          code: 'player.play_failed',
+          message: 'Failed to resume playback.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<Result<void>> stop() async {
+    final operationId = _operationId + 1;
+    _operationId = operationId;
+    try {
+      final player = await _replacePlayer();
+      if (!_isCurrentOperation(operationId)) {
+        return const Ok(null);
+      }
+      await player.stop();
       _emit(const PlayerSnapshot());
       return const Ok(null);
     } catch (error, stackTrace) {
@@ -103,11 +119,54 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
 
   @override
   Future<void> dispose() async {
+    _operationId += 1;
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }
     await _controller.close();
     await _player.dispose();
+  }
+
+  void _bindPlayer(media_kit.Player player) {
+    _subscriptions.add(
+      player.stream.playing.listen(
+        (playing) => _emit(_snapshot.copyWith(playing: playing)),
+      ),
+    );
+    _subscriptions.add(
+      player.stream.buffering.listen(
+        (buffering) => _emit(_snapshot.copyWith(buffering: buffering)),
+      ),
+    );
+    _subscriptions.add(
+      player.stream.position.listen(
+        (position) => _emit(_snapshot.copyWith(position: position)),
+      ),
+    );
+    _subscriptions.add(
+      player.stream.duration.listen(
+        (duration) => _emit(_snapshot.copyWith(duration: duration)),
+      ),
+    );
+  }
+
+  Future<media_kit.Player> _replacePlayer() async {
+    final oldPlayer = _player;
+    final oldSubscriptions = _subscriptions;
+    final nextPlayer = media_kit.Player();
+    _subscriptions = <StreamSubscription<Object?>>[];
+    _player = nextPlayer;
+    _bindPlayer(nextPlayer);
+
+    for (final subscription in oldSubscriptions) {
+      await subscription.cancel();
+    }
+    await oldPlayer.dispose();
+    return nextPlayer;
+  }
+
+  bool _isCurrentOperation(int operationId) {
+    return _operationId == operationId;
   }
 
   void _emit(PlayerSnapshot snapshot) {

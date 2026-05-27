@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -15,13 +16,18 @@ class PluginHttpClient {
           );
 
   final Dio _dio;
+  static const _requestBudget = Duration(seconds: 65);
 
   Future<Map<String, Object?>> request(Map<String, Object?> config) async {
     final url = _normalizeUrl((config['url'] ?? '').toString());
     final method = (config['method'] ?? 'GET').toString().toUpperCase();
     late final Response<Object?> response;
     try {
-      response = await _requestWithRetry(url, method, config);
+      response = await _requestWithRetry(
+        url,
+        method,
+        config,
+      ).timeout(_requestBudget);
     } on DioException catch (error) {
       throw DioException(
         requestOptions: error.requestOptions,
@@ -31,6 +37,8 @@ class PluginHttpClient {
         stackTrace: error.stackTrace,
         message: '$method $url failed: ${error.message}',
       );
+    } on TimeoutException catch (error) {
+      throw TimeoutException('$method $url timed out.', error.duration);
     }
     final data = _decodeResponseData(response.data, config['responseType']);
 

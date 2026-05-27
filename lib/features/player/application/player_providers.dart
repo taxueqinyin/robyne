@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/app_error.dart';
 import '../../../core/result/result.dart';
 import '../../plugin/application/plugin_providers.dart';
+import '../../plugin/application/plugin_runtime_config.dart';
 import '../../search/domain/music_item.dart';
 import '../domain/audio_player_service.dart';
 import '../infrastructure/media_kit_audio_player_service.dart';
@@ -25,18 +26,35 @@ final playerControllerProvider =
     AsyncNotifierProvider<PlayerController, AppError?>(PlayerController.new);
 
 class PlayerController extends AsyncNotifier<AppError?> {
+  int _playRequestId = 0;
+
   @override
   AppError? build() => null;
 
   Future<void> playFromPlugin(MusicItem item) async {
+    final requestId = _playRequestId + 1;
+    _playRequestId = requestId;
+
     final runtimeFactory = ref.read(pluginRuntimeFactoryProvider);
     final repository = ref.read(pluginRepositoryProvider);
     final compat = ref.read(musicFreeCompatAdapterProvider);
     final audio = ref.read(audioPlayerServiceProvider);
 
     state = const AsyncData(null);
+    final stopResult = await audio.stop();
+    if (!_isCurrentPlayRequest(requestId)) {
+      return;
+    }
+    if (stopResult case Failure<void>(:final error)) {
+      state = AsyncData(error);
+      return;
+    }
 
     final pluginsResult = await repository.listPlugins();
+    if (!_isCurrentPlayRequest(requestId)) {
+      return;
+    }
+
     final plugin = pluginsResult.fold(
       (plugins) => plugins
           .where((candidate) => candidate.enabled)
@@ -60,8 +78,22 @@ class PlayerController extends AsyncNotifier<AppError?> {
 
     final runtime = await runtimeFactory.create();
     try {
+      if (!_isCurrentPlayRequest(requestId)) {
+        return;
+      }
+
       final source = await File(plugin.sourcePath).readAsString();
-      final loaded = await runtime.loadPlugin(source);
+      if (!_isCurrentPlayRequest(requestId)) {
+        return;
+      }
+
+      final loaded = await runtime.loadPlugin(
+        source,
+        userVariables: Map<String, String>.from(plugin.userVariableValues),
+      );
+      if (!_isCurrentPlayRequest(requestId)) {
+        return;
+      }
       if (loaded case Failure<Map<String, Object?>>(:final error)) {
         state = AsyncData(error);
         return;
@@ -70,7 +102,11 @@ class PlayerController extends AsyncNotifier<AppError?> {
       final mediaResult = await runtime.callMethod('getMediaSource', <Object?>[
         item.raw,
         'standard',
-      ], timeout: const Duration(seconds: 10));
+      ], timeout: pluginMethodTimeout);
+
+      if (!_isCurrentPlayRequest(requestId)) {
+        return;
+      }
 
       final mediaSource = switch (mediaResult) {
         Ok<Object?>(:final value) => compat.mediaSourceFromPluginValue(value),
@@ -80,9 +116,13 @@ class PlayerController extends AsyncNotifier<AppError?> {
       switch (mediaSource) {
         case Ok(:final value):
           final playResult = await audio.play(value);
-          state = AsyncData(playResult.fold((_) => null, (error) => error));
+          if (_isCurrentPlayRequest(requestId)) {
+            state = AsyncData(playResult.fold((_) => null, (error) => error));
+          }
         case Failure(:final error):
-          state = AsyncData(error);
+          if (_isCurrentPlayRequest(requestId)) {
+            state = AsyncData(error);
+          }
       }
     } finally {
       await runtime.dispose();
@@ -90,12 +130,24 @@ class PlayerController extends AsyncNotifier<AppError?> {
   }
 
   Future<void> pause() async {
+    _playRequestId += 1;
     final result = await ref.read(audioPlayerServiceProvider).pause();
     state = AsyncData(result.fold((_) => null, (error) => error));
   }
 
+  Future<void> resume() async {
+    _playRequestId += 1;
+    final result = await ref.read(audioPlayerServiceProvider).resume();
+    state = AsyncData(result.fold((_) => null, (error) => error));
+  }
+
   Future<void> stop() async {
+    _playRequestId += 1;
     final result = await ref.read(audioPlayerServiceProvider).stop();
     state = AsyncData(result.fold((_) => null, (error) => error));
+  }
+
+  bool _isCurrentPlayRequest(int requestId) {
+    return _playRequestId == requestId;
   }
 }

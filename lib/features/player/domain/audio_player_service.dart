@@ -10,6 +10,8 @@ abstract interface class AudioPlayerService {
 
   Future<Result<void>> pause();
 
+  Future<Result<void>> resume();
+
   Future<Result<void>> stop();
 
   Future<void> dispose();

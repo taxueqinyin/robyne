@@ -11,6 +11,7 @@ class PluginDefinition {
     this.description,
     this.supportedSearchTypes = const <String>[],
     this.userVariables = const <Map<String, Object?>>[],
+    this.userVariableValues = const <String, String>{},
   });
 
   final String id;
@@ -24,6 +25,7 @@ class PluginDefinition {
   final DateTime updatedAt;
   final List<String> supportedSearchTypes;
   final List<Map<String, Object?>> userVariables;
+  final Map<String, String> userVariableValues;
 
   PluginDefinition copyWith({
     String? id,
@@ -37,6 +39,7 @@ class PluginDefinition {
     DateTime? updatedAt,
     List<String>? supportedSearchTypes,
     List<Map<String, Object?>>? userVariables,
+    Map<String, String>? userVariableValues,
   }) {
     return PluginDefinition(
       id: id ?? this.id,
@@ -50,6 +53,7 @@ class PluginDefinition {
       updatedAt: updatedAt ?? this.updatedAt,
       supportedSearchTypes: supportedSearchTypes ?? this.supportedSearchTypes,
       userVariables: userVariables ?? this.userVariables,
+      userVariableValues: userVariableValues ?? this.userVariableValues,
     );
   }
 
@@ -77,6 +81,13 @@ class PluginDefinition {
                 ),
               )
               .toList(growable: false),
+      userVariableValues:
+          (json['userVariableValues'] as Map<dynamic, dynamic>? ??
+                  const <dynamic, dynamic>{})
+              .map(
+                (key, value) =>
+                    MapEntry(key.toString(), value?.toString() ?? ''),
+              ),
     );
   }
 
@@ -93,6 +104,7 @@ class PluginDefinition {
       'updatedAt': updatedAt.toIso8601String(),
       'supportedSearchTypes': supportedSearchTypes,
       'userVariables': userVariables,
+      'userVariableValues': userVariableValues,
     };
   }
 }

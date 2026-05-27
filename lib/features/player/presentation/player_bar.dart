@@ -59,10 +59,16 @@ class PlayerBar extends ConsumerWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'Pause',
-                icon: const Icon(Icons.pause),
-                onPressed: () =>
-                    ref.read(playerControllerProvider.notifier).pause(),
+                tooltip: snapshot?.playing == true ? 'Pause' : 'Play',
+                icon: Icon(
+                  snapshot?.playing == true ? Icons.pause : Icons.play_arrow,
+                ),
+                onPressed: snapshot?.playing == true
+                    ? () => ref.read(playerControllerProvider.notifier).pause()
+                    : snapshot?.currentSource == null
+                    ? null
+                    : () =>
+                          ref.read(playerControllerProvider.notifier).resume(),
               ),
               IconButton(
                 tooltip: 'Stop',

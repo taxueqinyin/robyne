@@ -1,7 +1,10 @@
 import '../../../core/result/result.dart';
 
 abstract interface class PluginRuntime {
-  Future<Result<Map<String, Object?>>> loadPlugin(String source);
+  Future<Result<Map<String, Object?>>> loadPlugin(
+    String source, {
+    Map<String, String> userVariables,
+  });
 
   Future<Result<Object?>> callMethod(
     String method,
