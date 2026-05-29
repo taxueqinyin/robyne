@@ -7,10 +7,28 @@ class LocalFileStore {
 
   final Directory? _baseDirectory;
 
+  Future<Directory> supportDirectory() async {
+    return _baseDirectory ?? await getApplicationSupportDirectory();
+  }
+
   Future<Directory> pluginsDirectory() async {
-    final supportDirectory =
-        _baseDirectory ?? await getApplicationSupportDirectory();
-    final directory = Directory('${supportDirectory.path}/plugins');
+    final directory = Directory('${(await supportDirectory()).path}/plugins');
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+    return directory;
+  }
+
+  Future<Directory> dataDirectory() async {
+    final directory = Directory('${(await supportDirectory()).path}/data');
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+    return directory;
+  }
+
+  Future<Directory> cacheDirectory() async {
+    final directory = Directory('${(await supportDirectory()).path}/cache');
     if (!await directory.exists()) {
       await directory.create(recursive: true);
     }

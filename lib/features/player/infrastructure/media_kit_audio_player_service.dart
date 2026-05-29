@@ -17,6 +17,8 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
   var _subscriptions = <StreamSubscription<Object?>>[];
   PlayerSnapshot _snapshot = const PlayerSnapshot();
   int _operationId = 0;
+  double _volume = 100;
+  RestoreSnapshotFilter? _restoreFilter;
 
   @override
   PlayerSnapshot get snapshot => _snapshot;
@@ -28,7 +30,11 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
   }
 
   @override
-  Future<Result<void>> play(MediaSource source) async {
+  Future<Result<void>> play(
+    MediaSource source, {
+    Duration startPosition = Duration.zero,
+    Duration expectedDuration = Duration.zero,
+  }) async {
     final operationId = _operationId + 1;
     _operationId = operationId;
     try {
@@ -36,11 +42,35 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
       if (!_isCurrentOperation(operationId)) {
         return const Ok(null);
       }
-      _emit(_snapshot.copyWith(currentSource: source));
+      _restoreFilter = RestoreSnapshotFilter(
+        source: source,
+        startPosition: startPosition,
+        expectedDuration: expectedDuration,
+      );
+      _emit(
+        _snapshot.copyWith(
+          currentSource: source,
+          completed: false,
+          position: startPosition,
+        ),
+      );
       await player.open(
         media_kit.Media(source.url, httpHeaders: source.headers),
-        play: true,
+        play: startPosition <= Duration.zero,
       );
+      if (!_isCurrentOperation(operationId)) {
+        return const Ok(null);
+      }
+      if (startPosition > Duration.zero) {
+        await _seekWhenReady(player, startPosition, operationId);
+        if (!_isCurrentOperation(operationId)) {
+          return const Ok(null);
+        }
+        _restoreFilter?.markSeekCompleted();
+        _emit(_snapshot.copyWith(position: startPosition, completed: false));
+        await player.play();
+        _emit(_snapshot.copyWith(playing: true));
+      }
       return const Ok(null);
     } catch (error, stackTrace) {
       if (!_isCurrentOperation(operationId)) {
@@ -94,10 +124,49 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
   }
 
   @override
+  Future<Result<void>> seek(Duration position) async {
+    try {
+      await _player.seek(position);
+      _emit(_snapshot.copyWith(position: position, completed: false));
+      return const Ok(null);
+    } catch (error, stackTrace) {
+      return Failure(
+        AppError(
+          code: 'player.play_failed',
+          message: 'Failed to seek playback.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<Result<void>> setVolume(double volume) async {
+    try {
+      final normalized = volume.clamp(0, 100).toDouble();
+      _volume = normalized;
+      await _player.setVolume(normalized);
+      _emit(_snapshot.copyWith(volume: normalized));
+      return const Ok(null);
+    } catch (error, stackTrace) {
+      return Failure(
+        AppError(
+          code: 'player.play_failed',
+          message: 'Failed to set playback volume.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  @override
   Future<Result<void>> stop() async {
     final operationId = _operationId + 1;
     _operationId = operationId;
     try {
+      _restoreFilter = null;
       final player = await _replacePlayer();
       if (!_isCurrentOperation(operationId)) {
         return const Ok(null);
@@ -139,6 +208,11 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
       ),
     );
     _subscriptions.add(
+      player.stream.completed.listen(
+        (completed) => _emit(_snapshot.copyWith(completed: completed)),
+      ),
+    );
+    _subscriptions.add(
       player.stream.position.listen(
         (position) => _emit(_snapshot.copyWith(position: position)),
       ),
@@ -146,6 +220,11 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
     _subscriptions.add(
       player.stream.duration.listen(
         (duration) => _emit(_snapshot.copyWith(duration: duration)),
+      ),
+    );
+    _subscriptions.add(
+      player.stream.volume.listen(
+        (volume) => _emit(_snapshot.copyWith(volume: volume)),
       ),
     );
   }
@@ -157,6 +236,7 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
     _subscriptions = <StreamSubscription<Object?>>[];
     _player = nextPlayer;
     _bindPlayer(nextPlayer);
+    await nextPlayer.setVolume(_volume);
 
     for (final subscription in oldSubscriptions) {
       await subscription.cancel();
@@ -165,14 +245,66 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
     return nextPlayer;
   }
 
+  Future<void> _seekWhenReady(
+    media_kit.Player player,
+    Duration position,
+    int operationId,
+  ) async {
+    for (var attempt = 0; attempt < 20; attempt += 1) {
+      if (!_isCurrentOperation(operationId)) {
+        return;
+      }
+      if (player.state.duration > Duration.zero || attempt >= 2) {
+        await player.seek(position);
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    await player.seek(position);
+  }
+
   bool _isCurrentOperation(int operationId) {
     return _operationId == operationId;
   }
 
   void _emit(PlayerSnapshot snapshot) {
-    _snapshot = snapshot;
+    final nextSnapshot = _restoreFilter?.apply(snapshot) ?? snapshot;
+    _snapshot = nextSnapshot;
     if (!_controller.isClosed) {
-      _controller.add(snapshot);
+      _controller.add(nextSnapshot);
     }
+  }
+}
+
+class RestoreSnapshotFilter {
+  RestoreSnapshotFilter({
+    required this.source,
+    required this.startPosition,
+    required this.expectedDuration,
+  }) : _waitingForRestoredPosition = startPosition > Duration.zero;
+
+  final MediaSource source;
+  final Duration startPosition;
+  final Duration expectedDuration;
+  bool _waitingForRestoredPosition;
+
+  void markSeekCompleted() {
+    _waitingForRestoredPosition = false;
+  }
+
+  PlayerSnapshot apply(PlayerSnapshot snapshot) {
+    final duration =
+        snapshot.duration > Duration.zero || expectedDuration <= Duration.zero
+        ? snapshot.duration
+        : expectedDuration;
+    var position = snapshot.position;
+    if (_waitingForRestoredPosition) {
+      position = startPosition;
+    }
+    return snapshot.copyWith(
+      currentSource: snapshot.currentSource ?? source,
+      position: position,
+      duration: duration,
+    );
   }
 }
