@@ -18,7 +18,7 @@ import '../domain/playback_item.dart';
 import '../infrastructure/local_audio_cache_service.dart';
 import 'player_state_repository.dart';
 
-const _backgroundAudioCacheEnabled = false;
+const _backgroundAudioCacheEnabled = true;
 
 final audioPlayerServiceProvider = Provider<AudioPlayerService>((ref) {
   final service = MediaKitAudioPlayerService();

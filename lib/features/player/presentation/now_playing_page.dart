@@ -14,7 +14,7 @@ import '../application/player_providers.dart';
 import '../domain/playback_item.dart';
 import 'artwork_view.dart';
 
-const _lyricsSystemEnabled = false;
+const _lyricsSystemEnabled = true;
 
 class NowPlayingPage extends ConsumerWidget {
   const NowPlayingPage({super.key});

@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:robyne/app/app.dart';
+import 'package:robyne/core/database/app_database.dart' as db;
 import 'package:robyne/core/result/result.dart';
+import 'package:robyne/features/lyrics/application/lyrics_providers.dart';
+import 'package:robyne/features/lyrics/infrastructure/lyric_repository.dart';
 import 'package:robyne/features/player/application/player_providers.dart';
 import 'package:robyne/features/player/domain/audio_player_service.dart';
 import 'package:robyne/features/player/domain/media_source.dart';
@@ -56,14 +59,23 @@ void main() {
     expect(find.byKey(const Key('player-mode-button')), findsOneWidget);
   });
 
-  testWidgets('lyrics system is temporarily disabled on now playing page', (
+  testWidgets('lyric offset slider updates the active lyric before closing', (
     tester,
   ) async {
+    final database = db.AppDatabase.memory();
+    addTearDown(database.close);
     final item = PlaybackItem.plugin(
       platform: 'Lyrics',
       musicId: 'song-1',
       title: 'Song',
       raw: const <String, Object?>{'id': 'song-1'},
+    );
+    final lyricRepository = LyricRepository(database: database);
+    await lyricRepository.associatePluginLyric(
+      item: item,
+      rawLyric: _lrcLines(40),
+      pluginPlatform: 'Lyrics',
+      pluginRaw: const <String, Object?>{'id': 'lyric-1'},
     );
 
     await tester.pumpWidget(
@@ -73,7 +85,7 @@ void main() {
             _FakeAudio(
               const PlayerSnapshot(
                 currentSource: MediaSource(url: 'https://example.com/a.mp3'),
-                position: Duration(minutes: 1),
+                position: Duration(milliseconds: 20500),
                 duration: Duration(minutes: 3),
               ),
             ),
@@ -86,6 +98,7 @@ void main() {
               ),
             ),
           ),
+          lyricRepositoryProvider.overrideWithValue(lyricRepository),
           playlistControllerProvider.overrideWith(
             () => _SeededPlaylistController(),
           ),
@@ -95,14 +108,34 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Lyrics temporarily disabled.'), findsOneWidget);
+    expect(_lyricIsActive(tester, 'line 20'), isTrue);
+    expect(find.text('line 30'), findsNothing);
 
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
-    expect(find.text('Add to playlist'), findsOneWidget);
-    expect(find.text('Search and link lyric'), findsNothing);
-    expect(find.text('Adjust lyric offset'), findsNothing);
+    await tester.tap(find.text('Adjust lyric offset'));
+    await tester.pumpAndSettle();
+    tester
+        .widget<Slider>(find.byKey(const Key('lyric-offset-slider')))
+        .onChanged
+        ?.call(10000);
+    await tester.pumpAndSettle();
+
+    expect(_lyricIsActive(tester, 'line 30'), isTrue);
   });
+}
+
+String _lrcLines(int count) {
+  return <String>[
+    for (var second = 1; second <= count; second += 1)
+      '[00:${second.toString().padLeft(2, '0')}.00]line $second',
+  ].join('\n');
+}
+
+bool _lyricIsActive(WidgetTester tester, String text) {
+  final context = tester.element(find.text(text));
+  return DefaultTextStyle.of(context).style.color ==
+      Theme.of(context).colorScheme.primary;
 }
 
 class _SeededPlayerController extends PlayerController {

@@ -12,12 +12,11 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
     _bindPlayer(_player);
   }
 
-  media_kit.Player _player;
+  final media_kit.Player _player;
   final _controller = StreamController<PlayerSnapshot>.broadcast();
-  var _subscriptions = <StreamSubscription<Object?>>[];
+  final _subscriptions = <StreamSubscription<Object?>>[];
   PlayerSnapshot _snapshot = const PlayerSnapshot();
   int _operationId = 0;
-  double _volume = 100;
   RestoreSnapshotFilter? _restoreFilter;
 
   @override
@@ -38,7 +37,7 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
     final operationId = _operationId + 1;
     _operationId = operationId;
     try {
-      final player = await _replacePlayer();
+      final player = _player;
       if (!_isCurrentOperation(operationId)) {
         return const Ok(null);
       }
@@ -145,7 +144,6 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
   Future<Result<void>> setVolume(double volume) async {
     try {
       final normalized = volume.clamp(0, 100).toDouble();
-      _volume = normalized;
       await _player.setVolume(normalized);
       _emit(_snapshot.copyWith(volume: normalized));
       return const Ok(null);
@@ -167,11 +165,10 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
     _operationId = operationId;
     try {
       _restoreFilter = null;
-      final player = await _replacePlayer();
       if (!_isCurrentOperation(operationId)) {
         return const Ok(null);
       }
-      await player.stop();
+      await _player.stop();
       _emit(const PlayerSnapshot());
       return const Ok(null);
     } catch (error, stackTrace) {
@@ -227,22 +224,6 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
         (volume) => _emit(_snapshot.copyWith(volume: volume)),
       ),
     );
-  }
-
-  Future<media_kit.Player> _replacePlayer() async {
-    final oldPlayer = _player;
-    final oldSubscriptions = _subscriptions;
-    final nextPlayer = media_kit.Player();
-    _subscriptions = <StreamSubscription<Object?>>[];
-    _player = nextPlayer;
-    _bindPlayer(nextPlayer);
-    await nextPlayer.setVolume(_volume);
-
-    for (final subscription in oldSubscriptions) {
-      await subscription.cancel();
-    }
-    await oldPlayer.dispose();
-    return nextPlayer;
   }
 
   Future<void> _seekWhenReady(
