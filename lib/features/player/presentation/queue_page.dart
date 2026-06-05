@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/player_providers.dart';
 import '../domain/playback_item.dart';
+import 'artwork_view.dart';
 
 class QueuePage extends ConsumerWidget {
   const QueuePage({super.key});
@@ -97,7 +98,9 @@ class _QueueList extends ConsumerWidget {
         final item = state.queue[index];
         final selected = item.id == state.currentItem?.id;
         return ListTile(
-          leading: Icon(selected ? Icons.equalizer : Icons.music_note),
+          leading: selected
+              ? const Icon(Icons.equalizer)
+              : ArtworkView(artworkUrl: item.artworkUrl),
           title: Text(item.title),
           subtitle: Text(item.platform ?? item.localPath ?? ''),
           onTap: () =>
@@ -115,27 +118,44 @@ class _QueueList extends ConsumerWidget {
   }
 }
 
-class _HistoryList extends StatelessWidget {
+class _HistoryList extends ConsumerWidget {
   const _HistoryList({required this.state});
 
   final PlayerControllerState state;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (state.history.isEmpty) {
       return const Center(child: Text('History is empty.'));
     }
-    return ListView.separated(
-      itemCount: state.history.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final entry = state.history[state.history.length - index - 1];
-        return ListTile(
-          leading: const Icon(Icons.history),
-          title: Text(entry.item.title),
-          subtitle: Text(entry.playedAt.toLocal().toString()),
-        );
-      },
+    return Column(
+      children: <Widget>[
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            key: const Key('clear-history-button'),
+            onPressed: () =>
+                ref.read(playerControllerProvider.notifier).clearHistory(),
+            icon: const Icon(Icons.delete_sweep_outlined),
+            label: const Text('Clear history'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: ListView.separated(
+            itemCount: state.history.length,
+            separatorBuilder: (context, index) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final entry = state.history[state.history.length - index - 1];
+              return ListTile(
+                leading: ArtworkView(artworkUrl: entry.item.artworkUrl),
+                title: Text(entry.item.title),
+                subtitle: Text(entry.playedAt.toLocal().toString()),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

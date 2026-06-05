@@ -11,6 +11,50 @@ final pluginControllerProvider =
       PluginController.new,
     );
 
+final pluginImportProgressProvider =
+    NotifierProvider<PluginImportProgressNotifier, PluginImportProgress?>(
+      PluginImportProgressNotifier.new,
+    );
+
+class PluginImportProgressNotifier extends Notifier<PluginImportProgress?> {
+  @override
+  PluginImportProgress? build() => null;
+
+  void setProgress(PluginImportProgress? progress) {
+    state = progress;
+  }
+}
+
+class PluginImportProgress {
+  const PluginImportProgress({
+    required this.total,
+    required this.completed,
+    required this.importedCount,
+    required this.failedCount,
+    this.currentLabel,
+  });
+
+  final int total;
+  final int completed;
+  final int importedCount;
+  final int failedCount;
+  final String? currentLabel;
+
+  double? get fraction => total <= 0 ? null : completed / total;
+}
+
+class PluginImportBatchResult {
+  const PluginImportBatchResult({
+    required this.importedCount,
+    required this.errors,
+  });
+
+  final int importedCount;
+  final List<AppError> errors;
+
+  bool get hasErrors => errors.isNotEmpty;
+}
+
 class PluginController extends AsyncNotifier<List<PluginDefinition>> {
   @override
   Future<List<PluginDefinition>> build() async {
@@ -22,6 +66,71 @@ class PluginController extends AsyncNotifier<List<PluginDefinition>> {
     final repository = ref.read(pluginRepositoryProvider);
     final result = await repository.importPluginFromPath(path);
     return _refreshAfterImport(result, repository);
+  }
+
+  Future<PluginImportBatchResult> importFromPaths(List<String> paths) async {
+    final repository = ref.read(pluginRepositoryProvider);
+    final progress = ref.read(pluginImportProgressProvider.notifier);
+    var importedCount = 0;
+    final errors = <AppError>[];
+    final total = paths.length;
+    progress.setProgress(
+      PluginImportProgress(
+        total: total,
+        completed: 0,
+        importedCount: 0,
+        failedCount: 0,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    try {
+      for (var index = 0; index < paths.length; index += 1) {
+        final path = paths[index];
+        progress.setProgress(
+          PluginImportProgress(
+            total: total,
+            completed: index,
+            importedCount: importedCount,
+            failedCount: errors.length,
+            currentLabel: path,
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+        final result = await repository.importPluginFromPath(path);
+        result.fold((_) {
+          importedCount += 1;
+        }, errors.add);
+        progress.setProgress(
+          PluginImportProgress(
+            total: total,
+            completed: index + 1,
+            importedCount: importedCount,
+            failedCount: errors.length,
+            currentLabel: path,
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      if (importedCount > 0) {
+        final refreshError = await _refreshPlugins(repository);
+        if (refreshError == null) {
+          ref.invalidate(installedPluginsProvider);
+        } else {
+          errors.add(refreshError);
+        }
+      } else {
+        _restorePreviousPlugins();
+      }
+
+      return PluginImportBatchResult(
+        importedCount: importedCount,
+        errors: List<AppError>.unmodifiable(errors),
+      );
+    } finally {
+      progress.setProgress(null);
+    }
   }
 
   Future<AppError?> importFromUrl(String url) async {

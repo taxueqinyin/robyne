@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 
+import 'package:robyne/core/debug/ime_trace.dart';
 import 'package:robyne/features/plugin/application/plugin_controller.dart';
 import 'package:robyne/features/plugin/domain/plugin_definition.dart';
 
@@ -11,71 +16,96 @@ class PluginPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pluginsValue = ref.watch(pluginControllerProvider);
+    final importProgress = ref.watch(pluginImportProgressProvider);
+    final isImporting = importProgress != null;
 
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Row(
+          Text('Plugins', style: Theme.of(context).textTheme.headlineMedium),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: <Widget>[
-              Expanded(
-                child: Text(
-                  'Plugins',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
+              OutlinedButton.icon(
+                onPressed: isImporting
+                    ? null
+                    : () async {
+                        final result = await FilePicker.pickFiles(
+                          type: FileType.custom,
+                          allowedExtensions: <String>['js'],
+                          allowMultiple: true,
+                        );
+                        final paths =
+                            result?.files
+                                .map((file) => file.path)
+                                .whereType<String>()
+                                .toList(growable: false) ??
+                            const <String>[];
+                        if (paths.isEmpty || !context.mounted) {
+                          return;
+                        }
+                        _startPluginPathImport(context, ref, paths);
+                      },
+                icon: const Icon(Icons.file_open),
+                label: const Text('Import files'),
               ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.end,
-                children: <Widget>[
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final result = await FilePicker.pickFiles(
-                        type: FileType.custom,
-                        allowedExtensions: <String>['js'],
-                        allowMultiple: false,
-                      );
-                      final path = result?.files.single.path;
-                      if (path == null || !context.mounted) {
-                        return;
-                      }
-                      final error = await ref
-                          .read(pluginControllerProvider.notifier)
-                          .importFromPath(path);
-                      if (error != null && context.mounted) {
-                        _showPluginError(context, error);
-                      }
-                    },
-                    icon: const Icon(Icons.file_open),
-                    label: const Text('Import from file'),
-                  ),
-                  FilledButton.icon(
-                    onPressed: () async {
-                      final url = await _showImportUrlDialog(context);
-                      if (url == null || !context.mounted) {
-                        return;
-                      }
-                      final error = await ref
-                          .read(pluginControllerProvider.notifier)
-                          .importFromUrl(url);
-                      if (error != null && context.mounted) {
-                        _showPluginError(context, error);
-                      }
-                    },
-                    icon: const Icon(Icons.link),
-                    label: const Text('Import from URL'),
-                  ),
-                ],
+              OutlinedButton.icon(
+                onPressed: isImporting
+                    ? null
+                    : () async {
+                        final path = await _pickPluginDirectory(context);
+                        if (path == null || !context.mounted) {
+                          return;
+                        }
+                        final paths = await _pluginFilesInDirectory(path);
+                        if (!context.mounted) {
+                          return;
+                        }
+                        if (paths.isEmpty) {
+                          _showPluginError(
+                            context,
+                            'No JavaScript plugin files found.',
+                          );
+                          return;
+                        }
+                        _startPluginPathImport(context, ref, paths);
+                      },
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Import folder'),
+              ),
+              FilledButton.icon(
+                onPressed: isImporting
+                    ? null
+                    : () async {
+                        final url = await _showImportUrlDialog(context);
+                        if (url == null || !context.mounted) {
+                          return;
+                        }
+                        final error = await ref
+                            .read(pluginControllerProvider.notifier)
+                            .importFromUrl(url);
+                        if (error != null && context.mounted) {
+                          _showPluginError(context, error);
+                        }
+                      },
+                icon: const Icon(Icons.link),
+                label: const Text('Import from URL'),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            'Import MusicFree-style JavaScript plugins from local files.',
+            'Import MusicFree-style JavaScript plugins from local files, folders, or URLs.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
+          if (importProgress != null) ...<Widget>[
+            const SizedBox(height: 12),
+            _PluginImportProgressView(progress: importProgress),
+          ],
           const SizedBox(height: 24),
           Expanded(child: _PluginList(pluginsValue: pluginsValue)),
         ],
@@ -180,6 +210,87 @@ void _showPluginError(BuildContext context, Object error) {
   ).showSnackBar(SnackBar(content: Text(error.toString())));
 }
 
+void _startPluginPathImport(
+  BuildContext context,
+  WidgetRef ref,
+  List<String> paths,
+) {
+  unawaited(
+    Future<void>(() async {
+      final result = await ref
+          .read(pluginControllerProvider.notifier)
+          .importFromPaths(paths);
+      if (context.mounted) {
+        _showPluginImportResult(context, result);
+      }
+    }),
+  );
+}
+
+void _showPluginImportResult(
+  BuildContext context,
+  PluginImportBatchResult result,
+) {
+  final message = result.hasErrors
+      ? 'Imported ${result.importedCount}; ${result.errors.length} failed. ${result.errors.first.code}: ${result.errors.first.message}'
+      : 'Imported ${result.importedCount} plugin(s).';
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}
+
+Future<String?> _pickPluginDirectory(BuildContext context) async {
+  try {
+    return await FilePicker.getDirectoryPath(
+      dialogTitle: 'Choose plugin folder',
+    );
+  } catch (error) {
+    if (context.mounted) {
+      _showPluginError(context, error);
+    }
+    return null;
+  }
+}
+
+Future<List<String>> _pluginFilesInDirectory(String path) async {
+  final directory = Directory(path);
+  if (!await directory.exists()) {
+    return const <String>[];
+  }
+  final paths = <String>[];
+  await for (final entity in directory.list(recursive: true)) {
+    if (entity is File && p.extension(entity.path).toLowerCase() == '.js') {
+      paths.add(entity.path);
+    }
+  }
+  paths.sort();
+  return paths;
+}
+
+class _PluginImportProgressView extends StatelessWidget {
+  const _PluginImportProgressView({required this.progress});
+
+  final PluginImportProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = progress.currentLabel;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        LinearProgressIndicator(value: progress.fraction),
+        const SizedBox(height: 6),
+        Text(
+          current == null
+              ? 'Preparing plugin import...'
+              : 'Importing ${p.basename(current)} (${progress.completed}/${progress.total})',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+}
+
 Future<Map<String, String>?> _showUserVariablesDialog(
   BuildContext context,
   PluginDefinition plugin,
@@ -200,6 +311,12 @@ class _ImportUrlDialog extends StatefulWidget {
 class _ImportUrlDialogState extends State<_ImportUrlDialog> {
   final _controller = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    super.initState();
+    attachImeTextControllerTrace(_controller, 'plugins.importUrl');
+  }
 
   @override
   void dispose() {
@@ -277,7 +394,9 @@ class _UserVariablesDialogState extends State<_UserVariablesDialog> {
       if (_isBooleanVariable(variable)) {
         _boolValues[key] = value.toLowerCase() == 'true' || value == '1';
       } else {
-        _controllers[key] = TextEditingController(text: value);
+        final controller = TextEditingController(text: value);
+        attachImeTextControllerTrace(controller, 'plugins.variable.$key');
+        _controllers[key] = controller;
       }
     }
   }

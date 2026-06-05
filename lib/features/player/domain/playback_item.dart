@@ -58,13 +58,24 @@ class PlaybackItem {
     );
   }
 
-  factory PlaybackItem.local({required String path}) {
+  factory PlaybackItem.local({
+    required String path,
+    String? title,
+    String? artist,
+    String? album,
+    Duration? duration,
+    String? artworkUrl,
+  }) {
     final normalized = normalizePath(path);
     return PlaybackItem(
       id: 'local:$normalized',
       type: PlaybackItemType.local,
       localPath: normalized,
-      title: _titleFromPath(normalized),
+      title: title ?? _titleFromPath(normalized),
+      artist: artist,
+      album: album,
+      duration: duration,
+      artworkUrl: artworkUrl,
       raw: <String, Object?>{'path': normalized},
     );
   }

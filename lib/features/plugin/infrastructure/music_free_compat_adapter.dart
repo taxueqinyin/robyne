@@ -111,6 +111,7 @@ class MusicFreeCompatAdapter {
       artworkUrl:
           _stringValue(raw['artwork']) ??
           _stringValue(raw['artworkUrl']) ??
+          _stringValue(raw['cover']) ??
           _stringValue(raw['pic']) ??
           _stringValue(raw['coverImg']),
       raw: raw,
@@ -160,6 +161,34 @@ class MusicFreeCompatAdapter {
         raw: raw,
       ),
     );
+  }
+
+  Result<String> lyricFromPluginValue(Object? value) {
+    if (value is String && value.trim().isNotEmpty) {
+      return Ok(value);
+    }
+    if (value is! Map) {
+      return const Failure(
+        AppError(
+          code: 'lyric.empty',
+          message: 'Plugin did not return lyric text.',
+        ),
+      );
+    }
+
+    final raw = _objectMap(value);
+    final lyric =
+        _stringValue(raw['rawLrc']) ??
+        _stringValue(raw['lrc']) ??
+        _stringValue(raw['lyric']) ??
+        _stringValue(raw['lyrics']) ??
+        _stringValue(raw['text']);
+    if (lyric == null || lyric.trim().isEmpty) {
+      return const Failure(
+        AppError(code: 'lyric.empty', message: 'Plugin lyric result is empty.'),
+      );
+    }
+    return Ok(lyric);
   }
 
   static String _pluginId(String platform, String sourcePath) {

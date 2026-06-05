@@ -5,9 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/app_error.dart';
 import '../../../core/result/result.dart';
 import '../../plugin/application/plugin_providers.dart';
-import '../../plugin/application/plugin_runtime_config.dart';
 import '../../plugin/domain/plugin_definition.dart';
-import '../../plugin/domain/plugin_runtime.dart';
 import '../domain/music_item.dart';
 import '../domain/search_result.dart';
 
@@ -98,6 +96,7 @@ class PluginSearchState {
 }
 
 class SearchController extends AsyncNotifier<SearchState> {
+  static const _maxConcurrentSearches = 3;
   int _searchGeneration = 0;
 
   @override
@@ -178,18 +177,43 @@ class SearchController extends AsyncNotifier<SearchState> {
       ),
     );
 
-    final futures = enabledPlugins.map(
-      (plugin) => _searchPlugin(plugin, keyword, 1).then((result) {
-        _updatePluginResult(generation, result);
-      }),
-    );
-    await Future.wait<void>(futures);
+    await _searchPluginsLimited(generation, enabledPlugins, keyword);
 
     if (_searchGeneration == generation) {
       state = AsyncData(
         (state.value ?? const SearchState()).copyWith(isSearching: false),
       );
     }
+  }
+
+  Future<void> _searchPluginsLimited(
+    int generation,
+    List<PluginDefinition> plugins,
+    String keyword,
+  ) async {
+    var nextIndex = 0;
+    final workerCount = plugins.length < _maxConcurrentSearches
+        ? plugins.length
+        : _maxConcurrentSearches;
+    Future<void> worker() async {
+      while (_searchGeneration == generation) {
+        final index = nextIndex;
+        nextIndex += 1;
+        if (index >= plugins.length) {
+          return;
+        }
+        await Future<void>.delayed(Duration.zero);
+        final result = await _searchPlugin(plugins[index], keyword, 1);
+        if (_searchGeneration == generation) {
+          _replacePluginResult(result);
+        }
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    await Future.wait<void>(
+      List<Future<void>>.generate(workerCount, (_) => worker()),
+    );
   }
 
   Future<void> loadMoreSelected(List<PluginDefinition> plugins) async {
@@ -280,29 +304,17 @@ class SearchController extends AsyncNotifier<SearchState> {
     String keyword,
     int page,
   ) async {
-    final runtimeFactory = ref.read(pluginRuntimeFactoryProvider);
+    final executor = ref.read(pluginSearchExecutorProvider);
     final compat = ref.read(musicFreeCompatAdapterProvider);
-    PluginRuntime? runtime;
     try {
-      runtime = await runtimeFactory.create();
       final source = await File(plugin.sourcePath).readAsString();
-      final loaded = await runtime.loadPlugin(
-        source,
-        userVariables: plugin.userVariableValues,
+      final searchResult = await executor.search(
+        plugin: plugin,
+        source: source,
+        keyword: keyword,
+        page: page,
+        searchType: 'music',
       );
-      if (loaded case Failure<Map<String, Object?>>(:final error)) {
-        return PluginSearchState(
-          pluginId: plugin.id,
-          platform: plugin.platform,
-          error: error,
-        );
-      }
-
-      final searchResult = await runtime.callMethod('search', <Object?>[
-        keyword,
-        page,
-        'music',
-      ], timeout: pluginMethodTimeout);
       switch (searchResult) {
         case Ok<Object?>(:final value):
           final adapted = compat.searchResultFromPluginValue(
@@ -340,17 +352,7 @@ class SearchController extends AsyncNotifier<SearchState> {
           stackTrace: stackTrace,
         ),
       );
-    } finally {
-      await runtime?.dispose();
     }
-  }
-
-  void _updatePluginResult(int generation, PluginSearchState result) {
-    if (_searchGeneration != generation) {
-      return;
-    }
-
-    _replacePluginResult(result);
   }
 
   PluginSearchState? _pluginResultById(String pluginId) {

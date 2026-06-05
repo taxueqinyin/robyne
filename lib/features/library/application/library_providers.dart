@@ -5,7 +5,11 @@ import '../../player/domain/playback_item.dart';
 import '../infrastructure/local_music_repository.dart';
 
 final localMusicRepositoryProvider = Provider<LocalMusicRepository>((ref) {
-  return LocalMusicRepository(fileStore: ref.watch(localFileStoreProvider));
+  return LocalMusicRepository(
+    fileStore: ref.watch(localFileStoreProvider),
+    database: ref.watch(appDatabaseProvider),
+    legacyMigration: ref.watch(legacyStorageMigrationProvider),
+  );
 });
 
 final localMusicLibraryProvider =

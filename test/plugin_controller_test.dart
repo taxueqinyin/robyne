@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:robyne/core/errors/app_error.dart';
@@ -36,6 +38,74 @@ void main() {
     expect(state.hasError, isFalse);
     expect(state.value, <PluginDefinition>[existing]);
   });
+
+  test(
+    'batch path import refreshes successful plugins and reports failures',
+    () async {
+      final existing = _plugin('existing', 'Existing');
+      final imported = _plugin('imported', 'Imported');
+      final repository = _FakePluginRepository(
+        plugins: <PluginDefinition>[existing],
+        importResult: Ok(imported),
+        pathResults: <String, Result<PluginDefinition>>{
+          'good.js': Ok(imported),
+          'bad.js': const Failure(
+            AppError(code: 'plugin.load_failed', message: 'Bad plugin.'),
+          ),
+        },
+      );
+      final container = ProviderContainer(
+        overrides: [pluginRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(pluginControllerProvider.future);
+      final result = await container
+          .read(pluginControllerProvider.notifier)
+          .importFromPaths(<String>['good.js', 'bad.js']);
+
+      expect(result.importedCount, 1);
+      expect(result.errors.single.code, 'plugin.load_failed');
+      expect(container.read(pluginControllerProvider).value, <PluginDefinition>[
+        existing,
+        imported,
+      ]);
+    },
+  );
+
+  test('batch path import exposes progress while work is running', () async {
+    final imported = _plugin('imported', 'Imported');
+    final importStarted = Completer<void>();
+    final releaseImport = Completer<void>();
+    final repository = _FakePluginRepository(
+      plugins: <PluginDefinition>[],
+      importResult: Ok(imported),
+      importStarted: importStarted,
+      importGate: releaseImport.future,
+    );
+    final container = ProviderContainer(
+      overrides: [pluginRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(pluginControllerProvider.future);
+    final importFuture = container
+        .read(pluginControllerProvider.notifier)
+        .importFromPaths(<String>['slow.js']);
+
+    await importStarted.future;
+    final runningProgress = container.read(pluginImportProgressProvider);
+    expect(runningProgress, isNotNull);
+    expect(runningProgress?.total, 1);
+    expect(runningProgress?.completed, 0);
+    expect(runningProgress?.currentLabel, 'slow.js');
+
+    releaseImport.complete();
+    final result = await importFuture;
+
+    expect(result.importedCount, 1);
+    expect(container.read(pluginImportProgressProvider), isNull);
+  });
 }
 
 PluginDefinition _plugin(String id, String platform) {
@@ -50,10 +120,19 @@ PluginDefinition _plugin(String id, String platform) {
 }
 
 class _FakePluginRepository implements PluginRepository {
-  _FakePluginRepository({required this.plugins, required this.importResult});
+  _FakePluginRepository({
+    required this.plugins,
+    required this.importResult,
+    this.pathResults = const <String, Result<PluginDefinition>>{},
+    this.importStarted,
+    this.importGate,
+  });
 
   final List<PluginDefinition> plugins;
   final Result<PluginDefinition> importResult;
+  final Map<String, Result<PluginDefinition>> pathResults;
+  final Completer<void>? importStarted;
+  final Future<void>? importGate;
 
   @override
   Future<Result<List<PluginDefinition>>> listPlugins() async {
@@ -67,7 +146,18 @@ class _FakePluginRepository implements PluginRepository {
 
   @override
   Future<Result<PluginDefinition>> importPluginFromPath(String path) async {
-    return importResult;
+    if (!(importStarted?.isCompleted ?? true)) {
+      importStarted?.complete();
+    }
+    final gate = importGate;
+    if (gate != null) {
+      await gate;
+    }
+    final result = pathResults[path] ?? importResult;
+    if (result case Ok<PluginDefinition>(:final value)) {
+      plugins.add(value);
+    }
+    return result;
   }
 
   @override

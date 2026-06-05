@@ -128,6 +128,53 @@ void main() {
       );
     },
   );
+
+  test('uses configured cache directory and limit', () async {
+    final tempDirectory = await Directory.systemTemp.createTemp(
+      'robyne_cache_settings_test_',
+    );
+    addTearDown(() async {
+      await tempDirectory.delete(recursive: true);
+    });
+    final configuredCache = Directory('${tempDirectory.path}/configured-cache');
+    final downloader = _QueueAudioDownloader(<List<int>>[
+      List<int>.filled(60, 1),
+      List<int>.filled(60, 2),
+    ]);
+    final cache = LocalAudioCacheService(
+      fileStore: LocalFileStore(baseDirectory: tempDirectory),
+      downloader: downloader,
+      maxBytesReader: () async => 70,
+      cacheDirectoryReader: () async => configuredCache,
+    );
+
+    await cache.cache(
+      _pluginItem('A'),
+      const MediaSource(url: 'https://e/a.mp3'),
+    );
+    await cache.cache(
+      _pluginItem('B'),
+      const MediaSource(url: 'https://e/b.mp3'),
+    );
+
+    final resolvedA = await cache.resolve(
+      _pluginItem('A'),
+      const MediaSource(url: 'https://e/a.mp3'),
+    );
+    final resolvedB = await cache.resolve(
+      _pluginItem('B'),
+      const MediaSource(url: 'https://e/b.mp3'),
+    );
+
+    expect(
+      resolvedA.fold((source) => source.url, (_) => ''),
+      'https://e/a.mp3',
+    );
+    expect(
+      resolvedB.fold((source) => source.url, (_) => '').replaceAll(r'\', '/'),
+      startsWith('${configuredCache.path.replaceAll(r'\', '/')}/audio'),
+    );
+  });
 }
 
 PlaybackItem _pluginItem(String id) {

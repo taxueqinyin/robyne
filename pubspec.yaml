@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   cupertino_icons: ^1.0.8
   dio: ^5.9.2
@@ -41,6 +43,9 @@ dependencies:
   quickjs_engine: ^0.1.1
   shared_preferences: ^2.5.5
   file_picker: ^11.0.2
+  drift: ^2.33.0
+  path: ^1.9.1
+  audio_metadata_reader: ^1.6.0
 
 dev_dependencies:
   flutter_test:
@@ -53,9 +58,18 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   shared_preferences_platform_interface: ^2.4.2
+  drift_dev: ^2.33.0
+  build_runner: ^2.15.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
+
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: winsqlite3
+      name: sqlite3
 
 # The following section is specific to Flutter packages.
 flutter:

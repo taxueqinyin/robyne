@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:flutter/services.dart';
 import 'package:quickjs_engine/quickjs_engine.dart';
@@ -8,7 +9,9 @@ import '../../../core/errors/app_error.dart';
 import '../../../core/network/plugin_http_client.dart';
 import '../../../core/result/result.dart';
 import '../application/plugin_runtime_config.dart';
+import '../domain/plugin_definition.dart';
 import '../domain/plugin_runtime.dart';
+import '../domain/plugin_search_executor.dart';
 
 class QuickJsPluginRuntimeFactory implements PluginRuntimeFactory {
   QuickJsPluginRuntimeFactory({
@@ -33,6 +36,139 @@ class QuickJsPluginRuntimeFactory implements PluginRuntimeFactory {
       vendorSource: vendorSource,
     );
   }
+}
+
+class QuickJsIsolatePluginSearchExecutor implements PluginSearchExecutor {
+  QuickJsIsolatePluginSearchExecutor({
+    String vendorAssetPath = 'assets/js/musicfree_vendor.js',
+    Future<String?> Function()? vendorSourceLoader,
+  }) : _vendorAssetPath = vendorAssetPath,
+       _vendorSourceLoader = vendorSourceLoader;
+
+  final String _vendorAssetPath;
+  final Future<String?> Function()? _vendorSourceLoader;
+  Future<String?>? _vendorSourceFuture;
+
+  @override
+  Future<Result<Object?>> search({
+    required PluginDefinition plugin,
+    required String source,
+    required String keyword,
+    required int page,
+    required String searchType,
+  }) async {
+    try {
+      final vendorSource = await _loadVendorSource();
+      final response = await Isolate.run<Map<String, Object?>>(
+        () => _runQuickJsSearchInIsolate(<String, Object?>{
+          'source': source,
+          'userVariables': plugin.userVariableValues,
+          'keyword': keyword,
+          'page': page,
+          'searchType': searchType,
+          'timeoutMs': pluginMethodTimeout.inMilliseconds,
+          'vendorSource': vendorSource,
+        }),
+        debugName: 'robyne-plugin-search-${plugin.platform}',
+      );
+      if (response['ok'] == true) {
+        return Ok(response['value']);
+      }
+      return Failure(
+        AppError(
+          code: response['code']?.toString() ?? 'plugin.search_failed',
+          message:
+              response['message']?.toString() ??
+              'Plugin ${plugin.platform} search failed.',
+        ),
+      );
+    } catch (error, stackTrace) {
+      return Failure(
+        AppError(
+          code: 'plugin.search_isolate_failed',
+          message: 'Plugin ${plugin.platform} search failed off the UI thread.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  Future<String?> _loadVendorSource() {
+    return _vendorSourceFuture ??= _loadVendorSourceUncached();
+  }
+
+  Future<String?> _loadVendorSourceUncached() async {
+    final loader = _vendorSourceLoader;
+    if (loader != null) {
+      return loader();
+    }
+    try {
+      return await rootBundle.loadString(_vendorAssetPath);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+Future<Map<String, Object?>> _runQuickJsSearchInIsolate(
+  Map<String, Object?> request,
+) async {
+  final runtime = QuickJsPluginRuntime(
+    httpClient: PluginHttpClient(),
+    vendorSource: request['vendorSource'] as String?,
+  );
+  try {
+    final loaded = await runtime.loadPlugin(
+      request['source']?.toString() ?? '',
+      userVariables: _stringMapValue(request['userVariables']),
+    );
+    if (loaded case Failure<Map<String, Object?>>(:final error)) {
+      return _isolateFailure(error);
+    }
+
+    final result = await runtime.callMethod(
+      'search',
+      <Object?>[
+        request['keyword']?.toString() ?? '',
+        (request['page'] as int?) ?? 1,
+        request['searchType']?.toString() ?? 'music',
+      ],
+      timeout: Duration(milliseconds: (request['timeoutMs'] as int?) ?? 15000),
+    );
+    return switch (result) {
+      Ok<Object?>(:final value) => <String, Object?>{
+        'ok': true,
+        'value': value,
+      },
+      Failure<Object?>(:final error) => _isolateFailure(error),
+    };
+  } catch (error) {
+    return <String, Object?>{
+      'ok': false,
+      'code': 'plugin.search_failed',
+      'message': error.toString(),
+    };
+  } finally {
+    await runtime.dispose();
+  }
+}
+
+Map<String, Object?> _isolateFailure(AppError error) {
+  return <String, Object?>{
+    'ok': false,
+    'code': error.code,
+    'message': error.message,
+  };
+}
+
+Map<String, String> _stringMapValue(Object? value) {
+  if (value is! Map) {
+    return const <String, String>{};
+  }
+  return value.map(
+    (key, dynamic mapValue) => MapEntry(key.toString(), mapValue.toString()),
+  );
 }
 
 class QuickJsPluginRuntime implements PluginRuntime {

@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:robyne/core/result/result.dart';
 import 'package:robyne/features/plugin/application/plugin_providers.dart';
 import 'package:robyne/features/plugin/domain/plugin_definition.dart';
-import 'package:robyne/features/plugin/domain/plugin_runtime.dart';
+import 'package:robyne/features/plugin/domain/plugin_search_executor.dart';
 import 'package:robyne/features/search/application/search_controller.dart';
 
 void main() {
@@ -23,11 +23,9 @@ void main() {
       'plugin-disabled.js',
     );
 
-    final runtimeFactory = _FakePluginRuntimeFactory();
+    final executor = _FakePluginSearchExecutor();
     final container = ProviderContainer(
-      overrides: [
-        pluginRuntimeFactoryProvider.overrideWithValue(runtimeFactory),
-      ],
+      overrides: [pluginSearchExecutorProvider.overrideWithValue(executor)],
     );
     addTearDown(container.dispose);
 
@@ -51,7 +49,10 @@ void main() {
       state.pluginResults.first.result?.items.single.title,
       'Source A 周杰伦 page 1',
     );
-    expect(runtimeFactory.searches, <String>['Source A:1', 'Source B:1']);
+    expect(
+      executor.searches,
+      unorderedEquals(<String>['Source A:1', 'Source B:1']),
+    );
 
     notifier.selectPlugin('plugin-b');
     final selected = container.read(searchControllerProvider).value!;
@@ -69,12 +70,10 @@ void main() {
       });
       final pluginAPath = await _writePluginFile(tempDirectory, 'plugin-a.js');
       final pluginBPath = await _writePluginFile(tempDirectory, 'plugin-b.js');
-      final runtimeFactory = _FakePluginRuntimeFactory();
+      final executor = _FakePluginSearchExecutor();
 
       final container = ProviderContainer(
-        overrides: [
-          pluginRuntimeFactoryProvider.overrideWithValue(runtimeFactory),
-        ],
+        overrides: [pluginSearchExecutorProvider.overrideWithValue(executor)],
       );
       addTearDown(container.dispose);
 
@@ -99,13 +98,47 @@ void main() {
         'Source A 周杰伦 page 1',
         'Source A 周杰伦 page 2',
       ]);
-      expect(runtimeFactory.searches, contains('Source A:2'));
+      expect(executor.searches, contains('Source A:2'));
       expect(
-        runtimeFactory.searches.where((entry) => entry == 'Source B:2'),
+        executor.searches.where((entry) => entry == 'Source B:2'),
         isEmpty,
       );
     },
   );
+
+  test('limits concurrent plugin searches', () async {
+    final tempDirectory = await Directory.systemTemp.createTemp(
+      'robyne_search_concurrency_test_',
+    );
+    addTearDown(() async {
+      await tempDirectory.delete(recursive: true);
+    });
+    final pluginPaths = <String>[];
+    for (var index = 0; index < 8; index += 1) {
+      pluginPaths.add(
+        await _writePluginFile(tempDirectory, 'plugin-$index.js'),
+      );
+    }
+    final executor = _FakePluginSearchExecutor(
+      searchDelay: const Duration(milliseconds: 10),
+    );
+
+    final container = ProviderContainer(
+      overrides: [pluginSearchExecutorProvider.overrideWithValue(executor)],
+    );
+    addTearDown(container.dispose);
+
+    final notifier = container.read(searchControllerProvider.notifier);
+    notifier.updateKeyword('keyword');
+
+    await notifier.search(<PluginDefinition>[
+      for (var index = 0; index < pluginPaths.length; index += 1)
+        _plugin('plugin-$index', 'Source $index', pluginPaths[index]),
+    ]);
+
+    expect(executor.searches, hasLength(8));
+    expect(executor.maxConcurrentSearches, lessThanOrEqualTo(3));
+  });
 }
 
 Future<String> _writePluginFile(Directory directory, String name) async {
@@ -130,51 +163,43 @@ PluginDefinition _plugin(
   );
 }
 
-class _FakePluginRuntimeFactory implements PluginRuntimeFactory {
+class _FakePluginSearchExecutor implements PluginSearchExecutor {
+  _FakePluginSearchExecutor({this.searchDelay = Duration.zero});
+
+  final Duration searchDelay;
   final List<String> searches = <String>[];
+  int _activeSearches = 0;
+  int maxConcurrentSearches = 0;
 
   @override
-  Future<PluginRuntime> create() async {
-    return _FakePluginRuntime(searches);
-  }
-}
-
-class _FakePluginRuntime implements PluginRuntime {
-  _FakePluginRuntime(this._searches);
-
-  final List<String> _searches;
-  String _platform = 'unknown';
-
-  @override
-  Future<Result<Map<String, Object?>>> loadPlugin(
-    String source, {
-    Map<String, String> userVariables = const <String, String>{},
+  Future<Result<Object?>> search({
+    required PluginDefinition plugin,
+    required String source,
+    required String keyword,
+    required int page,
+    required String searchType,
   }) async {
-    final path = source.replaceAll(r'\', '/');
-    _platform = path.contains('plugin-a') ? 'Source A' : 'Source B';
-    return Ok(<String, Object?>{'platform': _platform});
+    _activeSearches += 1;
+    if (_activeSearches > maxConcurrentSearches) {
+      maxConcurrentSearches = _activeSearches;
+    }
+    try {
+      if (searchDelay > Duration.zero) {
+        await Future<void>.delayed(searchDelay);
+      }
+      searches.add('${plugin.platform}:$page');
+      return Ok(<String, Object?>{
+        'page': page,
+        'isEnd': page >= 2,
+        'data': <Object?>[
+          <String, Object?>{
+            'id': '${plugin.platform}-$page',
+            'title': '${plugin.platform} $keyword page $page',
+          },
+        ],
+      });
+    } finally {
+      _activeSearches -= 1;
+    }
   }
-
-  @override
-  Future<Result<Object?>> callMethod(
-    String method,
-    List<Object?> arguments, {
-    Duration timeout = const Duration(seconds: 15),
-  }) async {
-    final page = arguments[1] as int;
-    _searches.add('$_platform:$page');
-    return Ok(<String, Object?>{
-      'page': page,
-      'isEnd': page >= 2,
-      'data': <Object?>[
-        <String, Object?>{
-          'id': '$_platform-$page',
-          'title': '$_platform ${arguments.first} page $page',
-        },
-      ],
-    });
-  }
-
-  @override
-  Future<void> dispose() async {}
 }

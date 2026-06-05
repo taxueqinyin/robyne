@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:robyne/core/database/app_database.dart' as db;
 import 'package:robyne/core/result/result.dart';
 import 'package:robyne/core/storage/local_file_store.dart';
 import 'package:robyne/features/plugin/domain/plugin_runtime.dart';
@@ -125,6 +126,46 @@ void main() {
     final imported = await repository.importPluginFromUrl('file:///tmp/a.js');
     expect(imported, isA<Failure>());
     expect((imported as Failure).error.code, 'plugin.url_invalid');
+  });
+
+  test('skips importing duplicate plugin platforms', () async {
+    _setMockPreferences();
+    final tempDirectory = await Directory.systemTemp.createTemp(
+      'robyne_plugin_repo_test_',
+    );
+    final database = db.AppDatabase.memory();
+    addTearDown(database.close);
+    addTearDown(() async {
+      await tempDirectory.delete(recursive: true);
+    });
+    final firstFile = File('${tempDirectory.path}/first.js');
+    final secondFile = File('${tempDirectory.path}/second.js');
+    await firstFile.writeAsString('module.exports = {};');
+    await secondFile.writeAsString('module.exports = {};');
+
+    final fileStore = LocalFileStore(baseDirectory: tempDirectory);
+    final repository = LocalPluginRepository(
+      fileStore: fileStore,
+      database: database,
+      preferences: SharedPreferencesAsync(),
+      runtimeFactory: _FakeRuntimeFactory(),
+      compatAdapter: MusicFreeCompatAdapter(),
+    );
+
+    final firstImport = await repository.importPluginFromPath(firstFile.path);
+    final secondImport = await repository.importPluginFromPath(secondFile.path);
+    final listed = await repository.listPlugins();
+    final pluginDirectory = await fileStore.pluginsDirectory();
+    final copiedPlugins = await pluginDirectory
+        .list()
+        .where((entity) => entity is File)
+        .toList();
+
+    expect(firstImport, isA<Ok>());
+    expect(secondImport, isA<Failure>());
+    expect((secondImport as Failure).error.code, 'plugin.duplicate');
+    expect((listed as Ok).value, hasLength(1));
+    expect(copiedPlugins, hasLength(1));
   });
 }
 

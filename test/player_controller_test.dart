@@ -342,7 +342,9 @@ void main() {
     addTearDown(container.dispose);
     await container.read(playerControllerProvider.future);
 
-    await container.read(playerControllerProvider.notifier).resumeOrPlayCurrent();
+    await container
+        .read(playerControllerProvider.notifier)
+        .resumeOrPlayCurrent();
     container
         .read(playerControllerProvider.notifier)
         .syncSnapshot(
@@ -384,7 +386,9 @@ void main() {
     addTearDown(container.dispose);
     await container.read(playerControllerProvider.future);
 
-    await container.read(playerControllerProvider.notifier).resumeOrPlayCurrent();
+    await container
+        .read(playerControllerProvider.notifier)
+        .resumeOrPlayCurrent();
     for (final position in const <Duration>[
       Duration(seconds: 51),
       Duration(seconds: 52),
@@ -456,7 +460,9 @@ void main() {
     addTearDown(container.dispose);
     await container.read(playerControllerProvider.future);
 
-    await container.read(playerControllerProvider.notifier).resumeOrPlayCurrent();
+    await container
+        .read(playerControllerProvider.notifier)
+        .resumeOrPlayCurrent();
     container
         .read(playerControllerProvider.notifier)
         .syncSnapshot(
@@ -554,48 +560,48 @@ void main() {
     expect(state.lastDuration, const Duration(minutes: 3));
   });
 
-  test('cached plugin item plays without resolving remote media first', () async {
-    final tempDirectory = await Directory.systemTemp.createTemp(
-      'robyne_player_cached_plugin_test_',
-    );
-    addTearDown(() async {
-      await tempDirectory.delete(recursive: true);
-    });
-    final pluginPath = await _writePluginFile(tempDirectory, 'cached.js');
-    final cachedFile = File('${tempDirectory.path}/cached.audio');
-    await cachedFile.writeAsBytes(<int>[1, 2, 3]);
-    final runtimeFactory = _CountingRuntimeFactory();
-    final audio = _FakeAudioPlayerService();
-    final item = PlaybackItem.plugin(
-      platform: 'Cached',
-      musicId: 'A',
-      title: 'A',
-      raw: const <String, Object?>{'id': 'A'},
-    );
-    final container = ProviderContainer(
-      overrides: [
-        pluginRepositoryProvider.overrideWithValue(
-          _FakePluginRepository(<PluginDefinition>[
-            _plugin('cached', 'Cached', pluginPath),
-          ]),
-        ),
-        pluginRuntimeFactoryProvider.overrideWithValue(runtimeFactory),
-        audioPlayerServiceProvider.overrideWithValue(audio),
-        audioCacheServiceProvider.overrideWithValue(
-          _FakeCacheService(
-            MediaSource(url: cachedFile.path),
-            tempDirectory,
+  test(
+    'cached plugin item plays without resolving remote media first',
+    () async {
+      final tempDirectory = await Directory.systemTemp.createTemp(
+        'robyne_player_cached_plugin_test_',
+      );
+      addTearDown(() async {
+        await tempDirectory.delete(recursive: true);
+      });
+      final pluginPath = await _writePluginFile(tempDirectory, 'cached.js');
+      final cachedFile = File('${tempDirectory.path}/cached.audio');
+      await cachedFile.writeAsBytes(<int>[1, 2, 3]);
+      final runtimeFactory = _CountingRuntimeFactory();
+      final audio = _FakeAudioPlayerService();
+      final item = PlaybackItem.plugin(
+        platform: 'Cached',
+        musicId: 'A',
+        title: 'A',
+        raw: const <String, Object?>{'id': 'A'},
+      );
+      final container = ProviderContainer(
+        overrides: [
+          pluginRepositoryProvider.overrideWithValue(
+            _FakePluginRepository(<PluginDefinition>[
+              _plugin('cached', 'Cached', pluginPath),
+            ]),
           ),
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
+          pluginRuntimeFactoryProvider.overrideWithValue(runtimeFactory),
+          audioPlayerServiceProvider.overrideWithValue(audio),
+          audioCacheServiceProvider.overrideWithValue(
+            _FakeCacheService(MediaSource(url: cachedFile.path), tempDirectory),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    await container.read(playerControllerProvider.notifier).playItem(item);
+      await container.read(playerControllerProvider.notifier).playItem(item);
 
-    expect(audio.playedUrls, <String>[cachedFile.path]);
-    expect(runtimeFactory.createCount, 0);
-  });
+      expect(audio.playedUrls, <String>[cachedFile.path]);
+      expect(runtimeFactory.createCount, 0);
+    },
+  );
 }
 
 Future<PlaybackItem> _localItem(Directory directory, String name) async {
@@ -641,6 +647,11 @@ class _FakePlayerStateRepository implements PlayerStateRepository {
   @override
   Future<void> save(PlayerControllerState state) async {
     this.state = state;
+  }
+
+  @override
+  Future<void> clearHistory() async {
+    state = state.copyWith(history: const <PlaybackHistoryEntry>[]);
   }
 }
 
@@ -720,9 +731,7 @@ class _CountingRuntime implements PluginRuntime {
     List<Object?> arguments, {
     Duration timeout = const Duration(seconds: 15),
   }) async {
-    return const Ok(<String, Object?>{
-      'url': 'https://example.com/cached.mp3',
-    });
+    return const Ok(<String, Object?>{'url': 'https://example.com/cached.mp3'});
   }
 
   @override

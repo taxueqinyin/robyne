@@ -6,15 +6,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/app_error.dart';
 import '../../../core/result/result.dart';
+import '../../downloads/application/download_providers.dart';
 import '../../plugin/application/plugin_providers.dart';
 import '../../plugin/application/plugin_runtime_config.dart';
 import '../../search/domain/music_item.dart';
+import '../../settings/application/settings_providers.dart';
 import '../domain/audio_player_service.dart';
 import '../infrastructure/media_kit_audio_player_service.dart';
 import '../domain/media_source.dart';
 import '../domain/playback_item.dart';
 import '../infrastructure/local_audio_cache_service.dart';
 import 'player_state_repository.dart';
+
+const _backgroundAudioCacheEnabled = false;
 
 final audioPlayerServiceProvider = Provider<AudioPlayerService>((ref) {
   final service = MediaKitAudioPlayerService();
@@ -49,7 +53,22 @@ final playbackCompletionListenerProvider = Provider<void>((ref) {
 });
 
 final audioCacheServiceProvider = Provider<LocalAudioCacheService>((ref) {
-  return LocalAudioCacheService(fileStore: ref.watch(localFileStoreProvider));
+  final settingsRepository = ref.watch(settingsRepositoryProvider);
+  return LocalAudioCacheService(
+    fileStore: ref.watch(localFileStoreProvider),
+    database: ref.watch(appDatabaseProvider),
+    legacyMigration: ref.watch(legacyStorageMigrationProvider),
+    maxBytesReader: () async =>
+        (await settingsRepository.load()).cacheSizeBytes,
+    cacheDirectoryReader: () async {
+      final settings = await settingsRepository.load();
+      final directory = Directory(settings.cacheDirectoryPath);
+      if (!await directory.exists()) {
+        await directory.create(recursive: true);
+      }
+      return directory;
+    },
+  );
 });
 
 final playbackRandomProvider = Provider<Random>((ref) {
@@ -57,7 +76,10 @@ final playbackRandomProvider = Provider<Random>((ref) {
 });
 
 final playerStateRepositoryProvider = Provider<PlayerStateRepository>((ref) {
-  return PlayerStateRepository(fileStore: ref.watch(localFileStoreProvider));
+  return PlayerStateRepository(
+    database: ref.watch(appDatabaseProvider),
+    legacyMigration: ref.watch(legacyStorageMigrationProvider),
+  );
 });
 
 final playerControllerProvider =
@@ -186,15 +208,17 @@ class PlayerControllerState {
 class PlayerController extends AsyncNotifier<PlayerControllerState> {
   static const _historyLimit = 1000;
   static const _restoreSnapshotGuardDuration = Duration(milliseconds: 1500);
+  static const _persistDebounceDuration = Duration(seconds: 5);
   int _playRequestId = 0;
   String? _restoringItemId;
   Timer? _restoreGuardTimer;
+  Timer? _persistTimer;
+  PlayerControllerState? _pendingPersistState;
+  bool _lifecycleHooksRegistered = false;
 
   @override
   FutureOr<PlayerControllerState> build() async {
-    ref.onDispose(() {
-      _restoreGuardTimer?.cancel();
-    });
+    _registerLifecycleHooks();
     final saved = await ref.watch(playerStateRepositoryProvider).load();
     if (ref.mounted) {
       unawaited(ref.read(audioPlayerServiceProvider).setVolume(saved.volume));
@@ -233,6 +257,28 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     }
 
     if (item.isPlugin) {
+      final completedDownload = await ref
+          .read(downloadRepositoryProvider)
+          .completedForItem(item.id);
+      if (!ref.mounted) {
+        return;
+      }
+      if (!_isCurrentPlayRequest(requestId)) {
+        return;
+      }
+      final downloadPath = completedDownload?.filePath;
+      if (downloadPath != null && await File(downloadPath).exists()) {
+        await _playResolvedItem(
+          item,
+          MediaSource(url: downloadPath),
+          requestId,
+          recordHistory: recordHistory,
+          startPosition: startPosition,
+          startDuration: startDuration,
+        );
+        return;
+      }
+
       final cachedResult = await ref
           .read(audioCacheServiceProvider)
           .resolveCached(item);
@@ -324,12 +370,14 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     final resolved = await cache.resolve(item, source);
     switch (resolved) {
       case Ok<MediaSource>(:final value):
-        if (value.url == source.url) {
+        if (_backgroundAudioCacheEnabled && value.url == source.url) {
           unawaited(cache.cache(item, source));
         }
         return Ok(value);
       case Failure<MediaSource>():
-        unawaited(cache.cache(item, source));
+        if (_backgroundAudioCacheEnabled) {
+          unawaited(cache.cache(item, source));
+        }
         return Ok(source);
     }
   }
@@ -480,6 +528,7 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     _setData(
       _current.copyWith(error: result.fold((_) => null, (error) => error)),
     );
+    await _flushPersist();
   }
 
   Future<void> resume() async {
@@ -515,6 +564,7 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     _clearRestoreTracking(_current.currentItem?.id);
     if (ref.read(audioPlayerServiceProvider).snapshot.currentSource == null) {
       _setData(_current.copyWith(lastPosition: position));
+      await _flushPersist();
       return;
     }
     final result = await ref.read(audioPlayerServiceProvider).seek(position);
@@ -528,6 +578,7 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
         restoreTargetPosition: Duration.zero,
       ),
     );
+    await _flushPersist();
   }
 
   Future<void> setVolume(double volume) async {
@@ -541,6 +592,7 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
         volume: result is Ok<void> ? volume.clamp(0, 100).toDouble() : null,
       ),
     );
+    await _flushPersist();
   }
 
   Future<void> stop() async {
@@ -559,6 +611,7 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
         restoreTargetPosition: result is Ok<void> ? Duration.zero : null,
       ),
     );
+    await _flushPersist();
   }
 
   void syncSnapshot(PlayerSnapshot snapshot) {
@@ -586,6 +639,7 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
         lastDuration: nextDuration,
         restoreTargetPosition: Duration.zero,
       ),
+      schedulePersist: false,
     );
   }
 
@@ -614,6 +668,14 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     _setData(
       _current.copyWith(queue: const <PlaybackItem>[], clearCurrentItem: true),
     );
+  }
+
+  Future<void> clearHistory() async {
+    await ref.read(playerStateRepositoryProvider).clearHistory();
+    if (!ref.mounted) {
+      return;
+    }
+    _setData(_current.copyWith(history: const <PlaybackHistoryEntry>[]));
   }
 
   Future<void> setPlaybackMode(PlaybackMode mode) async {
@@ -687,12 +749,53 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
   PlayerControllerState get _current =>
       state.value ?? const PlayerControllerState();
 
-  void _setData(PlayerControllerState value) {
+  void _setData(PlayerControllerState value, {bool schedulePersist = true}) {
     state = AsyncData(value);
-    unawaited(_persist(value));
+    if (schedulePersist) {
+      _schedulePersist(value);
+    }
+  }
+
+  void _registerLifecycleHooks() {
+    if (_lifecycleHooksRegistered) {
+      return;
+    }
+    _lifecycleHooksRegistered = true;
+    ref.onDispose(() {
+      _restoreGuardTimer?.cancel();
+      _persistTimer?.cancel();
+      _pendingPersistState = null;
+    });
+  }
+
+  void _schedulePersist(PlayerControllerState value) {
+    _registerLifecycleHooks();
+    _pendingPersistState = value;
+    _persistTimer?.cancel();
+    _persistTimer = Timer(_persistDebounceDuration, () {
+      final pending = _pendingPersistState;
+      _pendingPersistState = null;
+      _persistTimer = null;
+      if (pending != null) {
+        unawaited(_persist(pending));
+      }
+    });
+  }
+
+  Future<void> _flushPersist() async {
+    final pending = _pendingPersistState;
+    _pendingPersistState = null;
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    if (pending != null) {
+      await _persist(pending);
+    }
   }
 
   Future<void> _persist(PlayerControllerState value) async {
+    if (!ref.mounted) {
+      return;
+    }
     try {
       await ref.read(playerStateRepositoryProvider).save(value);
     } catch (_) {

@@ -1,17 +1,46 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/debug/ime_trace.dart';
+import '../../downloads/application/download_providers.dart';
 import '../../player/application/player_providers.dart';
+import '../../player/domain/playback_item.dart';
+import '../../player/presentation/artwork_view.dart';
 import '../../plugin/application/plugin_controller.dart';
 import '../../plugin/domain/plugin_definition.dart';
 import '../application/search_controller.dart' as search_state;
 import '../domain/music_item.dart';
 
-class SearchPage extends ConsumerWidget {
+class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SearchPage> createState() => _SearchPageState();
+}
+
+class _SearchPageState extends ConsumerState<SearchPage> {
+  late final TextEditingController _keywordController;
+
+  @override
+  void initState() {
+    super.initState();
+    _keywordController = TextEditingController(
+      text:
+          ref.read(search_state.searchControllerProvider).value?.keyword ?? '',
+    );
+    attachImeTextControllerTrace(_keywordController, 'search.keyword');
+  }
+
+  @override
+  void dispose() {
+    _keywordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final pluginsValue = ref.watch(pluginControllerProvider);
     final searchValue = ref.watch(search_state.searchControllerProvider);
     final plugins = pluginsValue.value ?? const <PluginDefinition>[];
@@ -33,26 +62,20 @@ class SearchPage extends ConsumerWidget {
             children: <Widget>[
               Expanded(
                 child: TextField(
+                  controller: _keywordController,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.search),
                     labelText: 'Keyword',
                   ),
-                  onChanged: ref
-                      .read(search_state.searchControllerProvider.notifier)
-                      .updateKeyword,
-                  onSubmitted: (_) => ref
-                      .read(search_state.searchControllerProvider.notifier)
-                      .search(plugins),
+                  keyboardType: TextInputType.text,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => _search(plugins),
                 ),
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: state.isSearching
-                    ? null
-                    : () => ref
-                          .read(search_state.searchControllerProvider.notifier)
-                          .search(plugins),
+                onPressed: state.isSearching ? null : () => _search(plugins),
                 icon: state.isSearching
                     ? const SizedBox.square(
                         dimension: 18,
@@ -93,11 +116,22 @@ class SearchPage extends ConsumerWidget {
                     .read(playerControllerProvider.notifier)
                     .playFromPlugin(item);
               },
+              onDownload: (item) {
+                ref
+                    .read(downloadControllerProvider.notifier)
+                    .startDownload(PlaybackItem.fromMusicItem(item));
+              },
             ),
           ),
         ],
       ),
     );
+  }
+
+  void _search(List<PluginDefinition> plugins) {
+    final controller = ref.read(search_state.searchControllerProvider.notifier);
+    controller.updateKeyword(_keywordController.text);
+    unawaited(controller.search(plugins));
   }
 }
 
@@ -150,11 +184,13 @@ class _SearchResults extends StatelessWidget {
     required this.state,
     required this.onLoadMore,
     required this.onPlay,
+    required this.onDownload,
   });
 
   final search_state.SearchState state;
   final VoidCallback onLoadMore;
   final void Function(MusicItem item) onPlay;
+  final void Function(MusicItem item) onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -205,25 +241,79 @@ class _SearchResults extends StatelessWidget {
           }
 
           final item = result.items[index];
-          return ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.music_note),
-            title: Text(item.title),
-            subtitle: Text(
-              <String?>[item.artist, item.album, item.platform]
-                  .whereType<String>()
-                  .where((value) => value.isNotEmpty)
-                  .join(' - '),
-            ),
-            trailing: IconButton(
-              tooltip: 'Play',
-              icon: const Icon(Icons.play_arrow),
-              onPressed: () => onPlay(item),
+          return GestureDetector(
+            onSecondaryTapDown: (details) =>
+                _showResultMenu(context, details.globalPosition, item),
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: ArtworkView(artworkUrl: item.artworkUrl),
+              title: Text(item.title),
+              subtitle: Text(
+                <String?>[item.artist, item.album, item.platform]
+                    .whereType<String>()
+                    .where((value) => value.isNotEmpty)
+                    .join(' - '),
+              ),
+              trailing: Wrap(
+                spacing: 4,
+                children: <Widget>[
+                  IconButton(
+                    tooltip: 'Play',
+                    icon: const Icon(Icons.play_arrow),
+                    onPressed: () => onPlay(item),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'More',
+                    onSelected: (value) {
+                      if (value == 'download') {
+                        onDownload(item);
+                      }
+                    },
+                    itemBuilder: (context) => const <PopupMenuEntry<String>>[
+                      PopupMenuItem<String>(
+                        value: 'download',
+                        child: ListTile(
+                          leading: Icon(Icons.download),
+                          title: Text('Download'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           );
         },
       ),
     );
+  }
+
+  Future<void> _showResultMenu(
+    BuildContext context,
+    Offset position,
+    MusicItem item,
+  ) async {
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx,
+        position.dy,
+      ),
+      items: const <PopupMenuEntry<String>>[
+        PopupMenuItem<String>(
+          value: 'download',
+          child: ListTile(
+            leading: Icon(Icons.download),
+            title: Text('Download'),
+          ),
+        ),
+      ],
+    );
+    if (selected == 'download') {
+      onDownload(item);
+    }
   }
 }
 

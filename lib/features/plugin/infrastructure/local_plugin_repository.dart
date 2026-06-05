@@ -2,8 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/database/app_database.dart' as db;
+import '../../../core/database/legacy_storage_migration.dart';
 import '../../../core/errors/app_error.dart';
 import '../../../core/result/result.dart';
 import '../../../core/storage/local_file_store.dart';
@@ -15,12 +19,15 @@ import 'music_free_compat_adapter.dart';
 class LocalPluginRepository implements PluginRepository {
   LocalPluginRepository({
     required LocalFileStore fileStore,
-    required SharedPreferencesAsync preferences,
+    required SharedPreferencesAsync? preferences,
+    db.AppDatabase? database,
+    LegacyStorageMigration? legacyMigration,
     required PluginRuntimeFactory runtimeFactory,
     required MusicFreeCompatAdapter compatAdapter,
     Dio? dio,
   }) : _fileStore = fileStore,
-       _preferences = preferences,
+       _database = database ?? db.AppDatabase.memory(),
+       _legacyMigration = legacyMigration,
        _runtimeFactory = runtimeFactory,
        _compatAdapter = compatAdapter,
        _dio =
@@ -32,11 +39,11 @@ class LocalPluginRepository implements PluginRepository {
              ),
            );
 
-  static const _storageKey = 'plugins.v1';
   static const _maxPluginBytes = 2 * 1024 * 1024;
 
   final LocalFileStore _fileStore;
-  final SharedPreferencesAsync _preferences;
+  final db.AppDatabase _database;
+  final LegacyStorageMigration? _legacyMigration;
   final PluginRuntimeFactory _runtimeFactory;
   final MusicFreeCompatAdapter _compatAdapter;
   final Dio _dio;
@@ -44,6 +51,7 @@ class LocalPluginRepository implements PluginRepository {
   @override
   Future<Result<List<PluginDefinition>>> listPlugins() async {
     try {
+      await _legacyMigration?.ensureMigrated();
       return Ok(await _readDefinitions());
     } catch (error, stackTrace) {
       return Failure(
@@ -156,20 +164,19 @@ class LocalPluginRepository implements PluginRepository {
   @override
   Future<Result<PluginDefinition>> setEnabled(String id, bool enabled) async {
     try {
-      final definitions = await _readDefinitions();
-      final index = definitions.indexWhere((plugin) => plugin.id == id);
-      if (index == -1) {
+      await _legacyMigration?.ensureMigrated();
+      final existing = await _definitionById(id);
+      if (existing == null) {
         return const Failure(
           AppError(code: 'plugin.not_found', message: 'Plugin was not found.'),
         );
       }
 
-      final updated = definitions[index].copyWith(
+      final updated = existing.copyWith(
         enabled: enabled,
         updatedAt: DateTime.now(),
       );
-      definitions[index] = updated;
-      await _writeDefinitions(definitions);
+      await _upsertDefinition(updated);
       return Ok(updated);
     } catch (error, stackTrace) {
       return Failure(
@@ -189,15 +196,15 @@ class LocalPluginRepository implements PluginRepository {
     Map<String, String> values,
   ) async {
     try {
-      final definitions = await _readDefinitions();
-      final index = definitions.indexWhere((plugin) => plugin.id == id);
-      if (index == -1) {
+      await _legacyMigration?.ensureMigrated();
+      final existing = await _definitionById(id);
+      if (existing == null) {
         return const Failure(
           AppError(code: 'plugin.not_found', message: 'Plugin was not found.'),
         );
       }
 
-      final allowedKeys = definitions[index].userVariables
+      final allowedKeys = existing.userVariables
           .map((variable) => variable['key']?.toString())
           .whereType<String>()
           .toSet();
@@ -208,12 +215,11 @@ class LocalPluginRepository implements PluginRepository {
             )
             .map((entry) => MapEntry(entry.key, entry.value.trim())),
       );
-      final updated = definitions[index].copyWith(
+      final updated = existing.copyWith(
         userVariableValues: sanitized,
         updatedAt: DateTime.now(),
       );
-      definitions[index] = updated;
-      await _writeDefinitions(definitions);
+      await _upsertDefinition(updated);
       return Ok(updated);
     } catch (error, stackTrace) {
       return Failure(
@@ -230,20 +236,21 @@ class LocalPluginRepository implements PluginRepository {
   @override
   Future<Result<void>> deletePlugin(String id) async {
     try {
-      final definitions = await _readDefinitions();
-      final index = definitions.indexWhere((plugin) => plugin.id == id);
-      if (index == -1) {
+      await _legacyMigration?.ensureMigrated();
+      final removed = await _definitionById(id);
+      if (removed == null) {
         return const Failure(
           AppError(code: 'plugin.not_found', message: 'Plugin was not found.'),
         );
       }
 
-      final removed = definitions.removeAt(index);
       final file = File(removed.sourcePath);
       if (await file.exists()) {
         await file.delete();
       }
-      await _writeDefinitions(definitions);
+      await (_database.delete(
+        _database.pluginDefinitionRows,
+      )..where((row) => row.id.equals(id))).go();
       return const Ok(null);
     } catch (error, stackTrace) {
       return Failure(
@@ -258,27 +265,40 @@ class LocalPluginRepository implements PluginRepository {
   }
 
   Future<List<PluginDefinition>> _readDefinitions() async {
-    final raw = await _preferences.getString(_storageKey);
-    if (raw == null || raw.isEmpty) {
-      return <PluginDefinition>[];
-    }
-
-    final decoded = jsonDecode(raw);
-    if (decoded is! List) {
-      return <PluginDefinition>[];
-    }
-
-    return decoded
-        .whereType<Map<String, Object?>>()
-        .map(PluginDefinition.fromJson)
-        .toList();
+    final rows =
+        await (_database.select(_database.pluginDefinitionRows)
+              ..orderBy(<OrderingTerm Function(db.$PluginDefinitionRowsTable)>[
+                (row) => OrderingTerm.asc(row.installedAt),
+              ]))
+            .get();
+    return rows.map(_definitionFromRow).toList(growable: false);
   }
 
-  Future<void> _writeDefinitions(List<PluginDefinition> definitions) async {
-    final raw = jsonEncode(
-      definitions.map((definition) => definition.toJson()).toList(),
-    );
-    await _preferences.setString(_storageKey, raw);
+  Future<PluginDefinition?> _definitionById(String id) async {
+    final row = await (_database.select(
+      _database.pluginDefinitionRows,
+    )..where((plugin) => plugin.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _definitionFromRow(row);
+  }
+
+  Future<PluginDefinition?> _definitionByPlatform(String platform) async {
+    final normalized = platform.trim().toLowerCase();
+    final rows = await _database.select(_database.pluginDefinitionRows).get();
+    for (final row in rows) {
+      if (row.platform.trim().toLowerCase() == normalized) {
+        return _definitionFromRow(row);
+      }
+    }
+    return null;
+  }
+
+  Future<void> _upsertDefinition(PluginDefinition definition) async {
+    await _database
+        .into(_database.pluginDefinitionRows)
+        .insert(
+          _definitionCompanion(definition),
+          mode: InsertMode.insertOrReplace,
+        );
   }
 
   Future<Result<PluginDefinition>> _importPluginSource({
@@ -295,9 +315,26 @@ class LocalPluginRepository implements PluginRepository {
       }
 
       final metadata = (metadataResult as Ok<Map<String, Object?>>).value;
+      await _legacyMigration?.ensureMigrated();
+      final platform = metadata['platform']?.toString().trim();
+      if (platform != null && platform.isNotEmpty) {
+        final duplicate = await _definitionByPlatform(platform);
+        if (duplicate != null) {
+          return Failure(
+            AppError(
+              code: 'plugin.duplicate',
+              message: 'Plugin "${duplicate.platform}" is already imported.',
+            ),
+          );
+        }
+      }
+
       final pluginDirectory = await _fileStore.pluginsDirectory();
       final destination = File(
-        '${pluginDirectory.path}/${DateTime.now().microsecondsSinceEpoch}_${_safeFileName(fileName)}',
+        p.join(
+          pluginDirectory.path,
+          '${DateTime.now().microsecondsSinceEpoch}_${_safeFileName(fileName)}',
+        ),
       );
       await destination.writeAsString(source);
 
@@ -313,10 +350,7 @@ class LocalPluginRepository implements PluginRepository {
       }
 
       final definition = (definitionResult as Ok<PluginDefinition>).value;
-      final definitions = await _readDefinitions();
-      definitions.removeWhere((plugin) => plugin.id == definition.id);
-      definitions.add(definition);
-      await _writeDefinitions(definitions);
+      await _upsertDefinition(definition);
 
       return Ok(definition);
     } catch (error, stackTrace) {
@@ -344,5 +378,85 @@ class LocalPluginRepository implements PluginRepository {
   static String _safeFileName(String fileName) {
     final normalized = fileName.trim().isEmpty ? 'plugin.js' : fileName.trim();
     return normalized.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+  }
+
+  static PluginDefinition _definitionFromRow(db.PluginDefinitionRow row) {
+    return PluginDefinition(
+      id: row.id,
+      platform: row.platform,
+      version: row.version,
+      author: row.author,
+      description: row.description,
+      sourcePath: row.sourcePath,
+      enabled: row.enabled,
+      installedAt: row.installedAt,
+      updatedAt: row.updatedAt,
+      supportedSearchTypes: _stringList(row.supportedSearchTypesJson),
+      userVariables: _mapList(row.userVariablesJson),
+      userVariableValues: _stringMap(row.userVariableValuesJson),
+    );
+  }
+
+  static db.PluginDefinitionRowsCompanion _definitionCompanion(
+    PluginDefinition definition,
+  ) {
+    return db.PluginDefinitionRowsCompanion(
+      id: Value(definition.id),
+      platform: Value(definition.platform),
+      version: Value(definition.version),
+      author: Value(definition.author),
+      description: Value(definition.description),
+      sourcePath: Value(definition.sourcePath),
+      enabled: Value(definition.enabled),
+      installedAt: Value(definition.installedAt),
+      updatedAt: Value(definition.updatedAt),
+      supportedSearchTypesJson: Value(
+        jsonEncode(definition.supportedSearchTypes),
+      ),
+      userVariablesJson: Value(jsonEncode(definition.userVariables)),
+      userVariableValuesJson: Value(jsonEncode(definition.userVariableValues)),
+    );
+  }
+
+  static List<String> _stringList(String rawJson) {
+    final decoded = _json(rawJson);
+    if (decoded is! List) {
+      return const <String>[];
+    }
+    return decoded.map((value) => value.toString()).toList(growable: false);
+  }
+
+  static List<Map<String, Object?>> _mapList(String rawJson) {
+    final decoded = _json(rawJson);
+    if (decoded is! List) {
+      return const <Map<String, Object?>>[];
+    }
+    return decoded
+        .whereType<Map>()
+        .map((value) {
+          return value.map(
+            (key, dynamic mapValue) =>
+                MapEntry(key.toString(), mapValue as Object?),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  static Map<String, String> _stringMap(String rawJson) {
+    final decoded = _json(rawJson);
+    if (decoded is! Map) {
+      return const <String, String>{};
+    }
+    return decoded.map(
+      (key, dynamic value) => MapEntry(key.toString(), value.toString()),
+    );
+  }
+
+  static Object? _json(String rawJson) {
+    try {
+      return jsonDecode(rawJson);
+    } catch (_) {
+      return null;
+    }
   }
 }

@@ -1,16 +1,23 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:drift/drift.dart';
+
+import '../../../core/database/app_database.dart' as db;
+import '../../../core/database/legacy_storage_migration.dart';
 import '../../../core/errors/app_error.dart';
 import '../../../core/result/result.dart';
 import '../../../core/storage/local_file_store.dart';
 import '../../player/domain/playback_item.dart';
 
 class LocalMusicRepository {
-  LocalMusicRepository({required LocalFileStore fileStore})
-    : _fileStore = fileStore;
+  LocalMusicRepository({
+    required LocalFileStore fileStore,
+    db.AppDatabase? database,
+    LegacyStorageMigration? legacyMigration,
+  }) : _database = database ?? db.AppDatabase.memory(),
+       _legacyMigration = legacyMigration;
 
-  static const _fileName = 'local_music.v1.json';
   static const _supportedExtensions = <String>{
     'mp3',
     'flac',
@@ -22,10 +29,12 @@ class LocalMusicRepository {
     'wma',
   };
 
-  final LocalFileStore _fileStore;
+  final db.AppDatabase _database;
+  final LegacyStorageMigration? _legacyMigration;
 
   Future<Result<List<PlaybackItem>>> listTracks() async {
     try {
+      await _legacyMigration?.ensureMigrated();
       return Ok(await _readTracks());
     } catch (error, stackTrace) {
       return Failure(
@@ -41,6 +50,7 @@ class LocalMusicRepository {
 
   Future<Result<List<PlaybackItem>>> importFiles(List<String> paths) async {
     try {
+      await _legacyMigration?.ensureMigrated();
       final imported = <PlaybackItem>[];
       final existing = await _readTracks();
       final byId = <String, PlaybackItem>{
@@ -65,10 +75,10 @@ class LocalMusicRepository {
         if (!byId.containsKey(item.id)) {
           byId[item.id] = item;
           imported.add(item);
+          await _upsertTrack(item);
         }
       }
 
-      await _writeTracks(byId.values.toList(growable: false));
       return Ok(imported);
     } catch (error, stackTrace) {
       return Failure(
@@ -116,9 +126,10 @@ class LocalMusicRepository {
 
   Future<Result<void>> removeTrack(String id) async {
     try {
-      final tracks = await _readTracks();
-      tracks.removeWhere((item) => item.id == id);
-      await _writeTracks(tracks);
+      await _legacyMigration?.ensureMigrated();
+      await (_database.delete(
+        _database.localLibraryTracks,
+      )..where((row) => row.itemId.equals(id))).go();
       return const Ok(null);
     } catch (error, stackTrace) {
       return Failure(
@@ -133,36 +144,89 @@ class LocalMusicRepository {
   }
 
   Future<List<PlaybackItem>> _readTracks() async {
-    final file = await _storageFile();
-    if (!await file.exists()) {
-      return <PlaybackItem>[];
+    final rows =
+        await (_database.select(_database.localLibraryTracks)
+              ..orderBy(<OrderingTerm Function(db.$LocalLibraryTracksTable)>[
+                (row) => OrderingTerm.asc(row.addedAt),
+              ]))
+            .get();
+    final tracks = <PlaybackItem>[];
+    for (final row in rows) {
+      final item = await (_database.select(
+        _database.playbackItems,
+      )..where((item) => item.id.equals(row.itemId))).getSingleOrNull();
+      if (item != null) {
+        tracks.add(_itemFromRow(item));
+      }
     }
-    final decoded = jsonDecode(await file.readAsString());
-    if (decoded is! List) {
-      return <PlaybackItem>[];
-    }
-    return decoded
-        .whereType<Map>()
-        .map(
-          (value) => PlaybackItem.fromJson(
-            value.map(
-              (key, dynamic mapValue) =>
-                  MapEntry(key.toString(), mapValue as Object?),
-            ),
-          ),
-        )
-        .toList(growable: true);
+    return tracks;
   }
 
-  Future<void> _writeTracks(List<PlaybackItem> tracks) async {
-    final file = await _storageFile();
-    await file.writeAsString(
-      jsonEncode(tracks.map((item) => item.toJson()).toList()),
+  Future<void> _upsertTrack(PlaybackItem item) async {
+    await _database.transaction(() async {
+      await _database
+          .into(_database.playbackItems)
+          .insert(_itemCompanion(item), mode: InsertMode.insertOrReplace);
+      await _database
+          .into(_database.localLibraryTracks)
+          .insert(
+            db.LocalLibraryTracksCompanion(
+              itemId: Value(item.id),
+              addedAt: Value(DateTime.now()),
+            ),
+            mode: InsertMode.insertOrIgnore,
+          );
+    });
+  }
+
+  static db.PlaybackItemsCompanion _itemCompanion(PlaybackItem item) {
+    return db.PlaybackItemsCompanion(
+      id: Value(item.id),
+      type: Value(item.type.name),
+      title: Value(item.title),
+      platform: Value(item.platform),
+      musicId: Value(item.musicId),
+      localPath: Value(item.localPath),
+      artist: Value(item.artist),
+      album: Value(item.album),
+      durationMs: Value(item.duration?.inMilliseconds),
+      artworkUrl: Value(item.artworkUrl),
+      rawJson: Value(jsonEncode(item.raw)),
+      updatedAt: Value(DateTime.now()),
     );
   }
 
-  Future<File> _storageFile() async {
-    return File('${(await _fileStore.dataDirectory()).path}/$_fileName');
+  static PlaybackItem _itemFromRow(db.PlaybackItem row) {
+    return PlaybackItem(
+      id: row.id,
+      type: PlaybackItemType.values.firstWhere(
+        (type) => type.name == row.type,
+        orElse: () => PlaybackItemType.local,
+      ),
+      title: row.title,
+      platform: row.platform,
+      musicId: row.musicId,
+      localPath: row.localPath,
+      artist: row.artist,
+      album: row.album,
+      duration: row.durationMs == null
+          ? null
+          : Duration(milliseconds: row.durationMs!),
+      artworkUrl: row.artworkUrl,
+      raw: _jsonMap(row.rawJson),
+    );
+  }
+
+  static Map<String, Object?> _jsonMap(String rawJson) {
+    try {
+      final decoded = jsonDecode(rawJson);
+      if (decoded is Map) {
+        return decoded.map(
+          (key, dynamic value) => MapEntry(key.toString(), value as Object?),
+        );
+      }
+    } catch (_) {}
+    return const <String, Object?>{};
   }
 
   static bool _isSupported(String path) {
