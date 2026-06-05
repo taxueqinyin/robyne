@@ -23,9 +23,10 @@ class PlayerBar extends ConsumerWidget {
     final useRestoredPlaybackState =
         !hasLoadedSource || restoreTarget > Duration.zero;
     final snapshotDuration = snapshot?.duration ?? Duration.zero;
-    final preferredDuration =
-        playerState?.currentItem?.duration ?? playerState?.lastDuration;
-    final restoredDuration = preferredDuration ?? Duration.zero;
+    final restoredDuration = _restoredDuration(
+      itemDuration: playerState?.currentItem?.duration,
+      lastDuration: playerState?.lastDuration ?? Duration.zero,
+    );
     final stableDuration = _stableDuration(
       snapshotDuration: snapshotDuration,
       savedDuration: restoredDuration,
@@ -205,7 +206,23 @@ class PlayerBar extends ConsumerWidget {
   }
 
   String _formatPosition(Duration position, Duration duration) {
-    return '${_formatDuration(position)} / ${_formatDuration(duration)}';
+    return '${_formatElapsed(position)} / ${_formatTotalDuration(duration)}';
+  }
+
+  Duration _restoredDuration({
+    required Duration? itemDuration,
+    required Duration lastDuration,
+  }) {
+    if (itemDuration == null || itemDuration <= Duration.zero) {
+      return lastDuration;
+    }
+    if (lastDuration <= Duration.zero) {
+      return itemDuration;
+    }
+    return _stableDuration(
+      snapshotDuration: lastDuration,
+      savedDuration: itemDuration,
+    );
   }
 
   Duration _stableDuration({
@@ -216,15 +233,34 @@ class PlayerBar extends ConsumerWidget {
       return snapshotDuration;
     }
     final difference = (snapshotDuration - savedDuration).abs();
-    if (difference <= const Duration(seconds: 1)) {
+    if (difference == Duration.zero) {
       return savedDuration;
+    }
+    if (difference <= const Duration(seconds: 2)) {
+      if (snapshotDuration > savedDuration) {
+        return savedDuration;
+      }
+      final adjusted = savedDuration - const Duration(seconds: 1);
+      return adjusted > snapshotDuration ? adjusted : snapshotDuration;
     }
     return snapshotDuration;
   }
 
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  String _formatElapsed(Duration duration) {
+    return _formatSeconds(duration.inSeconds);
+  }
+
+  String _formatTotalDuration(Duration duration) {
+    final totalSeconds = (duration.inMilliseconds / 1000).round();
+    return _formatSeconds(totalSeconds);
+  }
+
+  String _formatSeconds(int totalSeconds) {
+    final minutes = (totalSeconds ~/ 60)
+        .remainder(60)
+        .toString()
+        .padLeft(2, '0');
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
   }
 

@@ -126,6 +126,29 @@ class PlayerStateRepository {
     });
   }
 
+  Future<void> savePlaybackProgress(PlayerControllerState state) async {
+    await _legacyMigration?.ensureMigrated();
+    await _database.transaction(() async {
+      final item = state.currentItem;
+      if (item != null) {
+        await _upsertItem(item);
+      }
+      await _database
+          .into(_database.playerStateRows)
+          .insert(
+            db.PlayerStateRowsCompanion(
+              id: const Value(1),
+              currentItemId: Value(item?.id),
+              playbackMode: Value(state.playbackMode.name),
+              volume: Value(state.volume),
+              lastPositionMs: Value(state.lastPosition.inMilliseconds),
+              lastDurationMs: Value(state.lastDuration.inMilliseconds),
+            ),
+            mode: InsertMode.insertOrReplace,
+          );
+    });
+  }
+
   Future<void> clearHistory() async {
     await _legacyMigration?.ensureMigrated();
     await _database.delete(_database.playbackHistoryRows).go();

@@ -95,6 +95,22 @@ class PlaybackItem {
   bool get isLocal => type == PlaybackItemType.local;
   bool get isPlugin => type == PlaybackItemType.plugin;
 
+  PlaybackItem withDuration(Duration duration) {
+    return PlaybackItem(
+      id: id,
+      type: type,
+      title: title,
+      platform: platform,
+      musicId: musicId,
+      localPath: localPath,
+      artist: artist,
+      album: album,
+      duration: duration,
+      artworkUrl: artworkUrl,
+      raw: raw,
+    );
+  }
+
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'id': id,

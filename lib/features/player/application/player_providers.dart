@@ -209,21 +209,37 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
   static const _historyLimit = 1000;
   static const _restoreSnapshotGuardDuration = Duration(milliseconds: 1500);
   static const _persistDebounceDuration = Duration(seconds: 5);
+  static const _progressPersistInterval = Duration(seconds: 1);
   int _playRequestId = 0;
   String? _restoringItemId;
   Timer? _restoreGuardTimer;
   Timer? _persistTimer;
+  Timer? _progressPersistTimer;
   PlayerControllerState? _pendingPersistState;
+  PlayerControllerState? _pendingProgressPersistState;
+  PlayerStateRepository? _repositoryForDispose;
   bool _lifecycleHooksRegistered = false;
 
   @override
   FutureOr<PlayerControllerState> build() async {
     _registerLifecycleHooks();
-    final saved = await ref.watch(playerStateRepositoryProvider).load();
-    if (ref.mounted) {
-      unawaited(ref.read(audioPlayerServiceProvider).setVolume(saved.volume));
+    final repository = ref.watch(playerStateRepositoryProvider);
+    _repositoryForDispose = repository;
+    final saved = await repository.load();
+    final normalized = _normalizeRestoredDuration(saved);
+    if (!identical(normalized, saved)) {
+      try {
+        await repository.savePlaybackProgress(normalized);
+      } catch (_) {
+        // Restored duration cleanup should not block app startup.
+      }
     }
-    return saved;
+    if (ref.mounted) {
+      unawaited(
+        ref.read(audioPlayerServiceProvider).setVolume(normalized.volume),
+      );
+    }
+    return normalized;
   }
 
   Future<void> playFromPlugin(MusicItem item) async {
@@ -629,17 +645,31 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
       snapshotDuration: snapshot.duration,
       savedDuration: current.currentItem?.duration ?? current.lastDuration,
     );
+    final currentItem = current.currentItem!;
+    final correctedCurrentItem =
+        nextDuration > Duration.zero && currentItem.duration != nextDuration
+        ? currentItem.withDuration(nextDuration)
+        : currentItem;
+    final durationChanged = nextDuration != current.lastDuration;
+    final itemDurationChanged =
+        correctedCurrentItem.duration != current.currentItem?.duration;
     if (snapshot.position == current.lastPosition &&
-        nextDuration == current.lastDuration) {
+        !durationChanged &&
+        !itemDurationChanged) {
       return;
     }
     _setData(
       current.copyWith(
+        queue: itemDurationChanged
+            ? _queueReplacing(current.queue, correctedCurrentItem)
+            : current.queue,
+        currentItem: correctedCurrentItem,
         lastPosition: snapshot.position,
         lastDuration: nextDuration,
         restoreTargetPosition: Duration.zero,
       ),
       schedulePersist: false,
+      scheduleProgressPersist: true,
     );
   }
 
@@ -749,10 +779,17 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
   PlayerControllerState get _current =>
       state.value ?? const PlayerControllerState();
 
-  void _setData(PlayerControllerState value, {bool schedulePersist = true}) {
+  void _setData(
+    PlayerControllerState value, {
+    bool schedulePersist = true,
+    bool scheduleProgressPersist = false,
+  }) {
     state = AsyncData(value);
     if (schedulePersist) {
       _schedulePersist(value);
+    }
+    if (scheduleProgressPersist) {
+      _scheduleProgressPersist(value);
     }
   }
 
@@ -764,7 +801,22 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     ref.onDispose(() {
       _restoreGuardTimer?.cancel();
       _persistTimer?.cancel();
+      _progressPersistTimer?.cancel();
+      final repository = _repositoryForDispose;
+      final pendingPersist = _pendingPersistState;
+      final pendingProgressPersist = _pendingProgressPersistState;
+      if (repository != null && pendingPersist != null) {
+        unawaited(repository.save(pendingPersist).catchError((_) {}));
+      } else if (repository != null && pendingProgressPersist != null) {
+        unawaited(
+          repository
+              .savePlaybackProgress(pendingProgressPersist)
+              .catchError((_) {}),
+        );
+      }
       _pendingPersistState = null;
+      _pendingProgressPersistState = null;
+      _repositoryForDispose = null;
     });
   }
 
@@ -783,6 +835,9 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
   }
 
   Future<void> _flushPersist() async {
+    _pendingProgressPersistState = null;
+    _progressPersistTimer?.cancel();
+    _progressPersistTimer = null;
     final pending = _pendingPersistState;
     _pendingPersistState = null;
     _persistTimer?.cancel();
@@ -790,6 +845,22 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     if (pending != null) {
       await _persist(pending);
     }
+  }
+
+  void _scheduleProgressPersist(PlayerControllerState value) {
+    _registerLifecycleHooks();
+    _pendingProgressPersistState = value;
+    if (_progressPersistTimer != null) {
+      return;
+    }
+    _progressPersistTimer = Timer(_progressPersistInterval, () {
+      final pending = _pendingProgressPersistState;
+      _pendingProgressPersistState = null;
+      _progressPersistTimer = null;
+      if (pending != null) {
+        unawaited(_persistProgress(pending));
+      }
+    });
   }
 
   Future<void> _persist(PlayerControllerState value) async {
@@ -803,12 +874,59 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     }
   }
 
+  Future<void> _persistProgress(PlayerControllerState value) async {
+    if (!ref.mounted) {
+      return;
+    }
+    try {
+      await ref.read(playerStateRepositoryProvider).savePlaybackProgress(value);
+    } catch (_) {
+      // Playback progress persistence must never interrupt playback controls.
+    }
+  }
+
   List<PlaybackItem> _queueWith(PlaybackItem item) {
     final existing = _current.queue;
     if (existing.any((candidate) => candidate.id == item.id)) {
       return existing;
     }
     return <PlaybackItem>[...existing, item];
+  }
+
+  List<PlaybackItem> _queueReplacing(
+    List<PlaybackItem> queue,
+    PlaybackItem item,
+  ) {
+    return queue
+        .map((candidate) => candidate.id == item.id ? item : candidate)
+        .toList(growable: false);
+  }
+
+  PlayerControllerState _normalizeRestoredDuration(
+    PlayerControllerState state,
+  ) {
+    final item = state.currentItem;
+    final itemDuration = item?.duration;
+    if (item == null ||
+        itemDuration == null ||
+        itemDuration <= Duration.zero ||
+        state.lastDuration <= Duration.zero) {
+      return state;
+    }
+    final normalizedDuration = _stableDuration(
+      snapshotDuration: state.lastDuration,
+      savedDuration: itemDuration,
+    );
+    if (normalizedDuration == state.lastDuration &&
+        normalizedDuration == itemDuration) {
+      return state;
+    }
+    final normalizedItem = item.withDuration(normalizedDuration);
+    return state.copyWith(
+      queue: _queueReplacing(state.queue, normalizedItem),
+      currentItem: normalizedItem,
+      lastDuration: normalizedDuration,
+    );
   }
 
   List<PlaybackHistoryEntry> _historyWith(PlaybackItem item) {
@@ -862,8 +980,15 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
       return snapshotDuration;
     }
     final difference = (snapshotDuration - savedDuration).abs();
-    if (difference <= const Duration(seconds: 1)) {
+    if (difference == Duration.zero) {
       return savedDuration;
+    }
+    if (difference <= const Duration(seconds: 2)) {
+      if (snapshotDuration > savedDuration) {
+        return savedDuration;
+      }
+      final adjusted = savedDuration - const Duration(seconds: 1);
+      return adjusted > snapshotDuration ? adjusted : snapshotDuration;
     }
     return snapshotDuration;
   }

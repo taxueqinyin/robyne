@@ -173,6 +173,44 @@ void main() {
     },
   );
 
+  testWidgets(
+    'restored playback bridges rounded item and shorter saved duration',
+    (tester) async {
+      final audio = _FakeAudioPlayerService();
+      final item = PlaybackItem.plugin(
+        platform: 'Test',
+        musicId: 'A',
+        title: 'A',
+        duration: const Duration(minutes: 3),
+        raw: const <String, Object?>{'id': 'A'},
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            audioPlayerServiceProvider.overrideWithValue(audio),
+            playerControllerProvider.overrideWith(
+              () => _SeededPlayerController(
+                PlayerControllerState(
+                  queue: <PlaybackItem>[item],
+                  currentItem: item,
+                  lastPosition: const Duration(seconds: 50),
+                  lastDuration: const Duration(minutes: 2, seconds: 58),
+                ),
+              ),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: PlayerBar())),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('00:50 / 02:59'), findsOneWidget);
+      expect(find.text('00:50 / 02:58'), findsNothing);
+      expect(find.text('00:50 / 03:00'), findsNothing);
+    },
+  );
+
   testWidgets('loaded source with zero duration still shows saved duration', (
     tester,
   ) async {
@@ -253,6 +291,50 @@ void main() {
     expect(find.text('00:55 / 03:00'), findsOneWidget);
     expect(find.text('00:55 / 03:01'), findsNothing);
   });
+
+  testWidgets(
+    'loaded source bridges rounded plugin and shorter probed duration',
+    (tester) async {
+      final audio = _FakeAudioPlayerService(
+        const PlayerSnapshot(
+          currentSource: MediaSource(url: 'https://example.com/a.mp3'),
+          position: Duration(seconds: 55),
+          duration: Duration(minutes: 2, seconds: 58),
+        ),
+      );
+      final item = PlaybackItem.plugin(
+        platform: 'Test',
+        musicId: 'A',
+        title: 'A',
+        duration: const Duration(minutes: 3),
+        raw: const <String, Object?>{'id': 'A'},
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            audioPlayerServiceProvider.overrideWithValue(audio),
+            playerControllerProvider.overrideWith(
+              () => _SeededPlayerController(
+                PlayerControllerState(
+                  queue: <PlaybackItem>[item],
+                  currentItem: item,
+                  lastPosition: const Duration(seconds: 54),
+                  lastDuration: const Duration(minutes: 3),
+                ),
+              ),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: PlayerBar())),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('00:55 / 02:59'), findsOneWidget);
+      expect(find.text('00:55 / 02:58'), findsNothing);
+      expect(find.text('00:55 / 03:00'), findsNothing);
+    },
+  );
 
   testWidgets('plugin item duration wins over polluted saved duration', (
     tester,

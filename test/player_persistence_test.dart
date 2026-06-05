@@ -51,4 +51,66 @@ void main() {
     expect(loaded.lastPosition, const Duration(seconds: 73));
     expect(loaded.lastDuration, const Duration(minutes: 4));
   });
+
+  test(
+    'progress save updates resume fields without rewriting queue or history',
+    () async {
+      final tempDirectory = await Directory.systemTemp.createTemp(
+        'robyne_player_progress_persistence_test_',
+      );
+      addTearDown(() async {
+        await tempDirectory.delete(recursive: true);
+      });
+      final repository = PlayerStateRepository(
+        fileStore: LocalFileStore(baseDirectory: tempDirectory),
+      );
+      final itemA = PlaybackItem.local(path: '${tempDirectory.path}/A.mp3');
+      final itemB = PlaybackItem.plugin(
+        platform: 'Test',
+        musicId: 'B',
+        title: 'B',
+        duration: const Duration(minutes: 3),
+        raw: const <String, Object?>{'id': 'B'},
+      );
+      final initial = PlayerControllerState(
+        queue: <PlaybackItem>[itemA, itemB],
+        history: <PlaybackHistoryEntry>[
+          PlaybackHistoryEntry(item: itemA, playedAt: DateTime(2026)),
+        ],
+        currentItem: itemB,
+        playbackMode: PlaybackMode.allLoop,
+        volume: 64,
+        lastPosition: const Duration(seconds: 12),
+        lastDuration: const Duration(minutes: 3),
+      );
+      await repository.save(initial);
+
+      await repository.savePlaybackProgress(
+        initial.copyWith(
+          currentItem: itemB.withDuration(
+            const Duration(minutes: 2, seconds: 59),
+          ),
+          lastPosition: const Duration(seconds: 91),
+          lastDuration: const Duration(minutes: 2, seconds: 59),
+        ),
+      );
+
+      final loaded = await repository.load();
+      expect(loaded.queue.map((item) => item.id), <String>[itemA.id, itemB.id]);
+      expect(loaded.history.map((entry) => entry.item.id), <String>[itemA.id]);
+      expect(loaded.currentItem?.id, itemB.id);
+      expect(
+        loaded.currentItem?.duration,
+        const Duration(minutes: 2, seconds: 59),
+      );
+      expect(
+        loaded.queue.last.duration,
+        const Duration(minutes: 2, seconds: 59),
+      );
+      expect(loaded.playbackMode, PlaybackMode.allLoop);
+      expect(loaded.volume, 64);
+      expect(loaded.lastPosition, const Duration(seconds: 91));
+      expect(loaded.lastDuration, const Duration(minutes: 2, seconds: 59));
+    },
+  );
 }

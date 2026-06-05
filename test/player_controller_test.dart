@@ -171,6 +171,57 @@ void main() {
   });
 
   test(
+    'startup bridges restored rounded item and shorter saved duration',
+    () async {
+      final item = PlaybackItem.plugin(
+        platform: 'Test',
+        musicId: 'A',
+        title: 'A',
+        duration: const Duration(minutes: 3),
+        raw: const <String, Object?>{'id': 'A'},
+      );
+      final repository = _FakePlayerStateRepository(
+        PlayerControllerState(
+          queue: <PlaybackItem>[item],
+          currentItem: item,
+          lastPosition: const Duration(seconds: 65),
+          lastDuration: const Duration(minutes: 2, seconds: 58),
+        ),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          audioPlayerServiceProvider.overrideWithValue(
+            _FakeAudioPlayerService(),
+          ),
+          playerStateRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final state = await container.read(playerControllerProvider.future);
+
+      expect(state.lastPosition, const Duration(seconds: 65));
+      expect(state.lastDuration, const Duration(minutes: 2, seconds: 59));
+      expect(
+        state.currentItem?.duration,
+        const Duration(minutes: 2, seconds: 59),
+      );
+      expect(
+        state.queue.single.duration,
+        const Duration(minutes: 2, seconds: 59),
+      );
+      expect(
+        repository.state.currentItem?.duration,
+        const Duration(minutes: 2, seconds: 59),
+      );
+      expect(
+        repository.state.lastDuration,
+        const Duration(minutes: 2, seconds: 59),
+      );
+    },
+  );
+
+  test(
     'initial zero snapshot cannot replace a pending restored position',
     () async {
       final tempDirectory = await Directory.systemTemp.createTemp(
@@ -519,6 +570,160 @@ void main() {
     expect(state.lastDuration, const Duration(minutes: 3));
   });
 
+  test('playing snapshots are periodically persisted without pause', () async {
+    final item = PlaybackItem.plugin(
+      platform: 'Test',
+      musicId: 'A',
+      title: 'A',
+      duration: const Duration(minutes: 3),
+      raw: const <String, Object?>{'id': 'A'},
+    );
+    final repository = _FakePlayerStateRepository(
+      PlayerControllerState(
+        queue: <PlaybackItem>[item],
+        currentItem: item,
+        lastPosition: const Duration(seconds: 10),
+        lastDuration: const Duration(minutes: 3),
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        audioPlayerServiceProvider.overrideWithValue(_FakeAudioPlayerService()),
+        playerStateRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(playerControllerProvider.future);
+
+    container
+        .read(playerControllerProvider.notifier)
+        .syncSnapshot(
+          const PlayerSnapshot(
+            currentSource: MediaSource(url: 'https://example.com/a.mp3'),
+            position: Duration(seconds: 45),
+            duration: Duration(minutes: 3),
+          ),
+        );
+
+    expect(repository.state.lastPosition, const Duration(seconds: 10));
+
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+
+    expect(repository.progressSaveCount, 1);
+    expect(repository.state.lastPosition, const Duration(seconds: 45));
+    expect(repository.state.lastDuration, const Duration(minutes: 3));
+  });
+
+  test(
+    'pending playback progress is flushed when controller is disposed',
+    () async {
+      final item = PlaybackItem.plugin(
+        platform: 'Test',
+        musicId: 'A',
+        title: 'A',
+        duration: const Duration(minutes: 3),
+        raw: const <String, Object?>{'id': 'A'},
+      );
+      final repository = _FakePlayerStateRepository(
+        PlayerControllerState(
+          queue: <PlaybackItem>[item],
+          currentItem: item,
+          lastPosition: const Duration(seconds: 10),
+          lastDuration: const Duration(minutes: 3),
+        ),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          audioPlayerServiceProvider.overrideWithValue(
+            _FakeAudioPlayerService(),
+          ),
+          playerStateRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      await container.read(playerControllerProvider.future);
+
+      container
+          .read(playerControllerProvider.notifier)
+          .syncSnapshot(
+            const PlayerSnapshot(
+              currentSource: MediaSource(url: 'https://example.com/a.mp3'),
+              position: Duration(seconds: 45),
+              duration: Duration(minutes: 3),
+            ),
+          );
+
+      container.dispose();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repository.progressSaveCount, 1);
+      expect(repository.state.lastPosition, const Duration(seconds: 45));
+    },
+  );
+
+  test(
+    'rounded plugin duration and shorter probed duration are bridged',
+    () async {
+      final item = PlaybackItem.plugin(
+        platform: 'Test',
+        musicId: 'A',
+        title: 'A',
+        duration: const Duration(minutes: 3),
+        raw: const <String, Object?>{'id': 'A'},
+      );
+      final repository = _FakePlayerStateRepository(
+        PlayerControllerState(
+          queue: <PlaybackItem>[item],
+          currentItem: item,
+          lastPosition: const Duration(seconds: 54),
+          lastDuration: const Duration(minutes: 3),
+        ),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          audioPlayerServiceProvider.overrideWithValue(
+            _FakeAudioPlayerService(),
+          ),
+          playerStateRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(playerControllerProvider.future);
+
+      container
+          .read(playerControllerProvider.notifier)
+          .syncSnapshot(
+            const PlayerSnapshot(
+              currentSource: MediaSource(url: 'https://example.com/a.mp3'),
+              position: Duration(seconds: 55),
+              duration: Duration(minutes: 2, seconds: 58),
+            ),
+          );
+
+      final state = container.read(playerControllerProvider).value!;
+      expect(state.lastPosition, const Duration(seconds: 55));
+      expect(state.lastDuration, const Duration(minutes: 2, seconds: 59));
+      expect(
+        state.currentItem?.duration,
+        const Duration(minutes: 2, seconds: 59),
+      );
+      expect(
+        state.queue.single.duration,
+        const Duration(minutes: 2, seconds: 59),
+      );
+
+      await container.read(playerControllerProvider.notifier).pause();
+
+      expect(
+        repository.state.currentItem?.duration,
+        const Duration(minutes: 2, seconds: 59),
+      );
+      expect(
+        repository.state.lastDuration,
+        const Duration(minutes: 2, seconds: 59),
+      );
+    },
+  );
+
   test('plugin item duration repairs polluted saved duration', () async {
     final item = PlaybackItem.plugin(
       platform: 'Test',
@@ -640,12 +845,19 @@ class _FakePlayerStateRepository implements PlayerStateRepository {
   _FakePlayerStateRepository(this.state);
 
   PlayerControllerState state;
+  int progressSaveCount = 0;
 
   @override
   Future<PlayerControllerState> load() async => state;
 
   @override
   Future<void> save(PlayerControllerState state) async {
+    this.state = state;
+  }
+
+  @override
+  Future<void> savePlaybackProgress(PlayerControllerState state) async {
+    progressSaveCount += 1;
     this.state = state;
   }
 
