@@ -11,6 +11,7 @@ class PlaybackItem {
     required this.id,
     required this.type,
     required this.title,
+    this.pluginId,
     this.platform,
     this.musicId,
     this.localPath,
@@ -22,6 +23,7 @@ class PlaybackItem {
   });
 
   factory PlaybackItem.plugin({
+    String? pluginId,
     required String platform,
     required String musicId,
     required String title,
@@ -32,8 +34,13 @@ class PlaybackItem {
     String? artworkUrl,
   }) {
     return PlaybackItem(
-      id: 'plugin:$platform:$musicId',
+      id: _pluginPlaybackId(
+        pluginId: pluginId,
+        platform: platform,
+        musicId: musicId,
+      ),
       type: PlaybackItemType.plugin,
+      pluginId: pluginId,
       platform: platform,
       musicId: musicId,
       title: title,
@@ -47,6 +54,7 @@ class PlaybackItem {
 
   factory PlaybackItem.fromMusicItem(MusicItem item) {
     return PlaybackItem.plugin(
+      pluginId: item.pluginId,
       platform: item.platform,
       musicId: item.id,
       title: item.title,
@@ -83,6 +91,7 @@ class PlaybackItem {
   final String id;
   final PlaybackItemType type;
   final String title;
+  final String? pluginId;
   final String? platform;
   final String? musicId;
   final String? localPath;
@@ -100,6 +109,7 @@ class PlaybackItem {
       id: id,
       type: type,
       title: title,
+      pluginId: pluginId,
       platform: platform,
       musicId: musicId,
       localPath: localPath,
@@ -116,6 +126,7 @@ class PlaybackItem {
       'id': id,
       'type': type.name,
       'title': title,
+      'pluginId': pluginId,
       'platform': platform,
       'musicId': musicId,
       'localPath': localPath,
@@ -129,14 +140,19 @@ class PlaybackItem {
 
   static PlaybackItem fromJson(Map<String, Object?> json) {
     final typeName = json['type']?.toString();
+    final id = json['id']?.toString() ?? '';
+    final musicId = json['musicId']?.toString();
+    final platform = json['platform']?.toString();
     return PlaybackItem(
-      id: json['id']?.toString() ?? '',
+      id: id,
       type: typeName == PlaybackItemType.local.name
           ? PlaybackItemType.local
           : PlaybackItemType.plugin,
       title: json['title']?.toString() ?? '',
-      platform: json['platform']?.toString(),
-      musicId: json['musicId']?.toString(),
+      pluginId:
+          json['pluginId']?.toString() ?? pluginIdFromStorage(id, musicId),
+      platform: platform,
+      musicId: musicId,
       localPath: json['localPath']?.toString(),
       artist: json['artist']?.toString(),
       album: json['album']?.toString(),
@@ -165,6 +181,31 @@ class PlaybackItem {
       return fileName;
     }
     return fileName.substring(0, dot);
+  }
+
+  static String _pluginPlaybackId({
+    required String? pluginId,
+    required String platform,
+    required String musicId,
+  }) {
+    final normalizedPluginId = pluginId?.trim();
+    if (normalizedPluginId != null && normalizedPluginId.isNotEmpty) {
+      return 'plugin:$normalizedPluginId:$musicId';
+    }
+    return 'plugin:$platform:$musicId';
+  }
+
+  static String? pluginIdFromStorage(String id, String? musicId) {
+    if (!id.startsWith('plugin:') || musicId == null || musicId.isEmpty) {
+      return null;
+    }
+    final prefix = 'plugin:';
+    final suffix = ':$musicId';
+    if (!id.endsWith(suffix) || id.length <= prefix.length + suffix.length) {
+      return null;
+    }
+    final value = id.substring(prefix.length, id.length - suffix.length);
+    return value.isEmpty ? null : value;
   }
 }
 

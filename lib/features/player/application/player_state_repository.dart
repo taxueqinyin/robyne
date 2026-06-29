@@ -196,6 +196,7 @@ class PlayerStateRepository {
         orElse: () => PlaybackItemType.plugin,
       ),
       title: row.title,
+      pluginId: PlaybackItem.pluginIdFromStorage(row.id, row.musicId),
       platform: row.platform,
       musicId: row.musicId,
       localPath: row.localPath,

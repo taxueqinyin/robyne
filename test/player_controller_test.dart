@@ -807,6 +807,39 @@ void main() {
       expect(runtimeFactory.createCount, 0);
     },
   );
+
+  test('plugin playback prefers pluginId before platform fallback', () async {
+    final tempDirectory = await Directory.systemTemp.createTemp(
+      'robyne_player_plugin_id_test_',
+    );
+    addTearDown(() async {
+      await tempDirectory.delete(recursive: true);
+    });
+    final alphaPath = await _writePluginFile(tempDirectory, 'alpha.js');
+    final betaPath = await _writePluginFile(tempDirectory, 'beta.js');
+    final audio = _FakeAudioPlayerService();
+    final container = ProviderContainer(
+      overrides: [
+        pluginRepositoryProvider.overrideWithValue(
+          _FakePluginRepository(<PluginDefinition>[
+            _plugin('alpha', 'Shared', alphaPath),
+            _plugin('beta', 'Shared', betaPath),
+          ]),
+        ),
+        pluginRuntimeFactoryProvider.overrideWithValue(
+          _SourceAwareRuntimeFactory(),
+        ),
+        audioPlayerServiceProvider.overrideWithValue(audio),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container
+        .read(playerControllerProvider.notifier)
+        .playFromPlugin(_musicItem('Shared', pluginId: 'beta', id: 'song-1'));
+
+    expect(audio.playedUrls, <String>['https://example.com/beta.mp3']);
+  });
 }
 
 Future<PlaybackItem> _localItem(Directory directory, String name) async {
@@ -832,12 +865,13 @@ PluginDefinition _plugin(String id, String platform, String sourcePath) {
   );
 }
 
-MusicItem _musicItem(String platform) {
+MusicItem _musicItem(String platform, {String? pluginId, String? id}) {
   return MusicItem(
-    id: platform,
+    id: id ?? platform,
+    pluginId: pluginId ?? platform.toLowerCase(),
     platform: platform,
     title: platform,
-    raw: <String, Object?>{'id': platform, 'title': platform},
+    raw: <String, Object?>{'id': id ?? platform, 'title': platform},
   );
 }
 
@@ -886,6 +920,14 @@ class _FakePluginRepository implements PluginRepository {
   }
 
   @override
+  Future<PluginImportBatchResult> importPluginsFromPaths(
+    List<String> paths, {
+    PluginImportProgressCallback? onProgress,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<Result<PluginDefinition>> importPluginFromUrl(String url) async {
     throw UnimplementedError();
   }
@@ -904,7 +946,7 @@ class _FakePluginRepository implements PluginRepository {
   }
 }
 
-class _FakeRuntimeFactory implements PluginRuntimeFactory {
+class _FakeRuntimeFactory extends PluginRuntimeFactory {
   _FakeRuntimeFactory(this._slowCompleter);
 
   final Completer<void> _slowCompleter;
@@ -918,7 +960,7 @@ class _FakeRuntimeFactory implements PluginRuntimeFactory {
   }
 }
 
-class _CountingRuntimeFactory implements PluginRuntimeFactory {
+class _CountingRuntimeFactory extends PluginRuntimeFactory {
   int createCount = 0;
 
   @override
@@ -944,6 +986,38 @@ class _CountingRuntime implements PluginRuntime {
     Duration timeout = const Duration(seconds: 15),
   }) async {
     return const Ok(<String, Object?>{'url': 'https://example.com/cached.mp3'});
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
+
+class _SourceAwareRuntimeFactory extends PluginRuntimeFactory {
+  @override
+  Future<PluginRuntime> create() async {
+    return _SourceAwareRuntime();
+  }
+}
+
+class _SourceAwareRuntime implements PluginRuntime {
+  String _key = 'alpha';
+
+  @override
+  Future<Result<Map<String, Object?>>> loadPlugin(
+    String source, {
+    Map<String, String> userVariables = const <String, String>{},
+  }) async {
+    _key = source.contains('beta') ? 'beta' : 'alpha';
+    return const Ok(<String, Object?>{'platform': 'Shared'});
+  }
+
+  @override
+  Future<Result<Object?>> callMethod(
+    String method,
+    List<Object?> arguments, {
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    return Ok(<String, Object?>{'url': 'https://example.com/$_key.mp3'});
   }
 
   @override

@@ -133,6 +133,7 @@ class _TaskList extends ConsumerWidget {
       DownloadStatus.queued => 'Queued',
       DownloadStatus.downloading =>
         'Downloading ${(task.progress * 100).round()}%',
+      DownloadStatus.converting => 'Converting',
       DownloadStatus.completed => 'Completed',
       DownloadStatus.failed => 'Failed',
     };

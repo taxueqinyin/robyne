@@ -11,6 +11,7 @@ void main() {
     final repository = DownloadRepository(database: database);
     final itemA = _item('A');
     final itemB = _item('B');
+    final itemC = _item('C');
     final now = DateTime(2026);
     await repository.upsertTask(
       DownloadTask(
@@ -28,6 +29,16 @@ void main() {
         item: itemB,
         status: DownloadStatus.downloading,
         progress: 0.5,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await repository.upsertTask(
+      DownloadTask(
+        id: itemC.id,
+        item: itemC,
+        status: DownloadStatus.converting,
+        progress: 1,
         createdAt: now,
         updatedAt: now,
       ),

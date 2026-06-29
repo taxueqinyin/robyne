@@ -126,11 +126,6 @@ class _NowPlayingMenu extends ConsumerWidget {
                   .associateLocalFile(item, filePath);
               ref.invalidate(storedCurrentLyricsProvider);
             }
-          case 'offset':
-            await showDialog<void>(
-              context: context,
-              builder: (context) => _LyricOffsetDialog(item: item),
-            );
           case 'playlist':
             await showDialog<void>(
               context: context,
@@ -143,7 +138,7 @@ class _NowPlayingMenu extends ConsumerWidget {
         }
       },
       itemBuilder: (context) => <PopupMenuEntry<String>>[
-        if (_lyricsSystemEnabled) ...const <PopupMenuEntry<String>>[
+        if (_lyricsSystemEnabled) ...<PopupMenuEntry<String>>[
           PopupMenuItem<String>(
             value: 'search',
             child: ListTile(
@@ -160,10 +155,10 @@ class _NowPlayingMenu extends ConsumerWidget {
           ),
           PopupMenuItem<String>(
             value: 'offset',
-            child: ListTile(
-              leading: Icon(Icons.tune),
-              title: Text('Adjust lyric offset'),
-            ),
+            enabled: false,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            height: 124,
+            child: _LyricOffsetMenuPanel(item: item),
           ),
         ],
         PopupMenuItem<String>(
@@ -357,16 +352,17 @@ class _LyricsPaneState extends ConsumerState<_LyricsPane> {
   }
 }
 
-class _LyricOffsetDialog extends ConsumerStatefulWidget {
-  const _LyricOffsetDialog({required this.item});
+class _LyricOffsetMenuPanel extends ConsumerStatefulWidget {
+  const _LyricOffsetMenuPanel({required this.item});
 
   final PlaybackItem item;
 
   @override
-  ConsumerState<_LyricOffsetDialog> createState() => _LyricOffsetDialogState();
+  ConsumerState<_LyricOffsetMenuPanel> createState() =>
+      _LyricOffsetMenuPanelState();
 }
 
-class _LyricOffsetDialogState extends ConsumerState<_LyricOffsetDialog> {
+class _LyricOffsetMenuPanelState extends ConsumerState<_LyricOffsetMenuPanel> {
   double _offsetMs = 0;
   Duration? _queuedOffset;
   bool _persistingOffset = false;
@@ -388,31 +384,43 @@ class _LyricOffsetDialogState extends ConsumerState<_LyricOffsetDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Lyric offset'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text('${(_offsetMs / 1000).toStringAsFixed(2)}s'),
-            Slider(
-              key: const Key('lyric-offset-slider'),
-              min: -10000,
-              max: 10000,
-              divisions: 80,
-              value: _offsetMs.clamp(-10000, 10000).toDouble(),
-              onChanged: _applyOffset,
-            ),
-          ],
-        ),
+    return SizedBox(
+      width: 280,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Icon(Icons.tune, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Lyric offset',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              Text(
+                '${(_offsetMs / 1000).toStringAsFixed(2)}s',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Slider(
+            key: const Key('lyric-offset-slider'),
+            min: -10000,
+            max: 10000,
+            divisions: 80,
+            value: _offsetMs.clamp(-10000, 10000).toDouble(),
+            onChanged: _applyOffset,
+          ),
+          Text(
+            'Drag to shift lyric timing in real time.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
-      actions: <Widget>[
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
-        ),
-      ],
     );
   }
 

@@ -2,14 +2,27 @@ import 'package:path/path.dart' as p;
 
 import '../../player/domain/playback_item.dart';
 
-String downloadFileNameForItem(PlaybackItem item, Uri? sourceUri) {
-  final extension = p.extension(sourceUri?.path ?? '').isEmpty
-      ? '.audio'
-      : p.extension(sourceUri?.path ?? '');
+String downloadFileNameForItem(
+  PlaybackItem item,
+  Uri? sourceUri, {
+  String? targetExtension,
+}) {
+  final sourceExtension = p.extension(sourceUri?.path ?? '');
+  final extension =
+      _normalizedExtension(targetExtension) ??
+      (sourceExtension.isEmpty ? '.audio' : sourceExtension);
   final title = _fileNamePart(item.title, fallback: 'Unknown title');
   final artist = _fileNamePart(item.artist, fallback: 'Unknown artist');
   final source = _fileNamePart(item.platform, fallback: 'Unknown source');
   return _limitFileName('$title - $artist - $source$extension');
+}
+
+String? _normalizedExtension(String? extension) {
+  final trimmed = extension?.trim();
+  if (trimmed == null || trimmed.isEmpty) {
+    return null;
+  }
+  return trimmed.startsWith('.') ? trimmed : '.$trimmed';
 }
 
 String _fileNamePart(String? value, {required String fallback}) {

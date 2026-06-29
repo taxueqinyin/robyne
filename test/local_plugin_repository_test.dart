@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:robyne/core/database/app_database.dart' as db;
 import 'package:robyne/core/result/result.dart';
 import 'package:robyne/core/storage/local_file_store.dart';
+import 'package:robyne/features/plugin/domain/plugin_definition.dart';
 import 'package:robyne/features/plugin/domain/plugin_runtime.dart';
 import 'package:robyne/features/plugin/infrastructure/local_plugin_repository.dart';
 import 'package:robyne/features/plugin/infrastructure/music_free_compat_adapter.dart';
@@ -31,14 +33,14 @@ void main() {
           'javascript',
           charset: 'utf-8',
         );
-        request.response.write('''
-          module.exports = {
+        request.response.write(
+          _pluginSource(
             platform: 'URL Plugin',
             version: '1.0.0',
             author: 'Robyne',
-            supportedSearchType: ['music']
-          };
-        ''');
+            supportedSearchType: const <Object?>['music'],
+          ),
+        );
         await request.response.close();
       }),
     );
@@ -77,7 +79,16 @@ void main() {
     addTearDown(server.close);
     unawaited(
       server.forEach((request) async {
-        request.response.write('module.exports = {};');
+        request.response.write(
+          _pluginSource(
+            platform: 'URL Plugin',
+            version: '1.0.0',
+            author: 'Robyne',
+            userVariables: const <Object?>[
+              <String, Object?>{'key': 'token', 'name': 'Token'},
+            ],
+          ),
+        );
         await request.response.close();
       }),
     );
@@ -128,7 +139,7 @@ void main() {
     expect((imported as Failure).error.code, 'plugin.url_invalid');
   });
 
-  test('skips importing duplicate plugin platforms', () async {
+  test('allows same platform with different authors to coexist', () async {
     _setMockPreferences();
     final tempDirectory = await Directory.systemTemp.createTemp(
       'robyne_plugin_repo_test_',
@@ -140,8 +151,12 @@ void main() {
     });
     final firstFile = File('${tempDirectory.path}/first.js');
     final secondFile = File('${tempDirectory.path}/second.js');
-    await firstFile.writeAsString('module.exports = {};');
-    await secondFile.writeAsString('module.exports = {};');
+    await firstFile.writeAsString(
+      _pluginSource(platform: 'Shared', author: 'Author A', version: '1.0.0'),
+    );
+    await secondFile.writeAsString(
+      _pluginSource(platform: 'Shared', author: 'Author B', version: '1.0.0'),
+    );
 
     final fileStore = LocalFileStore(baseDirectory: tempDirectory);
     final repository = LocalPluginRepository(
@@ -155,17 +170,115 @@ void main() {
     final firstImport = await repository.importPluginFromPath(firstFile.path);
     final secondImport = await repository.importPluginFromPath(secondFile.path);
     final listed = await repository.listPlugins();
-    final pluginDirectory = await fileStore.pluginsDirectory();
-    final copiedPlugins = await pluginDirectory
-        .list()
-        .where((entity) => entity is File)
-        .toList();
 
     expect(firstImport, isA<Ok>());
-    expect(secondImport, isA<Failure>());
-    expect((secondImport as Failure).error.code, 'plugin.duplicate');
-    expect((listed as Ok).value, hasLength(1));
-    expect(copiedPlugins, hasLength(1));
+    expect(secondImport, isA<Ok>());
+    expect((listed as Ok).value, hasLength(2));
+  });
+
+  test(
+    'batch import updates higher version and skips same or lower versions',
+    () async {
+      _setMockPreferences();
+      final tempDirectory = await Directory.systemTemp.createTemp(
+        'robyne_plugin_repo_test_',
+      );
+      final database = db.AppDatabase.memory();
+      addTearDown(database.close);
+      addTearDown(() async {
+        await tempDirectory.delete(recursive: true);
+      });
+      final firstFile = File('${tempDirectory.path}/first.js');
+      final higherFile = File('${tempDirectory.path}/higher.js');
+      final lowerFile = File('${tempDirectory.path}/lower.js');
+      await firstFile.writeAsString(
+        _pluginSource(
+          platform: 'Shared',
+          author: 'Author A',
+          version: '1.0.0',
+          userVariables: const <Object?>[
+            <String, Object?>{'key': 'token', 'name': 'Token'},
+          ],
+        ),
+      );
+      await higherFile.writeAsString(
+        _pluginSource(
+          platform: 'Shared',
+          author: 'Author A',
+          version: '1.1.0',
+          userVariables: const <Object?>[
+            <String, Object?>{'key': 'token', 'name': 'Token'},
+          ],
+        ),
+      );
+      await lowerFile.writeAsString(
+        _pluginSource(
+          platform: 'Shared',
+          author: 'Author A',
+          version: '1.0.0',
+          userVariables: const <Object?>[
+            <String, Object?>{'key': 'token', 'name': 'Token'},
+          ],
+        ),
+      );
+
+      final fileStore = LocalFileStore(baseDirectory: tempDirectory);
+      final repository = LocalPluginRepository(
+        fileStore: fileStore,
+        database: database,
+        preferences: SharedPreferencesAsync(),
+        runtimeFactory: _FakeRuntimeFactory(),
+        compatAdapter: MusicFreeCompatAdapter(),
+      );
+
+      final firstImport = await repository.importPluginFromPath(firstFile.path);
+      final original = (firstImport as Ok<PluginDefinition>).value;
+      await repository.setEnabled(original.id, false);
+      await repository.updateUserVariableValues(
+        original.id,
+        const <String, String>{'token': 'abc'},
+      );
+
+      final result = await repository.importPluginsFromPaths(<String>[
+        higherFile.path,
+        lowerFile.path,
+      ]);
+      final listed = await repository.listPlugins();
+      final plugin = ((listed as Ok<List<PluginDefinition>>).value).single;
+      final pluginDirectory = await fileStore.pluginsDirectory();
+      final copiedPlugins = await pluginDirectory
+          .list()
+          .where((entity) => entity is File)
+          .toList();
+
+      expect(result.importedCount, 0);
+      expect(result.updatedCount, 1);
+      expect(result.skippedCount, 1);
+      expect(result.errors, isEmpty);
+      expect(plugin.id, original.id);
+      expect(plugin.version, '1.1.0');
+      expect(plugin.enabled, isFalse);
+      expect(plugin.userVariableValues, const <String, String>{'token': 'abc'});
+      expect(plugin.sourcePath, isNot(original.sourcePath));
+      expect(await File(original.sourcePath).exists(), isFalse);
+      expect(copiedPlugins, hasLength(1));
+    },
+  );
+}
+
+String _pluginSource({
+  required String platform,
+  String? version,
+  String? author,
+  List<Object?> supportedSearchType = const <Object?>['music'],
+  List<Object?> userVariables = const <Object?>[],
+}) {
+  return jsonEncode(<String, Object?>{
+    'platform': platform,
+    'version': version,
+    'author': author,
+    'supportedSearchType': supportedSearchType,
+    'userVariables': userVariables,
   });
 }
 
@@ -174,7 +287,7 @@ void _setMockPreferences() {
   SharedPreferencesAsyncPlatform.instance = _MemoryPreferencesPlatform();
 }
 
-class _FakeRuntimeFactory implements PluginRuntimeFactory {
+class _FakeRuntimeFactory extends PluginRuntimeFactory {
   @override
   Future<PluginRuntime> create() async => _FakeRuntime();
 }
@@ -185,15 +298,12 @@ class _FakeRuntime implements PluginRuntime {
     String source, {
     Map<String, String> userVariables = const <String, String>{},
   }) async {
-    return Ok(<String, Object?>{
-      'platform': 'URL Plugin',
-      'version': '1.0.0',
-      'author': 'Robyne',
-      'supportedSearchType': <Object?>['music'],
-      'userVariables': <Object?>[
-        <String, Object?>{'key': 'token', 'name': 'Token'},
-      ],
-    });
+    final decoded = jsonDecode(source);
+    return Ok(
+      (decoded as Map<dynamic, dynamic>).map(
+        (key, dynamic value) => MapEntry(key.toString(), value as Object?),
+      ),
+    );
   }
 
   @override

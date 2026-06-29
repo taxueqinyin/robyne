@@ -51,6 +51,14 @@ class _FakePluginRepository implements PluginRepository {
   }
 
   @override
+  Future<PluginImportBatchResult> importPluginsFromPaths(
+    List<String> paths, {
+    PluginImportProgressCallback? onProgress,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<Result<PluginDefinition>> importPluginFromUrl(String url) async {
     throw UnimplementedError();
   }

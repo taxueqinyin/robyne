@@ -67,22 +67,125 @@ class LocalPluginRepository implements PluginRepository {
 
   @override
   Future<Result<PluginDefinition>> importPluginFromPath(String path) async {
+    final requestResult = await _pluginRequestFromPath(path);
+    if (requestResult case Failure<_PluginImportRequest>(:final error)) {
+      return Failure(error);
+    }
+    return _importSingleRequest(
+      (requestResult as Ok<_PluginImportRequest>).value,
+    );
+  }
+
+  @override
+  Future<PluginImportBatchResult> importPluginsFromPaths(
+    List<String> paths, {
+    PluginImportProgressCallback? onProgress,
+  }) async {
+    var stagedImportedCount = 0;
+    var stagedUpdatedCount = 0;
+    var skippedCount = 0;
+    final errors = <AppError>[];
+    final plannedImports = <_PlannedPluginImport>[];
+
+    void emitProgress({required int completed, String? currentLabel}) {
+      onProgress?.call(
+        PluginImportProgressSnapshot(
+          total: paths.length,
+          completed: completed,
+          importedCount: stagedImportedCount,
+          updatedCount: stagedUpdatedCount,
+          skippedCount: skippedCount,
+          failedCount: errors.length,
+          currentLabel: currentLabel,
+        ),
+      );
+    }
+
+    emitProgress(completed: 0);
+    if (paths.isEmpty) {
+      return const PluginImportBatchResult(
+        importedCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        errors: <AppError>[],
+      );
+    }
+
     try {
-      final source = await File(path).readAsString();
-      final sourceFile = File(path);
-      return await _importPluginSource(
-        source: source,
-        fileName: sourceFile.uri.pathSegments.last,
-        importLabel: path,
+      await _legacyMigration?.ensureMigrated();
+      final installed = await _readDefinitions();
+      final currentByIdentity = <String, PluginDefinition>{
+        for (final definition in installed)
+          _identityKeyForDefinition(definition): definition,
+      };
+      final pluginDirectory = await _fileStore.pluginsDirectory();
+
+      for (var index = 0; index < paths.length; index += 1) {
+        final path = paths[index];
+        emitProgress(completed: index, currentLabel: path);
+
+        final requestResult = await _pluginRequestFromPath(path);
+        if (requestResult case Failure<_PluginImportRequest>(:final error)) {
+          errors.add(error);
+          emitProgress(completed: index + 1, currentLabel: path);
+          continue;
+        }
+
+        final request = (requestResult as Ok<_PluginImportRequest>).value;
+        final planned = await _planImportRequest(
+          request: request,
+          pluginDirectory: pluginDirectory,
+          currentByIdentity: currentByIdentity,
+          sequence: index,
+        );
+
+        switch (planned.kind) {
+          case _PlannedImportKind.imported:
+            stagedImportedCount += 1;
+            plannedImports.add(planned);
+            currentByIdentity[_identityKeyForDefinition(planned.definition!)] =
+                planned.definition!;
+          case _PlannedImportKind.updated:
+            stagedUpdatedCount += 1;
+            plannedImports.add(planned);
+            currentByIdentity[_identityKeyForDefinition(planned.definition!)] =
+                planned.definition!;
+          case _PlannedImportKind.skipped:
+            skippedCount += 1;
+          case _PlannedImportKind.failed:
+            errors.add(planned.error!);
+        }
+
+        emitProgress(completed: index + 1, currentLabel: path);
+      }
+
+      final commitError = await _commitPlannedImports(plannedImports);
+      if (commitError != null) {
+        errors.add(commitError);
+        stagedImportedCount = 0;
+        stagedUpdatedCount = 0;
+      }
+
+      return PluginImportBatchResult(
+        importedCount: stagedImportedCount,
+        updatedCount: stagedUpdatedCount,
+        skippedCount: skippedCount,
+        errors: List<AppError>.unmodifiable(errors),
       );
     } catch (error, stackTrace) {
-      return Failure(
+      errors.add(
         AppError(
           code: 'plugin.load_failed',
-          message: 'Failed to import plugin from $path.',
+          message: 'Failed to import plugin files.',
           cause: error,
           stackTrace: stackTrace,
         ),
+      );
+      return PluginImportBatchResult(
+        importedCount: 0,
+        updatedCount: 0,
+        skippedCount: skippedCount,
+        errors: List<AppError>.unmodifiable(errors),
       );
     }
   }
@@ -144,10 +247,12 @@ class LocalPluginRepository implements PluginRepository {
         );
       }
 
-      return await _importPluginSource(
-        source: rawData,
-        fileName: _fileNameFromUri(uri),
-        importLabel: uri.toString(),
+      return _importSingleRequest(
+        _PluginImportRequest(
+          source: rawData,
+          fileName: _fileNameFromUri(uri),
+          importLabel: uri.toString(),
+        ),
       );
     } catch (error, stackTrace) {
       return Failure(
@@ -264,6 +369,255 @@ class LocalPluginRepository implements PluginRepository {
     }
   }
 
+  Future<Result<PluginDefinition>> _importSingleRequest(
+    _PluginImportRequest request,
+  ) async {
+    try {
+      await _legacyMigration?.ensureMigrated();
+      final installed = await _readDefinitions();
+      final currentByIdentity = <String, PluginDefinition>{
+        for (final definition in installed)
+          _identityKeyForDefinition(definition): definition,
+      };
+      final pluginDirectory = await _fileStore.pluginsDirectory();
+      final planned = await _planImportRequest(
+        request: request,
+        pluginDirectory: pluginDirectory,
+        currentByIdentity: currentByIdentity,
+        sequence: 0,
+      );
+      switch (planned.kind) {
+        case _PlannedImportKind.imported:
+        case _PlannedImportKind.updated:
+          final commitError = await _commitPlannedImports(
+            <_PlannedPluginImport>[planned],
+          );
+          if (commitError != null) {
+            return Failure(commitError);
+          }
+          return Ok(planned.definition!);
+        case _PlannedImportKind.skipped:
+          return Failure(
+            AppError(
+              code: 'plugin.skipped',
+              message:
+                  planned.skipMessage ??
+                  'Plugin is already imported and up to date.',
+            ),
+          );
+        case _PlannedImportKind.failed:
+          return Failure(planned.error!);
+      }
+    } catch (error, stackTrace) {
+      return Failure(
+        AppError(
+          code: 'plugin.load_failed',
+          message: 'Failed to import plugin from ${request.importLabel}.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  Future<Result<_PluginImportRequest>> _pluginRequestFromPath(
+    String path,
+  ) async {
+    try {
+      final sourceFile = File(path);
+      final source = await sourceFile.readAsString();
+      return Ok(
+        _PluginImportRequest(
+          source: source,
+          fileName: sourceFile.uri.pathSegments.last,
+          importLabel: path,
+        ),
+      );
+    } catch (error, stackTrace) {
+      return Failure(
+        AppError(
+          code: 'plugin.load_failed',
+          message: 'Failed to import plugin from $path.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  Future<_PlannedPluginImport> _planImportRequest({
+    required _PluginImportRequest request,
+    required Directory pluginDirectory,
+    required Map<String, PluginDefinition> currentByIdentity,
+    required int sequence,
+  }) async {
+    try {
+      final metadataResult = await _runtimeFactory.loadPluginMetadata(
+        request.source,
+      );
+      if (metadataResult case Failure<Map<String, Object?>>(:final error)) {
+        return _PlannedPluginImport.failed(error);
+      }
+
+      final metadata = (metadataResult as Ok<Map<String, Object?>>).value;
+      final destination = File(
+        p.join(
+          pluginDirectory.path,
+          _destinationFileName(sequence, request.fileName),
+        ),
+      );
+      final definitionResult = _compatAdapter.definitionFromRuntimeMetadata(
+        sourcePath: destination.path,
+        metadata: metadata,
+      );
+      if (definitionResult case Failure<PluginDefinition>(:final error)) {
+        return _PlannedPluginImport.failed(error);
+      }
+
+      final parsedDefinition = (definitionResult as Ok<PluginDefinition>).value;
+      final identityKey = _identityKeyForDefinition(parsedDefinition);
+      final existing = currentByIdentity[identityKey];
+      if (existing == null) {
+        return _PlannedPluginImport.imported(
+          request: request,
+          definition: parsedDefinition,
+        );
+      }
+
+      final decision = _resolveDuplicate(existing, parsedDefinition);
+      if (decision.kind == _PlannedImportKind.skipped) {
+        return _PlannedPluginImport.skipped(
+          decision.message ??
+              'Plugin "${existing.platform}" is already up to date.',
+        );
+      }
+
+      final mergedDefinition = parsedDefinition.copyWith(
+        id: existing.id,
+        enabled: existing.enabled,
+        installedAt: existing.installedAt,
+        updatedAt: DateTime.now(),
+        userVariableValues: _retainedUserVariableValues(
+          existing.userVariableValues,
+          parsedDefinition.userVariables,
+        ),
+      );
+      return _PlannedPluginImport.updated(
+        request: request,
+        previousDefinition: existing,
+        definition: mergedDefinition,
+      );
+    } catch (error, stackTrace) {
+      return _PlannedPluginImport.failed(
+        AppError(
+          code: 'plugin.load_failed',
+          message: 'Failed to import plugin from ${request.importLabel}.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  _DuplicateDecision _resolveDuplicate(
+    PluginDefinition existing,
+    PluginDefinition incoming,
+  ) {
+    final existingVersion = _normalizedText(existing.version);
+    final incomingVersion = _normalizedText(incoming.version);
+    final incomingParts = _parseVersionParts(incomingVersion);
+    final existingParts = _parseVersionParts(existingVersion);
+
+    if (existingVersion == null || existingVersion.isEmpty) {
+      if (incomingParts != null) {
+        return const _DuplicateDecision.update();
+      }
+      return _DuplicateDecision.skipped(_skipMessage(existing));
+    }
+
+    if (incomingVersion == null || incomingVersion.isEmpty) {
+      return _DuplicateDecision.skipped(_skipMessage(existing));
+    }
+    if (existingParts == null || incomingParts == null) {
+      return _DuplicateDecision.skipped(_skipMessage(existing));
+    }
+
+    return _compareVersionParts(incomingParts, existingParts) > 0
+        ? const _DuplicateDecision.update()
+        : _DuplicateDecision.skipped(_skipMessage(existing));
+  }
+
+  Future<AppError?> _commitPlannedImports(
+    List<_PlannedPluginImport> plannedImports,
+  ) async {
+    if (plannedImports.isEmpty) {
+      return null;
+    }
+
+    final createdPaths = <String>[];
+    try {
+      await _database.transaction(() async {
+        for (final planned in plannedImports) {
+          final definition = planned.definition!;
+          final destination = File(definition.sourcePath);
+          await destination.writeAsString(planned.request!.source);
+          createdPaths.add(destination.path);
+          await _upsertDefinition(definition);
+        }
+      });
+    } catch (error, stackTrace) {
+      for (final path in createdPaths) {
+        await _deleteFileIfExists(path);
+      }
+      return AppError(
+        code: 'storage.write_failed',
+        message: 'Failed to store imported plugins.',
+        cause: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    for (final planned in plannedImports) {
+      final previousDefinition = planned.previousDefinition;
+      final nextDefinition = planned.definition!;
+      if (planned.kind != _PlannedImportKind.updated ||
+          previousDefinition == null ||
+          previousDefinition.sourcePath == nextDefinition.sourcePath) {
+        continue;
+      }
+      await _deleteFileIfExists(previousDefinition.sourcePath);
+    }
+    return null;
+  }
+
+  Future<void> _deleteFileIfExists(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Best-effort cleanup for replaced plugin sources.
+    }
+  }
+
+  Map<String, String> _retainedUserVariableValues(
+    Map<String, String> existingValues,
+    List<Map<String, Object?>> userVariables,
+  ) {
+    final allowedKeys = userVariables
+        .map((variable) => variable['key']?.toString())
+        .whereType<String>()
+        .where((key) => key.isNotEmpty)
+        .toSet();
+    if (allowedKeys.isEmpty) {
+      return const <String, String>{};
+    }
+    return Map<String, String>.fromEntries(
+      existingValues.entries.where((entry) => allowedKeys.contains(entry.key)),
+    );
+  }
+
   Future<List<PluginDefinition>> _readDefinitions() async {
     final rows =
         await (_database.select(_database.pluginDefinitionRows)
@@ -281,17 +635,6 @@ class LocalPluginRepository implements PluginRepository {
     return row == null ? null : _definitionFromRow(row);
   }
 
-  Future<PluginDefinition?> _definitionByPlatform(String platform) async {
-    final normalized = platform.trim().toLowerCase();
-    final rows = await _database.select(_database.pluginDefinitionRows).get();
-    for (final row in rows) {
-      if (row.platform.trim().toLowerCase() == normalized) {
-        return _definitionFromRow(row);
-      }
-    }
-    return null;
-  }
-
   Future<void> _upsertDefinition(PluginDefinition definition) async {
     await _database
         .into(_database.pluginDefinitionRows)
@@ -301,70 +644,48 @@ class LocalPluginRepository implements PluginRepository {
         );
   }
 
-  Future<Result<PluginDefinition>> _importPluginSource({
-    required String source,
-    required String fileName,
-    required String importLabel,
-  }) async {
-    PluginRuntime? runtime;
-    try {
-      runtime = await _runtimeFactory.create();
-      final metadataResult = await runtime.loadPlugin(source);
-      if (metadataResult case Failure<Map<String, Object?>>(:final error)) {
-        return Failure(error);
-      }
+  String _destinationFileName(int sequence, String fileName) {
+    return '${DateTime.now().microsecondsSinceEpoch}_${sequence}_${_safeFileName(fileName)}';
+  }
 
-      final metadata = (metadataResult as Ok<Map<String, Object?>>).value;
-      await _legacyMigration?.ensureMigrated();
-      final platform = metadata['platform']?.toString().trim();
-      if (platform != null && platform.isNotEmpty) {
-        final duplicate = await _definitionByPlatform(platform);
-        if (duplicate != null) {
-          return Failure(
-            AppError(
-              code: 'plugin.duplicate',
-              message: 'Plugin "${duplicate.platform}" is already imported.',
-            ),
-          );
-        }
-      }
+  static String _identityKeyForDefinition(PluginDefinition definition) {
+    final author = _normalizedText(definition.author) ?? '';
+    return '${definition.platform.trim().toLowerCase()}::$author';
+  }
 
-      final pluginDirectory = await _fileStore.pluginsDirectory();
-      final destination = File(
-        p.join(
-          pluginDirectory.path,
-          '${DateTime.now().microsecondsSinceEpoch}_${_safeFileName(fileName)}',
-        ),
-      );
-      await destination.writeAsString(source);
+  static String? _normalizedText(String? value) {
+    final normalized = value?.trim();
+    return normalized == null || normalized.isEmpty ? null : normalized;
+  }
 
-      final definitionResult = _compatAdapter.definitionFromRuntimeMetadata(
-        sourcePath: destination.path,
-        metadata: metadata,
-      );
-      if (definitionResult case Failure<PluginDefinition>(:final error)) {
-        if (await destination.exists()) {
-          await destination.delete();
-        }
-        return Failure(error);
-      }
-
-      final definition = (definitionResult as Ok<PluginDefinition>).value;
-      await _upsertDefinition(definition);
-
-      return Ok(definition);
-    } catch (error, stackTrace) {
-      return Failure(
-        AppError(
-          code: 'plugin.load_failed',
-          message: 'Failed to import plugin from $importLabel.',
-          cause: error,
-          stackTrace: stackTrace,
-        ),
-      );
-    } finally {
-      await runtime?.dispose();
+  static List<int>? _parseVersionParts(String? value) {
+    if (value == null || value.isEmpty) {
+      return null;
     }
+    if (!RegExp(r'^\d+(?:\.\d+)*$').hasMatch(value)) {
+      return null;
+    }
+    return value.split('.').map(int.parse).toList(growable: false);
+  }
+
+  static int _compareVersionParts(List<int> left, List<int> right) {
+    final maxLength = left.length > right.length ? left.length : right.length;
+    for (var index = 0; index < maxLength; index += 1) {
+      final leftPart = index < left.length ? left[index] : 0;
+      final rightPart = index < right.length ? right[index] : 0;
+      if (leftPart != rightPart) {
+        return leftPart.compareTo(rightPart);
+      }
+    }
+    return 0;
+  }
+
+  static String _skipMessage(PluginDefinition definition) {
+    final author = _normalizedText(definition.author);
+    final subject = author == null
+        ? '"${definition.platform}"'
+        : '"${definition.platform}" by "$author"';
+    return 'Plugin $subject is already up to date.';
   }
 
   static String _fileNameFromUri(Uri uri) {
@@ -459,4 +780,74 @@ class LocalPluginRepository implements PluginRepository {
       return null;
     }
   }
+}
+
+class _PluginImportRequest {
+  const _PluginImportRequest({
+    required this.source,
+    required this.fileName,
+    required this.importLabel,
+  });
+
+  final String source;
+  final String fileName;
+  final String importLabel;
+}
+
+enum _PlannedImportKind { imported, updated, skipped, failed }
+
+class _PlannedPluginImport {
+  const _PlannedPluginImport._({
+    required this.kind,
+    this.request,
+    this.definition,
+    this.previousDefinition,
+    this.error,
+    this.skipMessage,
+  });
+
+  const _PlannedPluginImport.imported({
+    required _PluginImportRequest request,
+    required PluginDefinition definition,
+  }) : this._(
+         kind: _PlannedImportKind.imported,
+         request: request,
+         definition: definition,
+       );
+
+  const _PlannedPluginImport.updated({
+    required _PluginImportRequest request,
+    required PluginDefinition previousDefinition,
+    required PluginDefinition definition,
+  }) : this._(
+         kind: _PlannedImportKind.updated,
+         request: request,
+         definition: definition,
+         previousDefinition: previousDefinition,
+       );
+
+  const _PlannedPluginImport.skipped(String message)
+    : this._(kind: _PlannedImportKind.skipped, skipMessage: message);
+
+  const _PlannedPluginImport.failed(AppError error)
+    : this._(kind: _PlannedImportKind.failed, error: error);
+
+  final _PlannedImportKind kind;
+  final _PluginImportRequest? request;
+  final PluginDefinition? definition;
+  final PluginDefinition? previousDefinition;
+  final AppError? error;
+  final String? skipMessage;
+}
+
+class _DuplicateDecision {
+  const _DuplicateDecision._({required this.kind, this.message});
+
+  const _DuplicateDecision.update() : this._(kind: _PlannedImportKind.updated);
+
+  const _DuplicateDecision.skipped(String message)
+    : this._(kind: _PlannedImportKind.skipped, message: message);
+
+  final _PlannedImportKind kind;
+  final String? message;
 }

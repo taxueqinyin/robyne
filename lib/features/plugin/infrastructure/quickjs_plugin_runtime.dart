@@ -22,19 +22,65 @@ class QuickJsPluginRuntimeFactory implements PluginRuntimeFactory {
 
   final PluginHttpClient _httpClient;
   final String _vendorAssetPath;
+  Future<String?>? _vendorSourceFuture;
 
   @override
   Future<PluginRuntime> create() async {
-    String? vendorSource;
-    try {
-      vendorSource = await rootBundle.loadString(_vendorAssetPath);
-    } catch (_) {
-      vendorSource = null;
-    }
+    final vendorSource = await _loadVendorSource();
     return QuickJsPluginRuntime(
       httpClient: _httpClient,
       vendorSource: vendorSource,
     );
+  }
+
+  @override
+  Future<Result<Map<String, Object?>>> loadPluginMetadata(
+    String source, {
+    Map<String, String> userVariables = const <String, String>{},
+  }) async {
+    try {
+      final vendorSource = await _loadVendorSource();
+      final response = await Isolate.run<Map<String, Object?>>(
+        () => _runQuickJsLoadInIsolate(<String, Object?>{
+          'source': source,
+          'userVariables': userVariables,
+          'vendorSource': vendorSource,
+        }),
+        debugName: 'robyne-plugin-load',
+      );
+      if (response['ok'] == true) {
+        return Ok(_objectMapValue(response['value']));
+      }
+      return Failure(
+        AppError(
+          code: response['code']?.toString() ?? 'plugin.load_failed',
+          message:
+              response['message']?.toString() ??
+              'Failed to load JavaScript plugin.',
+        ),
+      );
+    } catch (error, stackTrace) {
+      return Failure(
+        AppError(
+          code: 'plugin.load_failed',
+          message: 'Failed to load JavaScript plugin.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  Future<String?> _loadVendorSource() {
+    return _vendorSourceFuture ??= _loadVendorSourceUncached();
+  }
+
+  Future<String?> _loadVendorSourceUncached() async {
+    try {
+      return await rootBundle.loadString(_vendorAssetPath);
+    } catch (_) {
+      return null;
+    }
   }
 }
 
@@ -154,6 +200,36 @@ Future<Map<String, Object?>> _runQuickJsSearchInIsolate(
   }
 }
 
+Future<Map<String, Object?>> _runQuickJsLoadInIsolate(
+  Map<String, Object?> request,
+) async {
+  final runtime = QuickJsPluginRuntime(
+    httpClient: PluginHttpClient(),
+    vendorSource: request['vendorSource'] as String?,
+  );
+  try {
+    final loaded = await runtime.loadPlugin(
+      request['source']?.toString() ?? '',
+      userVariables: _stringMapValue(request['userVariables']),
+    );
+    return switch (loaded) {
+      Ok<Map<String, Object?>>(:final value) => <String, Object?>{
+        'ok': true,
+        'value': value,
+      },
+      Failure<Map<String, Object?>>(:final error) => _isolateFailure(error),
+    };
+  } catch (error) {
+    return <String, Object?>{
+      'ok': false,
+      'code': 'plugin.load_failed',
+      'message': error.toString(),
+    };
+  } finally {
+    await runtime.dispose();
+  }
+}
+
 Map<String, Object?> _isolateFailure(AppError error) {
   return <String, Object?>{
     'ok': false,
@@ -168,6 +244,15 @@ Map<String, String> _stringMapValue(Object? value) {
   }
   return value.map(
     (key, dynamic mapValue) => MapEntry(key.toString(), mapValue.toString()),
+  );
+}
+
+Map<String, Object?> _objectMapValue(Object? value) {
+  if (value is! Map) {
+    return const <String, Object?>{};
+  }
+  return value.map(
+    (key, dynamic mapValue) => MapEntry(key.toString(), mapValue as Object?),
   );
 }
 

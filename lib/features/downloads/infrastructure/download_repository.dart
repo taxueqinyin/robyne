@@ -65,7 +65,8 @@ class DownloadRepository {
     await (_database.update(_database.downloadTasks)..where(
           (task) =>
               task.status.equals(DownloadStatus.queued.name) |
-              task.status.equals(DownloadStatus.downloading.name),
+              task.status.equals(DownloadStatus.downloading.name) |
+              task.status.equals(DownloadStatus.converting.name),
         ))
         .write(
           db.DownloadTasksCompanion(

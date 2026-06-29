@@ -379,6 +379,7 @@ class LyricSearchController extends AsyncNotifier<LyricSearchState> {
         case Ok<Object?>(:final value):
           final adapted = compat.searchResultFromPluginValue(
             value,
+            pluginId: plugin.id,
             platform: plugin.platform,
             page: 1,
           );

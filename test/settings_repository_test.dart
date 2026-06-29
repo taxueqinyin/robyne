@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:robyne/core/database/app_database.dart' as db;
 import 'package:robyne/core/storage/local_file_store.dart';
+import 'package:robyne/features/downloads/domain/download_audio_format.dart';
 import 'package:robyne/features/settings/infrastructure/settings_repository.dart';
 
 void main() {
@@ -25,6 +26,7 @@ void main() {
     expect(initial.cacheSizeBytes, SettingsRepository.defaultCacheSizeBytes);
     expect(initial.cacheDirectoryPath, endsWith('cache'));
     expect(initial.downloadsDirectoryPath, endsWith('downloads'));
+    expect(initial.downloadAudioFormat, DownloadAudioFormat.original);
 
     final customCache = Directory(p.join(tempDirectory.path, 'custom-cache'));
     final customDownloads = Directory(
@@ -33,11 +35,13 @@ void main() {
     await repository.setCacheSizeBytes(256 * 1024 * 1024);
     await repository.setCacheDirectory(customCache.path);
     await repository.setDownloadsDirectory(customDownloads.path);
+    await repository.setDownloadAudioFormat(DownloadAudioFormat.mp3);
 
     final saved = await repository.load();
     expect(saved.cacheSizeBytes, 256 * 1024 * 1024);
     expect(saved.cacheDirectoryPath, customCache.path);
     expect(saved.downloadsDirectoryPath, customDownloads.path);
+    expect(saved.downloadAudioFormat, DownloadAudioFormat.mp3);
     expect(await customCache.exists(), isTrue);
     expect(await customDownloads.exists(), isTrue);
   });

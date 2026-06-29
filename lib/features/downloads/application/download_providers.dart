@@ -14,7 +14,9 @@ import '../../plugin/application/plugin_runtime_config.dart';
 import '../../plugin/domain/plugin_definition.dart';
 import '../../plugin/domain/plugin_runtime.dart';
 import '../../settings/application/settings_providers.dart';
+import '../domain/download_audio_format.dart';
 import '../domain/download_task.dart';
+import '../infrastructure/download_audio_transcoder.dart';
 import '../infrastructure/download_file_namer.dart';
 import '../infrastructure/download_repository.dart';
 
@@ -23,6 +25,12 @@ final downloadRepositoryProvider = Provider<DownloadRepository>((ref) {
     database: ref.watch(appDatabaseProvider),
     legacyMigration: ref.watch(legacyStorageMigrationProvider),
   );
+});
+
+final downloadAudioTranscoderProvider = Provider<DownloadAudioTranscoder>((
+  ref,
+) {
+  return FfmpegDownloadAudioTranscoder();
 });
 
 final downloadControllerProvider =
@@ -67,16 +75,38 @@ class DownloadController extends AsyncNotifier<List<DownloadTask>> {
     );
     await _saveAndPublish(task);
 
+    String? temporaryDownloadPath;
+    String? temporaryConversionPath;
     try {
       final sourceResult = await _mediaSourceFromPluginItem(item);
       final source = switch (sourceResult) {
         Ok(:final value) => value,
         Failure(:final error) => throw _DownloadException(error),
       };
-      final filePath = await _downloadPath(item, source);
+      final settings = await ref.read(settingsRepositoryProvider).load();
+      final sourceUri = Uri.tryParse(source.url);
+      final filePath = await _downloadPath(
+        item,
+        source,
+        downloadsDirectoryPath: settings.downloadsDirectoryPath,
+        audioFormat: settings.downloadAudioFormat,
+      );
+      final needsTranscode = _needsTranscode(
+        settings.downloadAudioFormat,
+        source,
+        sourceUri,
+      );
+      final downloadPath = needsTranscode
+          ? _temporaryDownloadPath(filePath, sourceUri)
+          : filePath;
+      if (needsTranscode) {
+        temporaryDownloadPath = downloadPath;
+        temporaryConversionPath = _temporaryConversionPath(filePath);
+      }
+
       await _dio.download(
         source.url,
-        filePath,
+        downloadPath,
         options: Options(
           headers: source.headers,
           responseType: ResponseType.bytes,
@@ -100,6 +130,32 @@ class DownloadController extends AsyncNotifier<List<DownloadTask>> {
         },
       );
 
+      if (needsTranscode) {
+        task = _copyTask(
+          task,
+          status: DownloadStatus.converting,
+          progress: 1,
+          sourceUrl: source.url,
+          filePath: filePath,
+          updatedAt: DateTime.now(),
+        );
+        await _saveAndPublish(task);
+
+        final conversionPath = temporaryConversionPath!;
+        await ref
+            .read(downloadAudioTranscoderProvider)
+            .transcode(
+              inputPath: downloadPath,
+              outputPath: conversionPath,
+              format: settings.downloadAudioFormat,
+              metadata: _metadataFor(item),
+            );
+        await _replaceFile(conversionPath, filePath);
+        await _deleteIfExists(downloadPath);
+        temporaryDownloadPath = null;
+        temporaryConversionPath = null;
+      }
+
       task = _copyTask(
         task,
         status: DownloadStatus.completed,
@@ -111,6 +167,12 @@ class DownloadController extends AsyncNotifier<List<DownloadTask>> {
       );
       await _saveAndPublish(task);
     } catch (error) {
+      if (temporaryDownloadPath != null) {
+        await _deleteIfExists(temporaryDownloadPath);
+      }
+      if (temporaryConversionPath != null) {
+        await _deleteIfExists(temporaryConversionPath);
+      }
       final message = error is _DownloadException
           ? '${error.error.code}: ${error.error.message}'
           : error.toString();
@@ -214,15 +276,84 @@ class DownloadController extends AsyncNotifier<List<DownloadTask>> {
     }
   }
 
-  Future<String> _downloadPath(PlaybackItem item, MediaSource source) async {
-    final settings = await ref.read(settingsRepositoryProvider).load();
-    final directory = Directory(settings.downloadsDirectoryPath);
+  Future<String> _downloadPath(
+    PlaybackItem item,
+    MediaSource source, {
+    required String downloadsDirectoryPath,
+    required DownloadAudioFormat audioFormat,
+  }) async {
+    final directory = Directory(downloadsDirectoryPath);
     if (!await directory.exists()) {
       await directory.create(recursive: true);
     }
     final uri = Uri.tryParse(source.url);
-    final fileName = downloadFileNameForItem(item, uri);
+    final fileName = downloadFileNameForItem(
+      item,
+      uri,
+      targetExtension: audioFormat.extension,
+    );
     return p.join(directory.path, fileName);
+  }
+
+  bool _needsTranscode(
+    DownloadAudioFormat format,
+    MediaSource source,
+    Uri? sourceUri,
+  ) {
+    if (format == DownloadAudioFormat.original) {
+      return false;
+    }
+    final targetExtension = format.extension;
+    final sourceExtension = p.extension(sourceUri?.path ?? '').toLowerCase();
+    if (targetExtension != null && sourceExtension == targetExtension) {
+      return false;
+    }
+
+    final mimeType = source.mimeType?.toLowerCase();
+    return switch (format) {
+      DownloadAudioFormat.mp3 =>
+        mimeType != 'audio/mpeg' && mimeType != 'audio/mp3',
+      DownloadAudioFormat.wav =>
+        mimeType != 'audio/wav' &&
+            mimeType != 'audio/x-wav' &&
+            mimeType != 'audio/wave',
+      DownloadAudioFormat.original => false,
+    };
+  }
+
+  String _temporaryDownloadPath(String outputPath, Uri? sourceUri) {
+    final sourceExtension = p.extension(sourceUri?.path ?? '');
+    final extension = sourceExtension.isEmpty ? '.audio' : sourceExtension;
+    return '$outputPath.download$extension';
+  }
+
+  String _temporaryConversionPath(String outputPath) {
+    final extension = p.extension(outputPath);
+    final basename = p.basenameWithoutExtension(outputPath);
+    return p.join(p.dirname(outputPath), '$basename.converted$extension');
+  }
+
+  Map<String, String> _metadataFor(PlaybackItem item) {
+    return <String, String>{
+      'title': item.title,
+      if (item.artist != null) 'artist': item.artist!,
+      if (item.album != null) 'album': item.album!,
+    };
+  }
+
+  Future<void> _replaceFile(String sourcePath, String targetPath) async {
+    final target = File(targetPath);
+    if (await target.exists()) {
+      await target.delete();
+    }
+    await File(sourcePath).rename(targetPath);
+  }
+
+  Future<void> _deleteIfExists(String path) async {
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+    }
   }
 
   DownloadTask _copyTask(

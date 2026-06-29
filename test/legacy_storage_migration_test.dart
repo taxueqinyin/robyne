@@ -185,7 +185,7 @@ void main() {
   );
 }
 
-class _FakeRuntimeFactory implements PluginRuntimeFactory {
+class _FakeRuntimeFactory extends PluginRuntimeFactory {
   @override
   Future<PluginRuntime> create() async {
     throw UnimplementedError();

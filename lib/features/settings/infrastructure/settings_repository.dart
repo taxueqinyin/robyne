@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../../../core/database/app_database.dart' as db;
 import '../../../core/database/legacy_storage_migration.dart';
 import '../../../core/storage/local_file_store.dart';
+import '../../downloads/domain/download_audio_format.dart';
 import '../domain/user_settings.dart';
 
 class SettingsRepository {
@@ -22,6 +23,7 @@ class SettingsRepository {
   static const _cacheSizeKey = 'storage.cache_size_bytes';
   static const _cacheDirectoryKey = 'storage.cache_directory';
   static const _downloadsDirectoryKey = 'storage.downloads_directory';
+  static const _downloadAudioFormatKey = 'downloads.audio_format';
 
   final db.AppDatabase _database;
   final LocalFileStore _fileStore;
@@ -56,6 +58,9 @@ class SettingsRepository {
           int.tryParse(values[_cacheSizeKey] ?? '') ?? defaultCacheSizeBytes,
       cacheDirectoryPath: cacheDirectory.path,
       downloadsDirectoryPath: downloadsDirectory.path,
+      downloadAudioFormat: _downloadAudioFormat(
+        values[_downloadAudioFormatKey],
+      ),
     );
   }
 
@@ -76,6 +81,13 @@ class SettingsRepository {
   Future<UserSettings> setDownloadsDirectory(String path) async {
     final directory = await _ensureDirectory(path);
     await _write(_downloadsDirectoryKey, directory.path);
+    return load();
+  }
+
+  Future<UserSettings> setDownloadAudioFormat(
+    DownloadAudioFormat format,
+  ) async {
+    await _write(_downloadAudioFormatKey, format.name);
     return load();
   }
 
@@ -105,5 +117,12 @@ class SettingsRepository {
       await resolved.create(recursive: true);
     }
     return resolved;
+  }
+
+  static DownloadAudioFormat _downloadAudioFormat(String? value) {
+    return DownloadAudioFormat.values.firstWhere(
+      (format) => format.name == value,
+      orElse: () => DownloadAudioFormat.original,
+    );
   }
 }

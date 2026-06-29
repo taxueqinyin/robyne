@@ -80,6 +80,23 @@ class _FakePluginRepository implements PluginRepository {
   }
 
   @override
+  Future<PluginImportBatchResult> importPluginsFromPaths(
+    List<String> paths, {
+    PluginImportProgressCallback? onProgress,
+  }) async {
+    final errors = <AppError>[];
+    if (importResult case Failure<PluginDefinition>(:final error)) {
+      errors.add(error);
+    }
+    return PluginImportBatchResult(
+      importedCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      errors: errors,
+    );
+  }
+
+  @override
   Future<Result<void>> deletePlugin(String id) async {
     return const Ok(null);
   }

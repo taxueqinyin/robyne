@@ -42,6 +42,7 @@ class MusicFreeCompatAdapter {
 
   Result<SearchResult> searchResultFromPluginValue(
     Object? value, {
+    required String pluginId,
     required String platform,
     required int page,
   }) {
@@ -69,7 +70,11 @@ class MusicFreeCompatAdapter {
     for (final item in rawItems) {
       if (item is Map) {
         final rawItem = _objectMap(item);
-        final musicItem = musicItemFromRaw(rawItem, platform: platform);
+        final musicItem = musicItemFromRaw(
+          rawItem,
+          pluginId: pluginId,
+          platform: platform,
+        );
         if (musicItem != null) {
           items.add(musicItem);
         }
@@ -88,6 +93,7 @@ class MusicFreeCompatAdapter {
 
   MusicItem? musicItemFromRaw(
     Map<String, Object?> raw, {
+    required String pluginId,
     required String platform,
   }) {
     final id =
@@ -103,6 +109,7 @@ class MusicFreeCompatAdapter {
 
     return MusicItem(
       id: id,
+      pluginId: pluginId,
       platform: platform,
       title: title,
       artist: _stringValue(raw['artist']) ?? _stringValue(raw['author']),

@@ -15,6 +15,18 @@ abstract interface class PluginRuntime {
   Future<void> dispose();
 }
 
-abstract interface class PluginRuntimeFactory {
+abstract class PluginRuntimeFactory {
   Future<PluginRuntime> create();
+
+  Future<Result<Map<String, Object?>>> loadPluginMetadata(
+    String source, {
+    Map<String, String> userVariables = const <String, String>{},
+  }) async {
+    final runtime = await create();
+    try {
+      return await runtime.loadPlugin(source, userVariables: userVariables);
+    } finally {
+      await runtime.dispose();
+    }
+  }
 }

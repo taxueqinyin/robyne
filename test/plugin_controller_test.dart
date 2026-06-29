@@ -65,6 +65,8 @@ void main() {
           .importFromPaths(<String>['good.js', 'bad.js']);
 
       expect(result.importedCount, 1);
+      expect(result.updatedCount, 0);
+      expect(result.skippedCount, 0);
       expect(result.errors.single.code, 'plugin.load_failed');
       expect(container.read(pluginControllerProvider).value, <PluginDefinition>[
         existing,
@@ -98,6 +100,8 @@ void main() {
     expect(runningProgress, isNotNull);
     expect(runningProgress?.total, 1);
     expect(runningProgress?.completed, 0);
+    expect(runningProgress?.updatedCount, 0);
+    expect(runningProgress?.skippedCount, 0);
     expect(runningProgress?.currentLabel, 'slow.js');
 
     releaseImport.complete();
@@ -146,18 +150,78 @@ class _FakePluginRepository implements PluginRepository {
 
   @override
   Future<Result<PluginDefinition>> importPluginFromPath(String path) async {
-    if (!(importStarted?.isCompleted ?? true)) {
-      importStarted?.complete();
+    final result = await importPluginsFromPaths(<String>[path]);
+    if (result.importedCount > 0 || result.updatedCount > 0) {
+      return Ok(plugins.last);
     }
-    final gate = importGate;
-    if (gate != null) {
-      await gate;
+    final error = result.errors.isNotEmpty
+        ? result.errors.first
+        : const AppError(code: 'plugin.skipped', message: 'Skipped.');
+    return Failure(error);
+  }
+
+  @override
+  Future<PluginImportBatchResult> importPluginsFromPaths(
+    List<String> paths, {
+    PluginImportProgressCallback? onProgress,
+  }) async {
+    var importedCount = 0;
+    final errors = <AppError>[];
+    onProgress?.call(
+      PluginImportProgressSnapshot(
+        total: paths.length,
+        completed: 0,
+        importedCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        failedCount: 0,
+      ),
+    );
+    for (var index = 0; index < paths.length; index += 1) {
+      final path = paths[index];
+      if (!(importStarted?.isCompleted ?? true)) {
+        importStarted?.complete();
+      }
+      onProgress?.call(
+        PluginImportProgressSnapshot(
+          total: paths.length,
+          completed: index,
+          importedCount: importedCount,
+          updatedCount: 0,
+          skippedCount: 0,
+          failedCount: errors.length,
+          currentLabel: path,
+        ),
+      );
+      final gate = importGate;
+      if (gate != null) {
+        await gate;
+      }
+      final result = pathResults[path] ?? importResult;
+      if (result case Ok<PluginDefinition>(:final value)) {
+        plugins.add(value);
+        importedCount += 1;
+      } else if (result case Failure<PluginDefinition>(:final error)) {
+        errors.add(error);
+      }
+      onProgress?.call(
+        PluginImportProgressSnapshot(
+          total: paths.length,
+          completed: index + 1,
+          importedCount: importedCount,
+          updatedCount: 0,
+          skippedCount: 0,
+          failedCount: errors.length,
+          currentLabel: path,
+        ),
+      );
     }
-    final result = pathResults[path] ?? importResult;
-    if (result case Ok<PluginDefinition>(:final value)) {
-      plugins.add(value);
-    }
-    return result;
+    return PluginImportBatchResult(
+      importedCount: importedCount,
+      updatedCount: 0,
+      skippedCount: 0,
+      errors: List<AppError>.unmodifiable(errors),
+    );
   }
 
   @override

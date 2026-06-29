@@ -31,4 +31,23 @@ void main() {
       'Unknown title - Unknown artist - Unknown source.audio',
     );
   });
+
+  test('uses target extension when download format converts audio', () {
+    final item = PlaybackItem.plugin(
+      platform: 'bilibili',
+      musicId: '1',
+      title: 'Song',
+      artist: 'Artist',
+      raw: const <String, Object?>{'id': '1'},
+    );
+
+    expect(
+      downloadFileNameForItem(
+        item,
+        Uri.parse('https://e.test/audio.m4s'),
+        targetExtension: '.mp3',
+      ),
+      'Song - Artist - bilibili.mp3',
+    );
+  });
 }

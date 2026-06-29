@@ -411,16 +411,26 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
       return const Ok(MediaSource(url: ''));
     }
 
-    final plugin = pluginsResult.fold(
-      (plugins) => plugins
+    final plugin = pluginsResult.fold((plugins) {
+      final enabledPlugins = plugins
           .where((candidate) => candidate.enabled)
           .cast<dynamic>()
-          .firstWhere(
-            (candidate) => candidate.platform == item.platform,
-            orElse: () => null,
-          ),
-      (error) => null,
-    );
+          .toList(growable: false);
+      final pluginId = item.pluginId;
+      if (pluginId != null && pluginId.isNotEmpty) {
+        final exactMatch = enabledPlugins.firstWhere(
+          (candidate) => candidate.id == pluginId,
+          orElse: () => null,
+        );
+        if (exactMatch != null) {
+          return exactMatch;
+        }
+      }
+      return enabledPlugins.firstWhere(
+        (candidate) => candidate.platform == item.platform,
+        orElse: () => null,
+      );
+    }, (error) => null);
 
     if (plugin == null) {
       return const Failure(

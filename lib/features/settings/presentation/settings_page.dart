@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/debug/ime_trace.dart';
+import '../../downloads/domain/download_audio_format.dart';
 import '../application/settings_providers.dart';
 import '../domain/user_settings.dart';
 
@@ -45,6 +46,13 @@ class SettingsPage extends ConsumerWidget {
                 subtitle: Text(settings.downloadsDirectoryPath),
                 trailing: const Icon(Icons.folder_open),
                 onTap: () => _pickDownloadsDirectory(context, ref, settings),
+              ),
+              ListTile(
+                leading: const Icon(Icons.audio_file_outlined),
+                title: const Text('Download format'),
+                subtitle: Text(settings.downloadAudioFormat.label),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showDownloadFormatDialog(context, ref, settings),
               ),
             ],
           );
@@ -137,6 +145,35 @@ class SettingsPage extends ConsumerWidget {
           .read(settingsControllerProvider.notifier)
           .setDownloadsDirectory(path);
     }
+  }
+
+  Future<void> _showDownloadFormatDialog(
+    BuildContext context,
+    WidgetRef ref,
+    UserSettings settings,
+  ) async {
+    final value = await showDialog<DownloadAudioFormat>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Download format'),
+        children: <Widget>[
+          for (final format in DownloadAudioFormat.values)
+            ListTile(
+              title: Text(format.label),
+              trailing: settings.downloadAudioFormat == format
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () => Navigator.of(context).pop(format),
+            ),
+        ],
+      ),
+    );
+    if (value == null) {
+      return;
+    }
+    await ref
+        .read(settingsControllerProvider.notifier)
+        .setDownloadAudioFormat(value);
   }
 
   Future<String?> _pickDirectory(

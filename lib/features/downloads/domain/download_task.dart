@@ -1,6 +1,6 @@
 import '../../player/domain/playback_item.dart';
 
-enum DownloadStatus { queued, downloading, completed, failed }
+enum DownloadStatus { queued, downloading, converting, completed, failed }
 
 class DownloadTask {
   const DownloadTask({

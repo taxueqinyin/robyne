@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../downloads/domain/download_audio_format.dart';
 import '../../plugin/application/plugin_providers.dart';
 import '../domain/user_settings.dart';
 import '../infrastructure/settings_repository.dart';
@@ -38,6 +39,12 @@ class SettingsController extends AsyncNotifier<UserSettings> {
   Future<void> setDownloadsDirectory(String path) async {
     state = AsyncData(
       await ref.read(settingsRepositoryProvider).setDownloadsDirectory(path),
+    );
+  }
+
+  Future<void> setDownloadAudioFormat(DownloadAudioFormat format) async {
+    state = AsyncData(
+      await ref.read(settingsRepositoryProvider).setDownloadAudioFormat(format),
     );
   }
 }

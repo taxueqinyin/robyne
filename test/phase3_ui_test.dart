@@ -113,8 +113,8 @@ void main() {
 
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Adjust lyric offset'));
-    await tester.pumpAndSettle();
+
+    expect(find.text('Lyric offset'), findsOneWidget);
     tester
         .widget<Slider>(find.byKey(const Key('lyric-offset-slider')))
         .onChanged

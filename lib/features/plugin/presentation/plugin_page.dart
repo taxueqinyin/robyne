@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:robyne/core/debug/ime_trace.dart';
 import 'package:robyne/features/plugin/application/plugin_controller.dart';
 import 'package:robyne/features/plugin/domain/plugin_definition.dart';
+import 'package:robyne/features/plugin/domain/plugin_repository.dart';
 
 class PluginPage extends ConsumerWidget {
   const PluginPage({super.key});
@@ -231,9 +232,13 @@ void _showPluginImportResult(
   BuildContext context,
   PluginImportBatchResult result,
 ) {
+  final summary =
+      'Imported ${result.importedCount}, '
+      'updated ${result.updatedCount}, '
+      'skipped ${result.skippedCount}';
   final message = result.hasErrors
-      ? 'Imported ${result.importedCount}; ${result.errors.length} failed. ${result.errors.first.code}: ${result.errors.first.message}'
-      : 'Imported ${result.importedCount} plugin(s).';
+      ? '$summary; ${result.errors.length} failed. ${result.errors.first.code}: ${result.errors.first.message}'
+      : '$summary.';
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }
 

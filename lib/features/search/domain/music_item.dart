@@ -1,6 +1,7 @@
 class MusicItem {
   const MusicItem({
     required this.id,
+    this.pluginId,
     required this.platform,
     required this.title,
     required this.raw,
@@ -11,6 +12,7 @@ class MusicItem {
   });
 
   final String id;
+  final String? pluginId;
   final String platform;
   final String title;
   final String? artist;
