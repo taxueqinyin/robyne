@@ -10,6 +10,7 @@ import '../../../core/network/plugin_http_client.dart';
 import '../../../core/result/result.dart';
 import '../application/plugin_runtime_config.dart';
 import '../domain/plugin_definition.dart';
+import '../domain/plugin_discovery_executor.dart';
 import '../domain/plugin_runtime.dart';
 import '../domain/plugin_search_executor.dart';
 
@@ -157,6 +158,147 @@ class QuickJsIsolatePluginSearchExecutor implements PluginSearchExecutor {
   }
 }
 
+class QuickJsIsolatePluginDiscoveryExecutor implements PluginDiscoveryExecutor {
+  QuickJsIsolatePluginDiscoveryExecutor({
+    String vendorAssetPath = 'assets/js/musicfree_vendor.js',
+    Future<String?> Function()? vendorSourceLoader,
+  }) : _vendorAssetPath = vendorAssetPath,
+       _vendorSourceLoader = vendorSourceLoader;
+
+  final String _vendorAssetPath;
+  final Future<String?> Function()? _vendorSourceLoader;
+  Future<String?>? _vendorSourceFuture;
+
+  @override
+  Future<Result<Object?>> getTopLists({
+    required PluginDefinition plugin,
+    required String source,
+  }) {
+    return _invoke(
+      plugin: plugin,
+      source: source,
+      method: 'getTopLists',
+      arguments: const <Object?>[],
+    );
+  }
+
+  @override
+  Future<Result<Object?>> getTopListDetail({
+    required PluginDefinition plugin,
+    required String source,
+    required Map<String, Object?> topList,
+  }) {
+    return _invoke(
+      plugin: plugin,
+      source: source,
+      method: 'getTopListDetail',
+      arguments: <Object?>[topList],
+    );
+  }
+
+  @override
+  Future<Result<Object?>> getRecommendSheetTags({
+    required PluginDefinition plugin,
+    required String source,
+  }) {
+    return _invoke(
+      plugin: plugin,
+      source: source,
+      method: 'getRecommendSheetTags',
+      arguments: const <Object?>[],
+    );
+  }
+
+  @override
+  Future<Result<Object?>> getRecommendSheetsByTag({
+    required PluginDefinition plugin,
+    required String source,
+    required Map<String, Object?> tag,
+    required int page,
+  }) {
+    return _invoke(
+      plugin: plugin,
+      source: source,
+      method: 'getRecommendSheetsByTag',
+      arguments: <Object?>[tag, page],
+    );
+  }
+
+  @override
+  Future<Result<Object?>> getMusicSheetInfo({
+    required PluginDefinition plugin,
+    required String source,
+    required Map<String, Object?> sheetItem,
+    required int page,
+  }) {
+    return _invoke(
+      plugin: plugin,
+      source: source,
+      method: 'getMusicSheetInfo',
+      arguments: <Object?>[sheetItem, page],
+    );
+  }
+
+  Future<Result<Object?>> _invoke({
+    required PluginDefinition plugin,
+    required String source,
+    required String method,
+    required List<Object?> arguments,
+  }) async {
+    try {
+      final vendorSource = await _loadVendorSource();
+      final response = await Isolate.run<Map<String, Object?>>(
+        () => _runQuickJsMethodInIsolate(<String, Object?>{
+          'source': source,
+          'userVariables': plugin.userVariableValues,
+          'method': method,
+          'arguments': arguments,
+          'timeoutMs': pluginMethodTimeout.inMilliseconds,
+          'vendorSource': vendorSource,
+        }),
+        debugName: 'robyne-plugin-discovery-$method-${plugin.platform}',
+      );
+      if (response['ok'] == true) {
+        return Ok(response['value']);
+      }
+      return Failure(
+        AppError(
+          code: response['code']?.toString() ?? 'plugin.discovery_failed',
+          message:
+              response['message']?.toString() ??
+              'Plugin ${plugin.platform} $method failed.',
+        ),
+      );
+    } catch (error, stackTrace) {
+      return Failure(
+        AppError(
+          code: 'plugin.discovery_isolate_failed',
+          message:
+              'Plugin ${plugin.platform} $method failed off the UI thread.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  Future<String?> _loadVendorSource() {
+    return _vendorSourceFuture ??= _loadVendorSourceUncached();
+  }
+
+  Future<String?> _loadVendorSourceUncached() async {
+    final loader = _vendorSourceLoader;
+    if (loader != null) {
+      return loader();
+    }
+    try {
+      return await rootBundle.loadString(_vendorAssetPath);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 Future<Map<String, Object?>> _runQuickJsSearchInIsolate(
   Map<String, Object?> request,
 ) async {
@@ -230,6 +372,45 @@ Future<Map<String, Object?>> _runQuickJsLoadInIsolate(
   }
 }
 
+Future<Map<String, Object?>> _runQuickJsMethodInIsolate(
+  Map<String, Object?> request,
+) async {
+  final runtime = QuickJsPluginRuntime(
+    httpClient: PluginHttpClient(),
+    vendorSource: request['vendorSource'] as String?,
+  );
+  try {
+    final loaded = await runtime.loadPlugin(
+      request['source']?.toString() ?? '',
+      userVariables: _stringMapValue(request['userVariables']),
+    );
+    if (loaded case Failure<Map<String, Object?>>(:final error)) {
+      return _isolateFailure(error);
+    }
+
+    final result = await runtime.callMethod(
+      request['method']?.toString() ?? '',
+      _listValue(request['arguments']),
+      timeout: Duration(milliseconds: (request['timeoutMs'] as int?) ?? 15000),
+    );
+    return switch (result) {
+      Ok<Object?>(:final value) => <String, Object?>{
+        'ok': true,
+        'value': value,
+      },
+      Failure<Object?>(:final error) => _isolateFailure(error),
+    };
+  } catch (error) {
+    return <String, Object?>{
+      'ok': false,
+      'code': 'plugin.runtime_error',
+      'message': error.toString(),
+    };
+  } finally {
+    await runtime.dispose();
+  }
+}
+
 Map<String, Object?> _isolateFailure(AppError error) {
   return <String, Object?>{
     'ok': false,
@@ -254,6 +435,13 @@ Map<String, Object?> _objectMapValue(Object? value) {
   return value.map(
     (key, dynamic mapValue) => MapEntry(key.toString(), mapValue as Object?),
   );
+}
+
+List<Object?> _listValue(Object? value) {
+  if (value is List) {
+    return value.cast<Object?>();
+  }
+  return const <Object?>[];
 }
 
 class QuickJsPluginRuntime implements PluginRuntime {
@@ -312,7 +500,10 @@ class QuickJsPluginRuntime implements PluginRuntime {
             author: exported.author,
             description: exported.description,
             supportedSearchType: exported.supportedSearchType || [],
-            userVariables: exported.userVariables || []
+            userVariables: exported.userVariables || [],
+            exportedMethods: Object.keys(exported).filter(
+              (key) => typeof exported[key] === 'function'
+            )
           });
         })()
       ''');

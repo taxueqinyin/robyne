@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/debug/ime_trace.dart';
+import '../features/discover/presentation/discover_page.dart';
 import '../features/player/presentation/player_bar.dart';
 import '../features/player/presentation/now_playing_page.dart';
 import '../features/player/presentation/queue_page.dart';
@@ -14,6 +15,7 @@ import '../features/settings/presentation/settings_page.dart';
 
 enum RobyneTab {
   search,
+  discover,
   library,
   nowPlaying,
   queue,
@@ -68,6 +70,11 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
                 icon: Icon(Icons.search_outlined),
                 selectedIcon: Icon(Icons.search),
                 label: Text('Search'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.explore_outlined),
+                selectedIcon: Icon(Icons.explore),
+                label: Text('Discover'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.library_music_outlined),
@@ -145,6 +152,7 @@ class _TabContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return switch (tab) {
       RobyneTab.search => const SearchPage(),
+      RobyneTab.discover => const DiscoverPage(),
       RobyneTab.library => const LibraryPage(),
       RobyneTab.nowPlaying => const NowPlayingPage(),
       RobyneTab.queue => const QueuePage(),

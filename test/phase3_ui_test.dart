@@ -27,6 +27,7 @@ void main() {
       ),
     );
 
+    expect(find.text('Discover'), findsOneWidget);
     expect(find.text('Now Playing'), findsOneWidget);
     expect(find.text('Playlists'), findsOneWidget);
     expect(find.text('Downloads'), findsOneWidget);

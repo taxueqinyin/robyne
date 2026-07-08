@@ -6,6 +6,7 @@ import '../../../core/database/legacy_storage_migration.dart';
 import '../../../core/network/plugin_http_client.dart';
 import '../../../core/storage/local_file_store.dart';
 import '../domain/plugin_definition.dart';
+import '../domain/plugin_discovery_executor.dart';
 import '../domain/plugin_repository.dart';
 import '../domain/plugin_runtime.dart';
 import '../domain/plugin_search_executor.dart';
@@ -55,6 +56,12 @@ final pluginRuntimeFactoryProvider = Provider<PluginRuntimeFactory>((ref) {
 
 final pluginSearchExecutorProvider = Provider<PluginSearchExecutor>((ref) {
   return QuickJsIsolatePluginSearchExecutor();
+});
+
+final pluginDiscoveryExecutorProvider = Provider<PluginDiscoveryExecutor>((
+  ref,
+) {
+  return QuickJsIsolatePluginDiscoveryExecutor();
 });
 
 final pluginRepositoryProvider = Provider<PluginRepository>((ref) {
