@@ -121,7 +121,14 @@ void main() {
         'B',
       );
 
+      await controller.playItem(a);
       await controller.setPlaybackMode(PlaybackMode.singleLoop);
+      await controller.playNext();
+      expect(
+        container.read(playerControllerProvider).value!.currentItem?.title,
+        'B',
+      );
+
       final historyCount = container
           .read(playerControllerProvider)
           .value!

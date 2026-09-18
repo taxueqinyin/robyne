@@ -723,7 +723,7 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
   }
 
   Future<void> playNext() async {
-    final next = _nextItem();
+    final next = _nextItem(manual: true);
     if (next == null) {
       await stop();
       return;
@@ -950,7 +950,7 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     return history.sublist(history.length - _historyLimit);
   }
 
-  PlaybackItem? _nextItem() {
+  PlaybackItem? _nextItem({bool manual = false}) {
     final current = _current;
     final queue = current.queue;
     if (queue.isEmpty) {
@@ -961,7 +961,10 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
       PlaybackMode.sequence =>
         index >= 0 && index < queue.length - 1 ? queue[index + 1] : null,
       PlaybackMode.allLoop => queue[(index + 1) % queue.length],
-      PlaybackMode.singleLoop => current.currentItem,
+      PlaybackMode.singleLoop =>
+        manual
+            ? (index >= 0 && index < queue.length - 1 ? queue[index + 1] : null)
+            : current.currentItem,
       PlaybackMode.random => _randomNext(queue, index),
     };
   }
