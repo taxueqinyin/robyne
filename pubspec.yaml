@@ -46,6 +46,8 @@ dependencies:
   drift: ^2.33.0
   path: ^1.9.1
   audio_metadata_reader: ^1.6.0
+  desktop_multi_window: ^0.3.0
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:

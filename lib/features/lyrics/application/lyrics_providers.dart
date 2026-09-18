@@ -11,6 +11,11 @@ import '../../plugin/application/plugin_providers.dart';
 import '../../plugin/application/plugin_runtime_config.dart';
 import '../../plugin/domain/plugin_definition.dart';
 import '../../plugin/domain/plugin_runtime.dart';
+import '../../settings/domain/lyric_settings.dart';
+import '../../settings/application/settings_providers.dart';
+import '../../settings/domain/shortcut_action.dart';
+import 'desktop_lyric_theme_service.dart';
+import 'desktop_lyric_window_controller.dart';
 import '../domain/lyric_document.dart';
 import '../infrastructure/lyric_repository.dart';
 
@@ -24,6 +29,18 @@ final lyricRepositoryProvider = Provider<LyricRepository>((ref) {
 final currentPlaybackItemProvider = Provider<PlaybackItem?>((ref) {
   return ref.watch(
     playerControllerProvider.select((value) => value.value?.currentItem),
+  );
+});
+
+final currentPlaybackPositionProvider = Provider<Duration>((ref) {
+  final snapshot = ref.watch(playerSnapshotsProvider).value;
+  if (snapshot?.currentSource != null) {
+    return snapshot!.position;
+  }
+  return ref.watch(
+    playerControllerProvider.select(
+      (value) => value.value?.lastPosition ?? Duration.zero,
+    ),
   );
 });
 
@@ -62,6 +79,63 @@ final currentLyricsProvider = Provider<AsyncValue<LyricDocument?>>((ref) {
     return lyrics;
   }
   return lyrics.whenData((document) => document?.copyWith(offset: liveOffset));
+});
+
+final desktopLyricThemeProvider = FutureProvider<DesktopLyricTheme>((
+  ref,
+) async {
+  final artworkUrl = ref.watch(currentPlaybackItemProvider)?.artworkUrl;
+  return ref.read(desktopLyricThemeServiceProvider).resolve(artworkUrl);
+});
+
+final currentDesktopLyricPayloadProvider = Provider<DesktopLyricPayload>((ref) {
+  final item = ref.watch(currentPlaybackItemProvider);
+  final theme =
+      ref.watch(desktopLyricThemeProvider).value ??
+      const DesktopLyricTheme.defaultTheme();
+  final userSettings = ref.watch(settingsControllerProvider).value;
+  final lyricSettings =
+      userSettings?.lyricSettings ?? const LyricSettings.defaults();
+  final toggleBinding = userSettings?.shortcuts[ShortcutAction.desktopLyrics];
+  final isPlaying = ref.watch(playerSnapshotsProvider).value?.playing ?? false;
+  if (item == null) {
+    return DesktopLyricPayload(
+      title: 'Robyne',
+      lyric: '未在播放',
+      nextLyric: '',
+      subtitle: '',
+      theme: theme,
+      lyricSettings: lyricSettings,
+      isPlaying: isPlaying,
+      toggleBinding: toggleBinding,
+    );
+  }
+  final lyrics = ref.watch(currentLyricsProvider).value;
+  if (lyrics == null || lyrics.lines.isEmpty) {
+    return DesktopLyricPayload(
+      title: item.title,
+      lyric: '暂无歌词',
+      nextLyric: '',
+      subtitle: _desktopLyricSubtitle(item),
+      theme: theme,
+      lyricSettings: lyricSettings,
+      isPlaying: isPlaying,
+      toggleBinding: toggleBinding,
+    );
+  }
+  final index = lyrics.activeIndex(ref.watch(currentPlaybackPositionProvider));
+  final lyricText = index >= 0 ? lyrics.lines[index].text.trim() : '等待歌词...';
+  final nextLyricText = _desktopNextLyric(lyrics, index);
+  return DesktopLyricPayload(
+    title: item.title,
+    lyric: lyricText.isEmpty ? '...' : lyricText,
+    nextLyric: nextLyricText,
+    subtitle: _desktopLyricSubtitle(item),
+    theme: theme,
+    lyricSettings: lyricSettings,
+    isPlaying: isPlaying,
+    toggleBinding: toggleBinding,
+  );
 });
 
 final lyricSearchControllerProvider =
@@ -473,4 +547,24 @@ class LyricSearchController extends AsyncNotifier<LyricSearchState> {
       ),
     );
   }
+}
+
+String _desktopLyricSubtitle(PlaybackItem item) {
+  return <String?>[
+    item.artist,
+    item.album,
+    item.platform,
+  ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' - ');
+}
+
+String _desktopNextLyric(LyricDocument lyrics, int activeIndex) {
+  final start = activeIndex < 0 ? 0 : activeIndex + 1;
+  for (var index = start; index < lyrics.lines.length; index += 1) {
+    final line = lyrics.lines[index];
+    final text = line.text.trim();
+    if (line.timestamp != null && text.isNotEmpty) {
+      return text;
+    }
+  }
+  return '';
 }

@@ -1,5 +1,5 @@
 import 'app/bootstrap.dart';
 
-Future<void> main() async {
-  await bootstrap();
+Future<void> main(List<String> args) async {
+  await bootstrap(args);
 }
