@@ -192,6 +192,36 @@ class LyricSearchController extends AsyncNotifier<LyricSearchState> {
     );
   }
 
+  void cancel() {
+    final current = state.value ?? const LyricSearchState();
+    if (!current.isSearching) {
+      return;
+    }
+
+    _generation += 1;
+    final updated = current.pluginResults
+        .map((result) {
+          if (!result.isSearching) {
+            return result;
+          }
+          return result.copyWith(
+            isSearching: false,
+            error: const AppError(
+              code: 'lyric.search_cancelled',
+              message: 'Search stopped.',
+            ),
+          );
+        })
+        .toList(growable: false);
+    state = AsyncData(
+      current.copyWith(
+        pluginResults: updated,
+        isSearching: false,
+        clearError: true,
+      ),
+    );
+  }
+
   Future<void> search(String keyword, List<PluginDefinition> plugins) async {
     final trimmed = keyword.trim();
     if (trimmed.isEmpty) {

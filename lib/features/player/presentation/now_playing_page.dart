@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/debug/ime_trace.dart';
+import '../../../shared/widgets/search_action_button.dart';
 import '../../lyrics/application/lyrics_providers.dart';
 import '../../playlists/application/playlist_providers.dart';
 import '../../playlists/infrastructure/playlist_repository.dart';
@@ -530,14 +531,15 @@ class _LyricSearchDialogState extends ConsumerState<_LyricSearchDialog> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: state.isSearching
-                      ? null
-                      : () => ref
-                            .read(lyricSearchControllerProvider.notifier)
-                            .search(_controller.text, plugins),
-                  icon: const Icon(Icons.search),
-                  label: const Text('Search'),
+                SearchActionButton(
+                  isSearching: state.isSearching,
+                  onSearch: () => unawaited(
+                    ref
+                        .read(lyricSearchControllerProvider.notifier)
+                        .search(_controller.text, plugins),
+                  ),
+                  onCancel: () =>
+                      ref.read(lyricSearchControllerProvider.notifier).cancel(),
                 ),
               ],
             ),
@@ -555,6 +557,8 @@ class _LyricSearchDialogState extends ConsumerState<_LyricSearchDialog> {
                     label: Text(
                       result.isSearching
                           ? '${result.platform} ...'
+                          : result.error != null
+                          ? '${result.platform} !'
                           : '${result.platform} ${result.items.length}',
                     ),
                     onSelected: (_) => ref
@@ -570,6 +574,15 @@ class _LyricSearchDialogState extends ConsumerState<_LyricSearchDialog> {
                   ? const Center(child: Text('No lyric plugins.'))
                   : selected.isSearching
                   ? const Center(child: CircularProgressIndicator())
+                  : selected.error != null && selected.items.isEmpty
+                  ? Center(
+                      child: Text(
+                        '${selected.error!.code}: ${selected.error!.message}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    )
                   : ListView.separated(
                       itemCount: selected.items.length,
                       separatorBuilder: (context, index) =>

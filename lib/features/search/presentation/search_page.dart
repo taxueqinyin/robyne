@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/debug/ime_trace.dart';
+import '../../../shared/widgets/search_action_button.dart';
 import '../../downloads/application/download_providers.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/domain/playback_item.dart';
@@ -74,15 +75,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: state.isSearching ? null : () => _search(plugins),
-                icon: state.isSearching
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.search),
-                label: const Text('Search'),
+              SearchActionButton(
+                isSearching: state.isSearching,
+                onSearch: () => _search(plugins),
+                onCancel: () => ref
+                    .read(search_state.searchControllerProvider.notifier)
+                    .cancel(),
               ),
             ],
           ),

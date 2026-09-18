@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -139,6 +140,76 @@ void main() {
     expect(executor.searches, hasLength(8));
     expect(executor.maxConcurrentSearches, lessThanOrEqualTo(3));
   });
+
+  test(
+    'cancel stops remaining plugin searches and keeps finished results',
+    () async {
+      final tempDirectory = await Directory.systemTemp.createTemp(
+        'robyne_search_cancel_test_',
+      );
+      addTearDown(() async {
+        await tempDirectory.delete(recursive: true);
+      });
+      final pluginAPath = await _writePluginFile(tempDirectory, 'plugin-a.js');
+      final pluginBPath = await _writePluginFile(tempDirectory, 'plugin-b.js');
+      final pluginBHold = Completer<void>();
+      final pluginBStarted = Completer<void>();
+      final executor = _FakePluginSearchExecutor(
+        beforeComplete: (plugin) async {
+          if (plugin.id == 'plugin-b') {
+            if (!pluginBStarted.isCompleted) {
+              pluginBStarted.complete();
+            }
+            await pluginBHold.future;
+          }
+        },
+      );
+      final container = ProviderContainer(
+        overrides: [pluginSearchExecutorProvider.overrideWithValue(executor)],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(searchControllerProvider.notifier);
+      notifier.updateKeyword('周杰伦');
+      final searchFuture = notifier.search(<PluginDefinition>[
+        _plugin('plugin-a', 'Source A', pluginAPath),
+        _plugin('plugin-b', 'Source B', pluginBPath),
+      ]);
+
+      await pluginBStarted.future;
+      SearchState? mid;
+      for (var attempt = 0; attempt < 20; attempt += 1) {
+        mid = container.read(searchControllerProvider).value;
+        if (mid?.pluginResults.first.result != null) {
+          break;
+        }
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(mid?.isSearching, isTrue);
+      expect(mid?.pluginResults.first.result, isNotNull);
+      expect(mid?.pluginResults.last.isSearching, isTrue);
+
+      notifier.cancel();
+      final cancelled = container.read(searchControllerProvider).value!;
+      expect(cancelled.isSearching, isFalse);
+      expect(
+        cancelled.pluginResults.first.result?.items.single.title,
+        'Source A 周杰伦 page 1',
+      );
+      expect(cancelled.pluginResults.last.isSearching, isFalse);
+      expect(cancelled.pluginResults.last.error?.code, 'search.cancelled');
+
+      pluginBHold.complete();
+      await searchFuture;
+
+      final after = container.read(searchControllerProvider).value!;
+      expect(after.isSearching, isFalse);
+      expect(after.pluginResults.first.result, isNotNull);
+      expect(after.pluginResults.last.result, isNull);
+      expect(after.pluginResults.last.error?.code, 'search.cancelled');
+    },
+  );
 }
 
 Future<String> _writePluginFile(Directory directory, String name) async {
@@ -164,9 +235,13 @@ PluginDefinition _plugin(
 }
 
 class _FakePluginSearchExecutor implements PluginSearchExecutor {
-  _FakePluginSearchExecutor({this.searchDelay = Duration.zero});
+  _FakePluginSearchExecutor({
+    this.searchDelay = Duration.zero,
+    this.beforeComplete,
+  });
 
   final Duration searchDelay;
+  final Future<void> Function(PluginDefinition plugin)? beforeComplete;
   final List<String> searches = <String>[];
   int _activeSearches = 0;
   int maxConcurrentSearches = 0;
@@ -184,6 +259,10 @@ class _FakePluginSearchExecutor implements PluginSearchExecutor {
       maxConcurrentSearches = _activeSearches;
     }
     try {
+      final hold = beforeComplete;
+      if (hold != null) {
+        await hold(plugin);
+      }
       if (searchDelay > Duration.zero) {
         await Future<void>.delayed(searchDelay);
       }
