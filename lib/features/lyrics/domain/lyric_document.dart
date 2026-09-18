@@ -48,6 +48,45 @@ class LyricDocument {
     return active;
   }
 
+  Duration? startOfCurrentLine(Duration position) {
+    final index = activeIndex(position);
+    if (index < 0) {
+      return null;
+    }
+    return _seekPositionForLine(index);
+  }
+
+  Duration? startOfPreviousLine(Duration position) {
+    final index = activeIndex(position);
+    if (index < 0) {
+      return null;
+    }
+    for (var candidate = index - 1; candidate >= 0; candidate -= 1) {
+      if (lines[candidate].timestamp != null) {
+        return _seekPositionForLine(candidate);
+      }
+    }
+    return _seekPositionForLine(index);
+  }
+
+  Duration? startOfNextLine(Duration position) {
+    final index = activeIndex(position);
+    if (index < 0) {
+      for (var candidate = 0; candidate < lines.length; candidate += 1) {
+        if (lines[candidate].timestamp != null) {
+          return _seekPositionForLine(candidate);
+        }
+      }
+      return null;
+    }
+    for (var candidate = index + 1; candidate < lines.length; candidate += 1) {
+      if (lines[candidate].timestamp != null) {
+        return _seekPositionForLine(candidate);
+      }
+    }
+    return _seekPositionForLine(index);
+  }
+
   static LyricDocument parse(
     String raw, {
     required LyricSourceType sourceType,
@@ -98,6 +137,15 @@ class LyricDocument {
       seconds: seconds,
       milliseconds: milliseconds,
     );
+  }
+
+  Duration? _seekPositionForLine(int index) {
+    final timestamp = lines[index].timestamp;
+    if (timestamp == null) {
+      return null;
+    }
+    final effective = timestamp - offset;
+    return effective.isNegative ? Duration.zero : effective;
   }
 }
 

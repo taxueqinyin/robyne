@@ -22,6 +22,31 @@ void main() {
     expect(document.activeIndex(const Duration(seconds: 2)), 1);
   });
 
+  test('resolves current, previous, and next lyric starts', () {
+    final document = LyricDocument.parse(
+      '[00:10.00]first\n[00:20.00]second\n[00:30.00]third',
+      sourceType: LyricSourceType.plugin,
+      offset: const Duration(seconds: 1),
+    );
+
+    expect(
+      document.startOfCurrentLine(const Duration(seconds: 22)),
+      const Duration(seconds: 19),
+    );
+    expect(
+      document.startOfPreviousLine(const Duration(seconds: 22)),
+      const Duration(seconds: 9),
+    );
+    expect(
+      document.startOfNextLine(const Duration(seconds: 22)),
+      const Duration(seconds: 29),
+    );
+    expect(
+      document.startOfNextLine(const Duration(seconds: 1)),
+      const Duration(seconds: 9),
+    );
+  });
+
   test(
     'sidecar lyric wins over associated plugin lyric for local music',
     () async {

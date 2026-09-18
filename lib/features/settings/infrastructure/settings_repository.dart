@@ -7,6 +7,10 @@ import '../../../core/database/app_database.dart' as db;
 import '../../../core/database/legacy_storage_migration.dart';
 import '../../../core/storage/local_file_store.dart';
 import '../../downloads/domain/download_audio_format.dart';
+import '../domain/lyric_settings.dart';
+import '../domain/shortcut_action.dart';
+import '../domain/shortcut_binding.dart';
+import '../domain/shortcut_settings.dart';
 import '../domain/user_settings.dart';
 
 class SettingsRepository {
@@ -24,6 +28,18 @@ class SettingsRepository {
   static const _cacheDirectoryKey = 'storage.cache_directory';
   static const _downloadsDirectoryKey = 'storage.downloads_directory';
   static const _downloadAudioFormatKey = 'downloads.audio_format';
+  static const _shortcutPrefix = 'shortcuts.';
+  static const _desktopLyricsEnabledKey = 'lyrics.desktop.enabled';
+  static const _desktopLyricsAlwaysOnTopKey = 'lyrics.desktop.always_on_top';
+  static const _desktopLyricsLockedKey = 'lyrics.desktop.locked';
+  static const _desktopLyricsDoubleLineKey = 'lyrics.desktop.double_line';
+  static const _desktopLyricFontFamilyKey = 'lyrics.desktop.font_family';
+  static const _desktopLyricFontSizeKey = 'lyrics.desktop.font_size';
+  static const _desktopLyricTextColorKey = 'lyrics.desktop.text_color';
+  static const _desktopLyricStrokeColorKey = 'lyrics.desktop.stroke_color';
+  static const _desktopLyricWindowLeftKey = 'lyrics.desktop.window_left';
+  static const _desktopLyricWindowTopKey = 'lyrics.desktop.window_top';
+  static const _disabledShortcutValue = '__disabled__';
 
   final db.AppDatabase _database;
   final LocalFileStore _fileStore;
@@ -61,6 +77,8 @@ class SettingsRepository {
       downloadAudioFormat: _downloadAudioFormat(
         values[_downloadAudioFormatKey],
       ),
+      shortcuts: _shortcutSettings(values),
+      lyricSettings: _lyricSettings(values),
     );
   }
 
@@ -88,6 +106,65 @@ class SettingsRepository {
     DownloadAudioFormat format,
   ) async {
     await _write(_downloadAudioFormatKey, format.name);
+    return load();
+  }
+
+  Future<UserSettings> setShortcutBinding(
+    ShortcutAction action,
+    ShortcutBinding? binding,
+  ) async {
+    final key = '$_shortcutPrefix${action.storageKey}';
+    if (binding == null) {
+      await _write(key, _disabledShortcutValue);
+      return load();
+    }
+    await _write(key, binding.serialize());
+    return load();
+  }
+
+  Future<UserSettings> setLyricSettings(LyricSettings settings) async {
+    await _write(
+      _desktopLyricsEnabledKey,
+      settings.desktopLyricsEnabled.toString(),
+    );
+    await _write(
+      _desktopLyricsAlwaysOnTopKey,
+      settings.desktopLyricsAlwaysOnTop.toString(),
+    );
+    await _write(
+      _desktopLyricsLockedKey,
+      settings.desktopLyricsLocked.toString(),
+    );
+    await _write(
+      _desktopLyricsDoubleLineKey,
+      settings.desktopLyricsDoubleLine.toString(),
+    );
+    await _write(
+      _desktopLyricFontFamilyKey,
+      settings.desktopLyricFontFamily?.trim() ?? '',
+    );
+    await _write(
+      _desktopLyricFontSizeKey,
+      settings.desktopLyricFontSize
+          .clamp(LyricSettings.minFontSize, LyricSettings.maxFontSize)
+          .toString(),
+    );
+    await _write(
+      _desktopLyricTextColorKey,
+      settings.desktopLyricTextColorValue.toString(),
+    );
+    await _write(
+      _desktopLyricStrokeColorKey,
+      settings.desktopLyricStrokeColorValue.toString(),
+    );
+    await _write(
+      _desktopLyricWindowLeftKey,
+      settings.desktopLyricWindowLeft?.toString() ?? '',
+    );
+    await _write(
+      _desktopLyricWindowTopKey,
+      settings.desktopLyricWindowTop?.toString() ?? '',
+    );
     return load();
   }
 
@@ -124,5 +201,52 @@ class SettingsRepository {
       (format) => format.name == value,
       orElse: () => DownloadAudioFormat.original,
     );
+  }
+
+  static ShortcutSettings _shortcutSettings(Map<String, String> values) {
+    var settings = ShortcutSettings.defaults();
+    for (final action in ShortcutAction.values) {
+      final raw = values['$_shortcutPrefix${action.storageKey}'];
+      if (raw == _disabledShortcutValue) {
+        settings = settings.copyWithBinding(action, null);
+        continue;
+      }
+      final binding = ShortcutBinding.tryParse(raw);
+      if (binding != null) {
+        settings = settings.copyWithBinding(action, binding);
+      }
+    }
+    return settings;
+  }
+
+  static LyricSettings _lyricSettings(Map<String, String> values) {
+    const defaults = LyricSettings.defaults();
+    final fontFamily = values[_desktopLyricFontFamilyKey]?.trim();
+    return LyricSettings(
+      desktopLyricsEnabled: values[_desktopLyricsEnabledKey] == 'true',
+      desktopLyricsAlwaysOnTop: values[_desktopLyricsAlwaysOnTopKey] == null
+          ? defaults.desktopLyricsAlwaysOnTop
+          : values[_desktopLyricsAlwaysOnTopKey] == 'true',
+      desktopLyricsLocked: values[_desktopLyricsLockedKey] == 'true',
+      desktopLyricsDoubleLine: values[_desktopLyricsDoubleLineKey] == 'true',
+      desktopLyricFontFamily: fontFamily == null || fontFamily.isEmpty
+          ? null
+          : fontFamily,
+      desktopLyricFontSize:
+          int.tryParse(values[_desktopLyricFontSizeKey] ?? '') ??
+          defaults.desktopLyricFontSize,
+      desktopLyricTextColorValue:
+          int.tryParse(values[_desktopLyricTextColorKey] ?? '') ??
+          defaults.desktopLyricTextColorValue,
+      desktopLyricStrokeColorValue:
+          int.tryParse(values[_desktopLyricStrokeColorKey] ?? '') ??
+          defaults.desktopLyricStrokeColorValue,
+      desktopLyricWindowLeft: double.tryParse(
+        values[_desktopLyricWindowLeftKey] ?? '',
+      ),
+      desktopLyricWindowTop: double.tryParse(
+        values[_desktopLyricWindowTopKey] ?? '',
+      ),
+    ).copyWith();
   }
 }
