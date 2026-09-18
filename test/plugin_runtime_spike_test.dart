@@ -313,6 +313,7 @@ void main() {
 
         final searchResult = adapter.searchResultFromPluginValue(
           searchValue,
+          pluginId: platform,
           platform: platform,
           page: 1,
         );
