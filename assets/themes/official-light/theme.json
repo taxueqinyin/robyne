@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "id": "official.light",
+  "name": "Robyne 亮色",
+  "author": "Robyne",
+  "authorUrl": "https://github.com/robyne",
+  "version": "1.0.0",
+  "description": "官方亮色皮肤。同时是皮肤作者的可复制样例。",
+  "preview": "#F7F8FA",
+  "tags": [
+    "light",
+    "minimalist"
+  ],
+  "mode": "light",
+  "tokens": {
+    "color": {
+      "background": {
+        "base": "#F7F8FA",
+        "elevated": "#FFFFFF",
+        "sunken": "#EDEFF3",
+        "overlay": "#80000000"
+      },
+      "surface": {
+        "base": "#FFFFFF",
+        "hover": "#14000000",
+        "active": "#1F000000",
+        "selected": "#1F2F6FED"
+      },
+      "brand": {
+        "base": "#2F6FED",
+        "hover": "#2559C4",
+        "muted": "#1F2F6FED",
+        "onBrand": "#FFFFFF"
+      },
+      "text": {
+        "primary": "#1B1D21",
+        "secondary": "#4A4F57",
+        "muted": "#7A8089",
+        "disabled": "#B4B9C0"
+      },
+      "border": {
+        "subtle": "#0D000000",
+        "default": "#1A000000",
+        "strong": "#29000000",
+        "focus": "#2F6FED"
+      },
+      "status": {
+        "danger": "#D64545",
+        "warning": "#D98A1F",
+        "success": "#2E9E5B"
+      }
+    },
+    "radius": {
+      "sm": 6,
+      "md": 10,
+      "lg": 16,
+      "full": 999
+    },
+    "spacing": {
+      "xs": 4,
+      "sm": 8,
+      "md": 12,
+      "lg": 16,
+      "xl": 24
+    },
+    "typography": {
+      "scale": 1,
+      "bodyWeight": 400,
+      "titleWeight": 600
+    },
+    "elevation": {
+      "sm": 1,
+      "md": 3,
+      "lg": 6
+    },
+    "effects": {
+      "blur": 0,
+      "glassOpacity": 1
+    },
+    "background": {
+      "image": null,
+      "fillMode": "cover",
+      "overlay": null,
+      "overlayOpacity": 0
+    }
+  },
+  "settings": [
+    {
+      "key": "brandColor",
+      "type": "color",
+      "label": "强调色",
+      "default": "#2F6FED",
+      "target": "color.brand.base"
+    },
+    {
+      "key": "cornerRadius",
+      "type": "range",
+      "label": "圆角",
+      "min": 0,
+      "max": 28,
+      "default": 10,
+      "target": "radius.md"
+    }
+  ],
+  "assets": {},
+  "layout": {
+    "desktop": {
+      "sidebar": {
+        "position": "left",
+        "width": 80,
+        "collapsible": false,
+        "labelMode": "all"
+      },
+      "playerBarPosition": "bottom",
+      "playerBarHeight": 72
+    },
+    "mobile": {
+      "navigation": "bottomTabs",
+      "playerBarHeight": 64,
+      "playerBarCompact": true
+    },
+    "content": {
+      "listStyle": "list",
+      "density": "regular"
+    }
+  }
+}

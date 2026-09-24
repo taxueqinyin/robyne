@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/theme/infrastructure/token_resolver.dart';
+
 class ArtworkView extends StatefulWidget {
   const ArtworkView({super.key, this.artworkUrl, this.size = 48});
 
@@ -166,7 +168,10 @@ class _ArtworkViewState extends State<ArtworkView> {
         ? null
         : ArtworkView._resolvedProviders[url];
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      // Artwork corners follow the skin's small radius rather than a literal.
+      borderRadius: BorderRadius.circular(
+        RobyneTheme.of(context).tokens.radius.sm,
+      ),
       child: SizedBox.square(
         dimension: widget.size,
         child: url == null || url.isEmpty

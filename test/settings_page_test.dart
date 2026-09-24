@@ -118,6 +118,9 @@ class _FakeSettingsController extends SettingsController {
         downloadAudioFormat: DownloadAudioFormat.original,
         shortcuts: ShortcutSettings.defaults(),
         lyricSettings: const LyricSettings.defaults(),
+        activeThemeId: UserSettings.defaultActiveThemeId,
+        themeModeOverrideName: UserSettings.defaultThemeModeOverrideName,
+        themeSettingValues: const <String, Object>{},
       );
 
   UserSettings _settings;

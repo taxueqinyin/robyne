@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -54,6 +55,8 @@ class LocalPluginRepository implements PluginRepository {
       await _legacyMigration?.ensureMigrated();
       return Ok(await _readDefinitions());
     } catch (error, stackTrace) {
+      // Surface the root cause: the UI only renders the wrapper message.
+      debugPrint('listPlugins failed: $error\n$stackTrace');
       return Failure(
         AppError(
           code: 'storage.read_failed',

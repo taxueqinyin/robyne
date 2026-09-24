@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "id": "official.midnight",
+  "name": "午夜琉璃",
+  "author": "Robyne",
+  "authorUrl": "https://github.com/robyne",
+  "version": "1.0.0",
+  "description": "官方炫技皮肤：展示背景图、毛玻璃模糊与用户可调旋钮。",
+  "preview": "#0E1420",
+  "tags": [
+    "dark",
+    "gradient"
+  ],
+  "mode": "dark",
+  "tokens": {
+    "color": {
+      "background": {
+        "base": "#E6141A24",
+        "elevated": "#F21E2634",
+        "sunken": "#F20A0E15",
+        "overlay": "#99000000"
+      },
+      "surface": {
+        "base": "#26FFFFFF",
+        "hover": "#33FFFFFF",
+        "active": "#40FFFFFF",
+        "selected": "#4D7CC4FF"
+      },
+      "brand": {
+        "base": "#7CC4FF",
+        "hover": "#9BD5FF",
+        "muted": "#267CC4FF",
+        "onBrand": "#0E1420"
+      },
+      "text": {
+        "primary": "#EAF2FF",
+        "secondary": "#A8B8D0",
+        "muted": "#7A8AA0",
+        "disabled": "#4A5568"
+      },
+      "border": {
+        "subtle": "#14FFFFFF",
+        "default": "#24FFFFFF",
+        "strong": "#38FFFFFF",
+        "focus": "#7CC4FF"
+      },
+      "status": {
+        "danger": "#FF8A8A",
+        "warning": "#FFC46B",
+        "success": "#7BE0A8"
+      }
+    },
+    "radius": {
+      "sm": 8,
+      "md": 14,
+      "lg": 22,
+      "full": 999
+    },
+    "spacing": {
+      "xs": 4,
+      "sm": 8,
+      "md": 12,
+      "lg": 18,
+      "xl": 28
+    },
+    "typography": {
+      "scale": 1,
+      "bodyWeight": 400,
+      "titleWeight": 600
+    },
+    "elevation": {
+      "sm": 0,
+      "md": 0,
+      "lg": 0
+    },
+    "effects": {
+      "blur": 18,
+      "glassOpacity": 0.72
+    },
+    "background": {
+      "image": null,
+      "fillMode": "cover",
+      "overlay": "#08101C",
+      "overlayOpacity": 0.45
+    }
+  },
+  "layout": {
+    "desktop": {
+      "sidebar": {
+        "position": "left",
+        "width": 96,
+        "collapsible": false,
+        "labelMode": "all"
+      },
+      "playerBarPosition": "bottom",
+      "playerBarHeight": 76
+    },
+    "mobile": {
+      "navigation": "bottomTabs",
+      "playerBarHeight": 64,
+      "playerBarCompact": true
+    },
+    "content": {
+      "listStyle": "card",
+      "density": "comfortable"
+    }
+  },
+  "settings": [
+    {
+      "key": "blurAmount",
+      "type": "range",
+      "label": "毛玻璃强度",
+      "min": 0,
+      "max": 40,
+      "default": 18,
+      "target": "effects.blur"
+    },
+    {
+      "key": "accent",
+      "type": "color",
+      "label": "强调色",
+      "default": "#7CC4FF",
+      "target": "color.brand.base"
+    },
+    {
+      "key": "cornerRadius",
+      "type": "range",
+      "label": "圆角",
+      "min": 0,
+      "max": 28,
+      "default": 14,
+      "target": "radius.md"
+    },
+    {
+      "key": "scrimOpacity",
+      "type": "range",
+      "label": "背景压暗",
+      "min": 0,
+      "max": 1,
+      "default": 0.45,
+      "target": "background.overlayOpacity"
+    }
+  ],
+  "assets": {}
+}

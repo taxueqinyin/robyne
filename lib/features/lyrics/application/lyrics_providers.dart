@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/application/theme_providers.dart';
+
 import '../../../core/errors/app_error.dart';
 import '../../../core/result/result.dart';
 import '../../player/application/player_providers.dart';
@@ -90,9 +92,11 @@ final desktopLyricThemeProvider = FutureProvider<DesktopLyricTheme>((
 
 final currentDesktopLyricPayloadProvider = Provider<DesktopLyricPayload>((ref) {
   final item = ref.watch(currentPlaybackItemProvider);
+  // With artwork the lyric window follows the cover art; without it, fall
+  // back to the active skin so the window never looks unrelated to the app.
   final theme =
       ref.watch(desktopLyricThemeProvider).value ??
-      const DesktopLyricTheme.defaultTheme();
+      DesktopLyricTheme.fromTokens(ref.watch(activeThemeTokensProvider));
   final userSettings = ref.watch(settingsControllerProvider).value;
   final lyricSettings =
       userSettings?.lyricSettings ?? const LyricSettings.defaults();

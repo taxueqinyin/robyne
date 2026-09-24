@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:robyne/core/debug/ime_trace.dart';
+import 'package:robyne/core/layout/window_size_class.dart';
 import 'package:robyne/features/plugin/application/plugin_controller.dart';
 import 'package:robyne/features/plugin/domain/plugin_definition.dart';
 import 'package:robyne/features/plugin/domain/plugin_repository.dart';
@@ -420,7 +421,7 @@ class _UserVariablesDialogState extends State<_UserVariablesDialog> {
     return AlertDialog(
       title: Text('Configure ${plugin.platform}'),
       content: SizedBox(
-        width: 520,
+        width: RobyneDialogWidth.forContext(context, 520),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

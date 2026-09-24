@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/debug/ime_trace.dart';
+import '../../../core/layout/window_size_class.dart';
 import '../../../shared/widgets/search_action_button.dart';
 import '../../lyrics/application/lyrics_providers.dart';
 import '../../playlists/application/playlist_providers.dart';
@@ -40,50 +41,66 @@ class NowPlayingPage extends ConsumerWidget {
             ) ??
         false;
 
+    final sizeClass = WindowSizeClass.of(context);
+    final padding = sizeClass.isCompactWidth ? 16.0 : 32.0;
+
+    // The 340dp art column was fixed: on a 400dp-wide phone the content area
+    // is ~336dp, so art + divider + lyrics overflowed and the lyrics pane was
+    // pushed off-screen entirely. Every extent is now derived from the
+    // viewport. See ADR-001 decision D4.
+    final artSize = sizeClass.clampDimension(300, maxRatio: 0.62);
+    final metadata = _NowPlayingMetadata(
+      item: item,
+      favorite: favorite,
+      artworkSize: artSize,
+    );
+
+    if (sizeClass.isCompactWidth) {
+      // Compact width: the two panes cannot share the axis, so they become
+      // tabs. This is the Material list-detail pattern; stacking them would
+      // give each pane ~80dp of height on a landscape phone.
+      return DefaultTabController(
+        length: 2,
+        child: Padding(
+          padding: EdgeInsets.all(padding),
+          child: Column(
+            children: <Widget>[
+              TabBar(
+                tabs: const <Tab>[
+                  Tab(icon: Icon(Icons.album_outlined), text: 'Now'),
+                  Tab(icon: Icon(Icons.lyrics_outlined), text: 'Lyrics'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TabBarView(
+                  children: <Widget>[
+                    SingleChildScrollView(child: metadata),
+                    _lyricsSystemEnabled
+                        ? _LyricsPane(item: item)
+                        : const _LyricsDisabledPane(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Compact *height* with a non-compact width (landscape phone): keep both
+    // panes side by side but shrink the art so the lyrics keep usable height.
+    final artColumnWidth = artSize + (sizeClass.isCompactHeight ? 16 : 40);
+
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: EdgeInsets.all(padding),
       child: Row(
         children: <Widget>[
           SizedBox(
-            width: 340,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                ArtworkView(artworkUrl: item.artworkUrl, size: 300),
-                const SizedBox(height: 24),
-                Text(
-                  item.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  <String?>[item.artist, item.album, item.platform]
-                      .whereType<String>()
-                      .where((value) => value.isNotEmpty)
-                      .join(' - '),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: <Widget>[
-                    IconButton.filledTonal(
-                      tooltip: favorite ? 'Remove from liked' : 'Add to liked',
-                      icon: Icon(
-                        favorite ? Icons.favorite : Icons.favorite_border,
-                      ),
-                      onPressed: () => ref
-                          .read(playlistControllerProvider.notifier)
-                          .toggleFavorite(item),
-                    ),
-                    const SizedBox(width: 8),
-                    _NowPlayingMenu(item: item),
-                  ],
-                ),
-              ],
+            width: artColumnWidth,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: SingleChildScrollView(child: metadata),
             ),
           ),
           const VerticalDivider(width: 48),
@@ -94,6 +111,73 @@ class NowPlayingPage extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Cover art plus title/artist/actions, shared by every layout variant.
+class _NowPlayingMetadata extends StatelessWidget {
+  const _NowPlayingMetadata({
+    required this.item,
+    required this.favorite,
+    required this.artworkSize,
+  });
+
+  final PlaybackItem item;
+  final bool favorite;
+  final double artworkSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        ArtworkView(artworkUrl: item.artworkUrl, size: artworkSize),
+        const SizedBox(height: 16),
+        Text(
+          item.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          <String?>[
+            item.artist,
+            item.album,
+            item.platform,
+          ].whereType<String>().where((value) => value.isNotEmpty).join(' - '),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 16),
+        _NowPlayingActions(item: item, favorite: favorite),
+      ],
+    );
+  }
+}
+
+class _NowPlayingActions extends ConsumerWidget {
+  const _NowPlayingActions({required this.item, required this.favorite});
+
+  final PlaybackItem item;
+  final bool favorite;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Row(
+      children: <Widget>[
+        IconButton.filledTonal(
+          tooltip: favorite ? 'Remove from liked' : 'Add to liked',
+          icon: Icon(favorite ? Icons.favorite : Icons.favorite_border),
+          onPressed: () => ref
+              .read(playlistControllerProvider.notifier)
+              .toggleFavorite(item),
+        ),
+        const SizedBox(width: 8),
+        _NowPlayingMenu(item: item),
+      ],
     );
   }
 }
@@ -206,8 +290,10 @@ class _AddToPlaylistDialog extends ConsumerWidget {
     final playlists = ref.watch(playlistControllerProvider);
     return AlertDialog(
       title: const Text('Add to playlist'),
+      // A 420dp dialog on a 400dp screen overflows by 400dp. The width is a
+      // preference, not a requirement. See ADR-001 decision D4.
       content: SizedBox(
-        width: 420,
+        width: RobyneDialogWidth.forContext(context, 420),
         child: playlists.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stackTrace) => Text(error.toString()),
@@ -386,7 +472,7 @@ class _LyricOffsetMenuPanelState extends ConsumerState<_LyricOffsetMenuPanel> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 280,
+      width: RobyneDialogWidth.forContext(context, 280),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,8 +589,8 @@ class _LyricSearchDialogState extends ConsumerState<_LyricSearchDialog> {
     return AlertDialog(
       title: const Text('Search lyrics'),
       content: SizedBox(
-        width: 720,
-        height: 520,
+        width: RobyneDialogWidth.forContext(context, 720),
+        height: RobyneDialogWidth.heightForContext(context, 520),
         child: Column(
           children: <Widget>[
             Row(

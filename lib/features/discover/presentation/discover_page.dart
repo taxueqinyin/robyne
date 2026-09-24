@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/layout/window_size_class.dart';
+import '../../../core/theme/infrastructure/token_resolver.dart';
 import '../../downloads/application/download_providers.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/domain/playback_item.dart';
@@ -83,7 +85,14 @@ class DiscoverPage extends ConsumerWidget {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final compact = constraints.maxWidth < 960;
+                  // This is the Material list-detail pattern. On an expanded
+                  // width both panes share the axis; at medium or compact they
+                  // must not, because stacking them gave each pane ~80dp on a
+                  // landscape phone. Instead the detail takes the full pane and
+                  // offers a back affordance. See ADR-001 decision D6.
+                  final splitPanes =
+                      constraints.maxWidth >=
+                      WindowSizeClass.expandedWidthBreakpoint;
                   final browse = _BrowsePanel(
                     plugins: enabledPlugins,
                     state: discoverState,
@@ -103,6 +112,7 @@ class DiscoverPage extends ConsumerWidget {
                     state: discoverState,
                     onRetry: () => unawaited(controller.reloadDetail()),
                     onLoadMore: () => unawaited(controller.loadMoreDetail()),
+                    onBack: splitPanes ? null : () => controller.closeDetail(),
                     onPlay: (item) => unawaited(
                       ref
                           .read(playerControllerProvider.notifier)
@@ -115,22 +125,23 @@ class DiscoverPage extends ConsumerWidget {
                     ),
                   );
 
-                  if (compact) {
-                    return Column(
+                  if (splitPanes) {
+                    return Row(
                       children: <Widget>[
                         Expanded(flex: 5, child: browse),
-                        const SizedBox(height: 16),
+                        const SizedBox(width: 16),
                         Expanded(flex: 6, child: detail),
                       ],
                     );
                   }
 
-                  return Row(
-                    children: <Widget>[
-                      Expanded(flex: 5, child: browse),
-                      const SizedBox(width: 16),
-                      Expanded(flex: 6, child: detail),
-                    ],
+                  // Single pane: the detail replaces the browse list while a
+                  // collection is open, so the user never has to read a list
+                  // through a 80dp slot.
+                  final showingDetail = discoverState.detail != null;
+                  return AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: showingDetail ? detail : browse,
                   );
                 },
               ),
@@ -419,6 +430,7 @@ class _DetailPanel extends StatelessWidget {
     required this.onLoadMore,
     required this.onPlay,
     required this.onDownload,
+    this.onBack,
   });
 
   final DiscoverState state;
@@ -426,6 +438,9 @@ class _DetailPanel extends StatelessWidget {
   final VoidCallback onLoadMore;
   final ValueChanged<MusicItem> onPlay;
   final ValueChanged<MusicItem> onDownload;
+
+  /// Non-null only when the detail owns the whole pane; pops back to browse.
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -452,8 +467,16 @@ class _DetailPanel extends StatelessWidget {
             children: <Widget>[
               Row(
                 children: <Widget>[
+                  if (onBack != null)
+                    IconButton(
+                      tooltip: 'Back to browse',
+                      onPressed: onBack,
+                      icon: const Icon(Icons.arrow_back),
+                    ),
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(
+                      RobyneTheme.of(context).tokens.radius.sm,
+                    ),
                     child: SizedBox(
                       width: 72,
                       height: 72,
@@ -628,19 +651,23 @@ class _CollectionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    // Card colours come from component tokens so a skin can restyle the
+    // collection grid; the semantic layer has no "card" role to fall back on.
+    final components = RobyneTheme.of(context).tokens.components;
+    final radius = RobyneTheme.of(context).tokens.radius.sm;
+    final fill = selected ? components.card.selected : components.card.surface;
     return Material(
-      color: selected ? scheme.primaryContainer : Colors.white,
-      borderRadius: BorderRadius.circular(8),
+      color: fill,
+      borderRadius: BorderRadius.circular(radius),
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(radius),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: <Widget>[
               ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(radius),
                 child: SizedBox(
                   width: 56,
                   height: 56,
@@ -750,11 +777,12 @@ class _PanelShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = RobyneTheme.of(context).tokens;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Theme.of(context).dividerColor),
+        color: tokens.components.card.surface,
+        borderRadius: BorderRadius.circular(tokens.radius.sm),
+        border: Border.all(color: tokens.color.borderSubtle),
       ),
       child: Padding(padding: const EdgeInsets.all(16), child: child),
     );

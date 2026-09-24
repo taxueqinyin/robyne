@@ -316,6 +316,25 @@ class DiscoverController extends Notifier<DiscoverState> {
     await _loadMusicSheetDetail(collection, page: 1, append: false);
   }
 
+  /// Clears the open collection so the browse pane becomes the only pane.
+  ///
+  /// Only used by the single-pane layout, where detail and browse share one
+  /// slot instead of sitting side by side. See ADR-001 decision D6.
+  void closeDetail() {
+    if (state.detail == null) {
+      return;
+    }
+    // Any in-flight detail load is invalidated first, otherwise a late
+    // response would re-open the pane the user just dismissed.
+    _invalidateAllRequests();
+    state = state.copyWith(
+      detail: null,
+      detailError: null,
+      isLoadingDetail: false,
+      isLoadingMoreDetail: false,
+    );
+  }
+
   Future<void> loadMoreDetail() async {
     final detail = state.detail;
     final plugin = _selectedPlugin;

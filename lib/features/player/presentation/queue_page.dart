@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/layout/window_size_class.dart';
 import '../application/player_providers.dart';
 import '../domain/playback_item.dart';
 import 'artwork_view.dart';
@@ -13,65 +14,130 @@ class QueuePage extends ConsumerWidget {
     final state =
         ref.watch(playerControllerProvider).value ??
         const PlayerControllerState();
+    final sizeClass = WindowSizeClass.of(context);
+    // Queue and history side by side need real horizontal room; below the
+    // expanded breakpoint they become tabs rather than 50/50 slits.
+    final splitPanes =
+        sizeClass.width == WindowWidthClass.expanded &&
+        !sizeClass.isCompactHeight;
+    final padding = sizeClass.isCompactWidth ? 16.0 : 24.0;
+
+    final queueList = _QueueList(state: state);
+    final historyList = _HistoryList(state: state);
+
+    final pane = splitPanes
+        ? Row(
+            children: <Widget>[
+              Expanded(child: queueList),
+              const VerticalDivider(width: 32),
+              Expanded(child: historyList),
+            ],
+          )
+        : DefaultTabController(
+            length: 2,
+            child: Column(
+              children: <Widget>[
+                TabBar(
+                  tabs: const <Tab>[
+                    Tab(text: 'Queue'),
+                    Tab(text: 'History'),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: TabBarView(children: <Widget>[queueList, historyList]),
+                ),
+              ],
+            ),
+          );
+
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(padding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  'Queue',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-              ),
-              DropdownButton<PlaybackMode>(
-                value: state.playbackMode,
-                onChanged: (mode) {
-                  if (mode != null) {
-                    ref
-                        .read(playerControllerProvider.notifier)
-                        .setPlaybackMode(mode);
-                  }
-                },
-                items: PlaybackMode.values
-                    .map(
-                      (mode) => DropdownMenuItem<PlaybackMode>(
-                        value: mode,
-                        child: Text(_modeLabel(mode)),
+          // Title + mode dropdown + clear button do not fit one line on a
+          // phone, so the controls wrap onto their own row instead of
+          // overflowing.
+          sizeClass.isCompactWidth
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Text(
+                      'Queue',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    _QueueControls(state: state),
+                  ],
+                )
+              : Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        'Queue',
+                        style: Theme.of(context).textTheme.headlineMedium,
                       ),
-                    )
-                    .toList(growable: false),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: state.queue.isEmpty
-                    ? null
-                    : () => ref
-                          .read(playerControllerProvider.notifier)
-                          .clearQueue(),
-                icon: const Icon(Icons.clear_all),
-                label: const Text('Clear'),
-              ),
-            ],
-          ),
+                    ),
+                    // Flexible, not bare: a Row gives its non-flex children
+                    // unbounded width, which the controls' own Expanded child
+                    // cannot resolve.
+                    const SizedBox(width: 16),
+                    Flexible(child: _QueueControls(state: state)),
+                  ],
+                ),
           const SizedBox(height: 16),
-          Expanded(
-            child: Row(
-              children: <Widget>[
-                Expanded(child: _QueueList(state: state)),
-                const VerticalDivider(width: 32),
-                Expanded(child: _HistoryList(state: state)),
-              ],
-            ),
-          ),
+          Expanded(child: pane),
         ],
       ),
     );
   }
+}
 
-  String _modeLabel(PlaybackMode mode) {
+/// Playback-mode picker and the clear action, shared by both header layouts.
+class _QueueControls extends ConsumerWidget {
+  const _QueueControls({required this.state});
+
+  final PlayerControllerState state;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: DropdownButton<PlaybackMode>(
+            isExpanded: true,
+            value: state.playbackMode,
+            onChanged: (mode) {
+              if (mode != null) {
+                ref
+                    .read(playerControllerProvider.notifier)
+                    .setPlaybackMode(mode);
+              }
+            },
+            items: PlaybackMode.values
+                .map(
+                  (mode) => DropdownMenuItem<PlaybackMode>(
+                    value: mode,
+                    child: Text(_modeLabel(mode)),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          onPressed: state.queue.isEmpty
+              ? null
+              : () => ref.read(playerControllerProvider.notifier).clearQueue(),
+          icon: const Icon(Icons.clear_all),
+          label: const Text('Clear'),
+        ),
+      ],
+    );
+  }
+
+  static String _modeLabel(PlaybackMode mode) {
     return switch (mode) {
       PlaybackMode.sequence => 'Sequence',
       PlaybackMode.random => 'Random',

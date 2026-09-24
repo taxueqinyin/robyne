@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+
+import '../../../core/theme/domain/theme_tokens.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -88,6 +90,21 @@ class DesktopLyricTheme {
         subtitleSaturation,
         0.56,
       ).toColor().toARGB32(),
+    );
+  }
+
+  /// Builds a lyric theme from the active skin's tokens.
+  ///
+  /// Used when the current track has no artwork, so the desktop lyric window
+  /// still follows the user's chosen skin instead of snapping to the default.
+  factory DesktopLyricTheme.fromTokens(ThemeTokens tokens) {
+    final brand = tokens.color.brandBase;
+    final background = tokens.color.backgroundBase;
+    return DesktopLyricTheme(
+      backgroundColorValue: background.toARGB32(),
+      titleColorValue: brand.toARGB32(),
+      subtitleColorValue: tokens.color.textSecondary.toARGB32(),
+      lyricColorValue: tokens.color.textPrimary.toARGB32(),
     );
   }
 

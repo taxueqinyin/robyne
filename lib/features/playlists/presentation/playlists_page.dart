@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/debug/ime_trace.dart';
+import '../../../core/layout/window_size_class.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/presentation/artwork_view.dart';
 import '../application/playlist_providers.dart';
@@ -188,7 +189,7 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
     return AlertDialog(
       title: const Text('New playlist'),
       content: SizedBox(
-        width: 360,
+        width: RobyneDialogWidth.forContext(context, 360),
         child: TextField(
           controller: _controller,
           autofocus: true,

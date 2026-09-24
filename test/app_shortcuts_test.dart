@@ -134,6 +134,9 @@ class _SeededSettingsController extends SettingsController {
           ? ShortcutSettings.defaults()
           : shortcuts,
       lyricSettings: const LyricSettings.defaults(),
+      activeThemeId: UserSettings.defaultActiveThemeId,
+      themeModeOverrideName: UserSettings.defaultThemeModeOverrideName,
+      themeSettingValues: const <String, Object>{},
     );
   }
 

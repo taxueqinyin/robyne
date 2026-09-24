@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -39,6 +40,9 @@ class SettingsRepository {
   static const _desktopLyricStrokeColorKey = 'lyrics.desktop.stroke_color';
   static const _desktopLyricWindowLeftKey = 'lyrics.desktop.window_left';
   static const _desktopLyricWindowTopKey = 'lyrics.desktop.window_top';
+  static const _activeThemeIdKey = 'theme.active_id';
+  static const _themeModeOverrideKey = 'theme.mode_override';
+  static const _themeSettingValuesKey = 'theme.setting_values';
   static const _disabledShortcutValue = '__disabled__';
 
   final db.AppDatabase _database;
@@ -79,7 +83,48 @@ class SettingsRepository {
       ),
       shortcuts: _shortcutSettings(values),
       lyricSettings: _lyricSettings(values),
+      activeThemeId: (values[_activeThemeIdKey]?.trim().isEmpty ?? true)
+          ? UserSettings.defaultActiveThemeId
+          : values[_activeThemeIdKey]!.trim(),
+      themeModeOverrideName:
+          (values[_themeModeOverrideKey]?.trim().isEmpty ?? true)
+          ? UserSettings.defaultThemeModeOverrideName
+          : values[_themeModeOverrideKey]!.trim(),
+      themeSettingValues: _themeSettingValues(values[_themeSettingValuesKey]),
     );
+  }
+
+  Future<UserSettings> setActiveThemeId(String id) async {
+    await _write(_activeThemeIdKey, id.trim());
+    return load();
+  }
+
+  Future<UserSettings> setThemeModeOverride(String name) async {
+    await _write(_themeModeOverrideKey, name.trim());
+    return load();
+  }
+
+  Future<UserSettings> setThemeSettingValue(
+    String themeId,
+    String key,
+    Object? value,
+  ) async {
+    final current = _themeSettingValues(await _readRaw(_themeSettingValuesKey));
+    final composite = '$themeId/$key';
+    if (value == null) {
+      current.remove(composite);
+    } else {
+      current[composite] = value;
+    }
+    await _write(_themeSettingValuesKey, jsonEncode(current));
+    return load();
+  }
+
+  Future<String?> _readRaw(String key) async {
+    final row = await (_database.select(
+      _database.appSettings,
+    )..where((row) => row.key.equals(key))).getSingleOrNull();
+    return row?.value;
   }
 
   Future<UserSettings> setCacheSizeBytes(int bytes) async {
@@ -194,6 +239,24 @@ class SettingsRepository {
       await resolved.create(recursive: true);
     }
     return resolved;
+  }
+
+  static Map<String, Object> _themeSettingValues(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return <String, Object>{};
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return <String, Object>{};
+      }
+      return <String, Object>{
+        for (final entry in decoded.entries)
+          entry.key.toString(): entry.value as Object,
+      };
+    } on Object {
+      return <String, Object>{};
+    }
   }
 
   static DownloadAudioFormat _downloadAudioFormat(String? value) {

@@ -51,6 +51,30 @@ class SettingsController extends AsyncNotifier<UserSettings> {
     );
   }
 
+  Future<void> setActiveThemeId(String id) async {
+    state = AsyncData(
+      await ref.read(settingsRepositoryProvider).setActiveThemeId(id),
+    );
+  }
+
+  Future<void> setThemeModeOverride(String name) async {
+    state = AsyncData(
+      await ref.read(settingsRepositoryProvider).setThemeModeOverride(name),
+    );
+  }
+
+  Future<void> setThemeSettingValue(
+    String themeId,
+    String key,
+    Object? value,
+  ) async {
+    state = AsyncData(
+      await ref
+          .read(settingsRepositoryProvider)
+          .setThemeSettingValue(themeId, key, value),
+    );
+  }
+
   Future<void> setShortcutBinding(
     ShortcutAction action,
     ShortcutBinding? binding,

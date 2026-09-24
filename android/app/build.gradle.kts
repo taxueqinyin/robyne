@@ -37,6 +37,16 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    packaging {
+        // `package:sqlite3` resolves the database library with
+        // dlopen("libsqlite3.so") at runtime. With the default
+        // useLegacyPackaging = false the .so files stay compressed inside the
+        // APK and are invisible to dlopen, so extract them like legacy apps.
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 flutter {

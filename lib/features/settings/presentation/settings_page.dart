@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/debug/ime_trace.dart';
 import '../../downloads/domain/download_audio_format.dart';
+import '../../../core/layout/window_size_class.dart';
+import '../../../core/theme/infrastructure/token_resolver.dart';
 import '../application/settings_providers.dart';
 import '../application/shortcut_runtime.dart';
 import '../domain/lyric_settings.dart';
@@ -12,6 +14,7 @@ import '../domain/shortcut_action.dart';
 import '../domain/shortcut_binding.dart';
 import '../domain/shortcut_settings.dart';
 import '../domain/user_settings.dart';
+import 'theme_settings_tab.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -26,18 +29,23 @@ class SettingsPage extends ConsumerWidget {
         error: (error, stackTrace) => Center(child: Text(error.toString())),
         data: (settings) {
           return DefaultTabController(
-            length: 3,
+            length: 4,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text('设置', style: Theme.of(context).textTheme.headlineMedium),
                 const SizedBox(height: 24),
+                // The tab bar was pinned to 420dp; on a 400dp phone it
+                // overflowed and pushed the whole settings surface off-screen.
                 SizedBox(
-                  width: 320,
+                  width: WindowSizeClass.of(
+                    context,
+                  ).clampDimension(420, maxRatio: 0.92),
                   child: TabBar(
                     dividerColor: Colors.transparent,
                     tabs: const <Tab>[
                       Tab(text: '常规'),
+                      Tab(text: '外观'),
                       Tab(text: '快捷键'),
                       Tab(text: '歌词'),
                     ],
@@ -48,6 +56,7 @@ class SettingsPage extends ConsumerWidget {
                   child: TabBarView(
                     children: <Widget>[
                       _GeneralSettingsTab(settings: settings),
+                      const ThemeSettingsTab(),
                       _ShortcutSettingsTab(settings: settings),
                       _LyricsSettingsTab(settings: settings),
                     ],
@@ -137,7 +146,7 @@ class _GeneralSettingsTab extends ConsumerWidget {
       builder: (context) => AlertDialog(
         title: const Text('缓存大小'),
         content: SizedBox(
-          width: 320,
+          width: RobyneDialogWidth.forContext(context, 320),
           child: TextField(
             controller: controller,
             autofocus: true,
@@ -598,7 +607,9 @@ class _FontSizeStepper extends StatelessWidget {
     final canIncrease = value < LyricSettings.maxFontSize;
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(
+          RobyneTheme.of(context).tokens.radius.md,
+        ),
         color: theme.colorScheme.surfaceContainerHighest,
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
@@ -642,6 +653,9 @@ class _ColorPalettePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Swatches are circular whatever the skin says, so they use the `full`
+    // radius token rather than a literal 18 (half of the 32dp box).
+    final fullRadius = RobyneTheme.of(context).tokens.radius.full;
     final children = <Widget>[
       if (noneLabel != null && noneValue != null)
         _NoColorOption(
@@ -658,7 +672,7 @@ class _ColorPalettePicker extends StatelessWidget {
           message:
               '#${colorValue.toRadixString(16).padLeft(8, '0').toUpperCase()}',
           child: InkWell(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(fullRadius),
             onTap: () => onSelected(colorValue),
             child: Ink(
               width: 32,
@@ -701,16 +715,18 @@ class _NoColorOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // A pill: fully rounded on the 32dp-tall chip.
+    final pillRadius = RobyneTheme.of(context).tokens.radius.full;
     return Tooltip(
       message: label,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(pillRadius),
         onTap: onTap,
         child: Ink(
           height: 32,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(pillRadius),
             color: theme.colorScheme.surfaceContainerHighest,
             border: Border.all(
               color: selected
@@ -789,7 +805,7 @@ class _ShortcutCaptureDialogState
     return AlertDialog(
       title: Text('设置 ${widget.action.label}'),
       content: SizedBox(
-        width: 460,
+        width: RobyneDialogWidth.forContext(context, 460),
         child: Focus(
           focusNode: _focusNode,
           onKeyEvent: (node, event) {
@@ -838,7 +854,9 @@ class _ShortcutCaptureDialogState
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(
+                      RobyneTheme.of(context).tokens.radius.md,
+                    ),
                     border: Border.all(color: theme.colorScheme.outlineVariant),
                     color: theme.colorScheme.surfaceContainerHighest,
                   ),
@@ -923,7 +941,7 @@ Future<String?> _showManualDirectoryDialog(
     builder: (context) => AlertDialog(
       title: Text(dialogTitle),
       content: SizedBox(
-        width: 520,
+        width: RobyneDialogWidth.forContext(context, 520),
         child: TextField(
           controller: controller,
           autofocus: true,
