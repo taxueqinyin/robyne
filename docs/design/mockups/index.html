@@ -75,6 +75,12 @@
   .plrow.on{background:rgba(255,255,255,.055);color:var(--t1)}
   .navfoot{margin-top:auto;display:flex;align-items:center;gap:11px;padding:10px;border-radius:9px;
     color:var(--t2);font-size:13px;border-top:1px solid var(--line)}
+  .navsecrow{display:flex;align-items:center;gap:8px;padding:14px 9px 6px;font-size:10.5px;font-weight:600;
+    letter-spacing:.07em;color:var(--t4)}
+  .navsecrow .ln{flex:1;height:1px;background:var(--line)}
+  .navmini{display:flex;align-items:center;gap:9px;height:32px;padding:0 10px;border-radius:8px;
+    color:var(--t3);font-size:12.5px}
+  .navmini:hover{background:rgba(255,255,255,.045);color:var(--t2)}
 
   .main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
   .topbar{height:54px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;
@@ -172,6 +178,140 @@
   @keyframes eq{0%,100%{height:4px}50%{height:13px}}
 
   /* ---------- queue region ---------- */
+  /* ---------- page-level shared parts ---------- */
+  .two-pane{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:16px;flex:1;min-height:0}
+  .pane{display:flex;flex-direction:column;min-height:0;border-radius:var(--r2);
+    background:var(--surf);border:1px solid var(--line);padding:14px 16px}
+  .pane h4{font-size:12px;font-weight:640;color:var(--t2);letter-spacing:.04em;margin-bottom:10px}
+  .segbar{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:rgba(255,255,255,.05);
+    border:1px solid var(--line)}
+  .segbar b{display:flex;align-items:center;gap:5px;height:26px;padding:0 12px;border-radius:7px;
+    font-size:11.5px;font-weight:560;color:var(--t3)}
+  .segbar b.on{background:var(--brand-mut);color:#FFA184;font-weight:680}
+  .tagwrap{display:flex;flex-wrap:wrap;gap:7px}
+  .tchip{font-size:11.5px;color:var(--t2);border:1px solid var(--line2);background:rgba(255,255,255,.04);
+    border-radius:999px;padding:4px 11px;flex:none}
+  .tchip.on{background:var(--brand-mut);border-color:rgba(255,107,74,.34);color:#FFA184;font-weight:600}
+  .collist{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:9px;border:1px solid transparent}
+  .collist:hover{background:var(--hov)}
+  .collist.on{background:var(--brand-mut);border-color:rgba(255,107,74,.26)}
+  .collist .cov{width:54px;height:54px;border-radius:7px;flex:none}
+  .collist .ct{font-size:12.5px;font-weight:560}
+  .collist.on .ct{color:#FFA184}
+  .collist .cd{font-size:10.5px;color:var(--t3);margin-top:3px}
+  .collist .cgo{margin-left:auto;color:var(--t4)}
+  .dethead{display:flex;align-items:center;gap:15px;padding-bottom:14px}
+  .dethead .cov{width:74px;height:74px;border-radius:9px;flex:none}
+  .dethead .dt{font-size:17px;font-weight:680}
+  .dethead .dd{font-size:11.5px;color:var(--t2);margin-top:4px}
+  .dethead .dm{font-size:10.5px;color:var(--t3);margin-top:3px}
+  .emptybox{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    color:var(--t3);font-size:12.5px;text-align:center;padding:20px}
+  .emptybox .ei{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.05);color:var(--t4)}
+  .hintbox{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:10px;
+    background:var(--surf);border:1px solid var(--line);font-size:11.5px;color:var(--t2)}
+  /* ---------- modal surfaces (plugin import / config, overflow sheets) ---------- */
+  .scrim{position:absolute;inset:0;background:rgba(8,9,11,.62);backdrop-filter:blur(3px);
+    display:flex;align-items:center;justify-content:center;z-index:5}
+  .dlg{width:520px;max-width:88%;border-radius:14px;background:var(--elev);
+    border:1px solid var(--line2);box-shadow:0 30px 70px rgba(0,0,0,.66);overflow:hidden}
+  .dlg .dh{display:flex;align-items:center;gap:10px;padding:16px 18px 12px}
+  .dlg .dh .di{width:32px;height:32px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;
+    background:var(--brand-mut);color:var(--brand)}
+  .dlg .dt{font-size:14.5px;font-weight:640}
+  .dlg .ds{font-size:11px;color:var(--t3);margin-top:2px}
+  .dlg .db{padding:2px 18px 16px}
+  .dlg .df{padding:12px 18px;display:flex;justify-content:flex-end;gap:9px;
+    border-top:1px solid var(--line);background:rgba(255,255,255,.018)}
+  .field{border:1px solid var(--line2);border-radius:10px;background:rgba(255,255,255,.04);padding:11px 13px}
+  .field .fl{font-size:11px;color:var(--t3);margin-bottom:5px}
+  .field .fv{font-size:13px;color:var(--t1)}
+  .field.on{border-color:var(--brand);background:var(--brand-mut)}
+  .field .fe{font-size:10.5px;color:#E4736A;margin-top:6px}
+  .vrow+.vrow{margin-top:11px}
+  .sheet{position:absolute;left:0;right:0;bottom:0;border-radius:16px 16px 0 0;background:var(--elev);
+    border-top:1px solid var(--line2);box-shadow:0 -18px 46px rgba(0,0,0,.6);padding:8px 10px 12px;z-index:5}
+  .sheet .sh{width:34px;height:4px;border-radius:999px;background:rgba(255,255,255,.2);margin:6px auto 12px}
+  .sheet .si2{display:flex;align-items:center;gap:13px;padding:12px 12px;border-radius:10px;font-size:13px}
+  .sheet .si2 .sic{width:32px;height:32px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.055);color:var(--t2)}
+  .sheet .si2 .sbadge{margin-left:auto;font-size:11px;color:var(--t3)}
+  .setrow{display:flex;align-items:center;gap:13px;padding:11px 12px;border-radius:10px}
+  .setrow+.setrow{border-top:1px solid var(--line)}
+  .setrow .si{width:34px;height:34px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.055);color:var(--t2)}
+  .setrow .st{flex:1;min-width:0}
+  .setrow .s1{font-size:13px;font-weight:520}
+  .setrow .s2{font-size:11px;color:var(--t3);margin-top:2px}
+  .setrow .sv{font-size:11.5px;color:var(--t2);flex:none}
+  .setrow .sc{margin-left:auto;display:flex;align-items:center;gap:7px;flex:none}
+  .switch{width:38px;height:22px;border-radius:999px;background:rgba(255,255,255,.14);position:relative;flex:none}
+  .switch i{position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:999px;background:#8C939D;
+    transition:none}
+  .switch.on{background:rgba(255,107,74,.36)}
+  .switch.on i{left:19px;background:var(--brand)}
+  .toggle-group{display:inline-flex;gap:8px;flex:none}
+  .modepick{display:flex;gap:8px;flex:none}
+  .modepick div{font-size:11.5px;padding:4px 12px;border-radius:8px;color:var(--t3);
+    border:1px solid var(--line2);background:rgba(255,255,255,.04)}
+  .modepick div.on{background:var(--brand-mut);border-color:transparent;color:#FFA184;font-weight:640}
+  .stepper{display:flex;align-items:center;gap:2px;border:1px solid var(--line2);border-radius:8px;
+    background:rgba(255,255,255,.04);flex:none}
+  .stepper b{width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:var(--t2)}
+  .stepper span{font-size:11.5px;min-width:26px;text-align:center;font-variant-numeric:tabular-nums}
+  .swatches{display:flex;gap:5px;flex:none}
+  .swatches i{width:20px;height:20px;border-radius:6px;border:1px solid rgba(255,255,255,.16)}
+  .swatches i.on{box-shadow:0 0 0 2px var(--brand)}
+  .kbdlist{display:flex;flex-direction:column;gap:2px}
+  .krow{display:flex;align-items:center;gap:13px;padding:10px 12px;border-radius:9px}
+  .krow+.krow{border-top:1px solid var(--line)}
+  .krow .kn{min-width:150px}
+  .krow .kk{margin-left:auto;display:flex;gap:5px;align-items:center}
+  .kkey{font-size:11px;padding:3px 9px;border-radius:6px;border:1px solid var(--line2);
+    background:rgba(255,255,255,.05);color:var(--t2)}
+  .kkey.none{color:var(--t4);font-style:italic}
+  .taskrow{display:flex;align-items:center;gap:12px;padding:10px 10px;border-radius:9px}
+  .taskrow:hover{background:var(--hov)}
+  .taskrow .cov{width:40px;height:40px;border-radius:7px;flex:none}
+  .taskrow .tt{flex:1;min-width:0}
+  .taskrow .ts{font-size:11px;color:var(--t3);margin-top:3px}
+  .taskrow .bar{height:3px;border-radius:999px;background:rgba(255,255,255,.12);margin-top:6px;overflow:hidden}
+  .taskrow .bar i{display:block;height:100%;background:var(--brand)}
+  .taskrow .bad{font-size:10.5px;color:#E4736A;margin-top:4px}
+  .tabs2{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:14px}
+  .tabs2 b{font-size:12.5px;padding:8px 14px;color:var(--t3);border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tabs2 b.on{color:var(--t1);font-weight:620;border-bottom-color:var(--brand)}
+  .plrow2{display:flex;align-items:center;gap:12px;padding:11px 10px;border-radius:9px;border:1px solid var(--line);
+    background:rgba(255,255,255,.025);margin-bottom:9px}
+  .plrow2 .cov{width:44px;height:44px;border-radius:8px;flex:none}
+  .plrow2 .pl{flex:1;min-width:0}
+  .plugrow{display:flex;align-items:center;gap:12px;padding:11px 10px;border-radius:9px}
+  .plugrow+.plugrow{border-top:1px solid var(--line)}
+  .plugrow .pi{width:36px;height:36px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;
+    background:var(--mint-mut);color:var(--mint)}
+  .skelrow{height:54px;border-radius:9px;background:linear-gradient(90deg,rgba(255,255,255,.045),rgba(255,255,255,.02))}
+  .thumbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:12px}
+
+  .browser{position:relative;z-index:1;flex:1;min-height:0;display:flex;flex-direction:column}
+  .browser .bhead{display:flex;align-items:center;gap:12px;padding-bottom:16px}
+  .browser .two-pane{flex:1;min-height:0}
+
+  /* ---------- desktop lyric window ---------- */
+  .lyricwin{position:relative;width:100%;height:100%;overflow:hidden;display:flex;flex-direction:column;
+    border-radius:14px;
+    background:radial-gradient(70% 120% at 18% 0%,rgba(255,107,74,.22),transparent 62%),
+               radial-gradient(60% 110% at 88% 100%,rgba(90,208,190,.16),transparent 66%),
+               linear-gradient(160deg,#14161A,#0A0B0D 72%)}
+  .lwbar{display:flex;align-items:center;gap:8px;height:34px;flex:none;padding:0 12px;font-size:11.5px;
+    color:var(--t3);border-bottom:1px solid var(--line)}
+  .lwbar .lwacts{margin-left:auto;display:flex;gap:3px;color:var(--t2)}
+  .lwbar .lw{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center}
+  .lwbody{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    padding:0 24px}
+  .lwline{font-size:26px;font-weight:660;text-align:center;color:rgba(255,255,255,.34);
+    text-shadow:0 2px 14px rgba(0,0,0,.45)}
+  .lwline.now{color:#fff;font-size:34px;text-shadow:0 0 26px rgba(255,107,74,.4),0 2px 12px rgba(0,0,0,.5)}
   .queue{width:308px;flex:none;display:flex;flex-direction:column;overflow:hidden;
     background:linear-gradient(180deg,#15181C,#111316);border-left:1px solid var(--line)}
   .qhead{display:flex;align-items:center;gap:8px;padding:15px 14px 10px}
@@ -420,6 +560,15 @@ const P = {
   winMax:'<rect x="6.4" y="6.4" width="11.2" height="11.2" rx="1.6"/>',
   winClose:'<path d="M6.8 6.8l10.4 10.4M17.2 6.8L6.8 17.2"/>',
   arrowDown:'<path d="M12 5.5v12M7.6 13.2L12 17.6l4.4-4.4"/>',
+  extension:'<path d="M10.5 4.2h7.3v7.3M20.5 13.5h-7.3v7.3"/><path d="M14.2 4.2h3.6a2.2 2.2 0 0 1 2.2 2.2v3.6"/><path d="M4.2 10.5h3.6v3.6H4.2z" transform="translate(4.6 4.4)"/>',
+  storage:'<ellipse cx="12" cy="6" rx="7.4" ry="3"/><path d="M4.6 6v12c0 1.7 3.3 3 7.4 3s7.4-1.3 7.4-3V6"/><path d="M4.6 12c0 1.7 3.3 3 7.4 3s7.4-1.3 7.4-3"/>',
+  folder:'<path d="M3.6 6.4h5.2l1.8 2.2h9.8v9.4H3.6z"/>',
+  copy:'<rect x="8.6" y="8.6" width="11" height="11" rx="2.2"/><path d="M15.4 8.6V6.4a2.2 2.2 0 0 0-2.2-2.2H6.4a2.2 2.2 0 0 0-2.2 2.2v7a2.2 2.2 0 0 0 2.2 2.2"/>',
+  edit:'<path d="M4.6 19.4h3.2l9.6-9.6-3.2-3.2L4.6 16.2z"/><path d="M14.6 5.2l3.2 3.2"/>',
+  info:'<circle cx="12" cy="12" r="8.6"/><path d="M12 11v5.2M12 7.8v.6"/>',
+  minus:'<path d="M6 12h12"/>',
+  refresh:'<path d="M19.4 12a7.4 7.4 0 1 1-2.2-5.2"/><path d="M19.6 4.6v4.2h-4.2"/>',
+  lock:'<rect x="5.4" y="10.6" width="13.2" height="9.2" rx="2.2"/><path d="M8.4 10.6V8.2a3.6 3.6 0 0 1 7.2 0v2.4"/>',
 };
 const FILLED = new Set(['prev','next','play','pause','heart']);
 const ico = (n, cls = '') =>
@@ -485,78 +634,21 @@ const desktopDiscover = (o = {}) => `
         <div class="avatar"></div>
         <div class="usermeta"><div class="un">沈屿</div><div class="ul">本地曲库 · 1,248 首</div></div>
       </div>
-      <div class="navitem on">${ico('compass')} 发现</div>
-      <div class="navitem">${ico('music')} 内容库 <span class="badge">1248</span></div>
-      <div class="navitem">${ico('heart')} 我喜欢 <span class="badge">86</span></div>
-      <div class="navitem">${ico('download')} 已下载 <span class="badge">23</span></div>
-      <div class="navsec">我的歌单 <span class="newbtn">${ico('plus','xs')} 新建</span></div>
-      <div class="plrow"><div class="plcov art a2"></div><span class="ell">深夜通勤电台</span></div>
-      <div class="plrow"><div class="plcov art a4"></div><span class="ell">半岛与公路</span></div>
-      <div class="plrow"><div class="plcov art a5"></div><span class="ell">专注十分钟</span></div>
-      <div class="plrow"><div class="plcov art a7"></div><span class="ell">花园与雨</span></div>
-      <div class="navfoot">${ico('settings')} 设置与插件</div>
+      ${navItems(o)}
+      ${navFoot(o)}
     </aside>
     <div class="main">
-      <div class="topbar">
-        <div class="navarrow dim">${ico('chevLeft')}</div>
-        <div class="navarrow">${ico('chevRight')}</div>
-        <div class="searchbox">${ico('search','sm')} 搜索歌曲、歌手、专辑 <span class="kbd">Ctrl K</span></div>
-        <div class="topright">
-          <div class="topico">${ico('sparkle')}</div>
-          <div class="topico">${ico('bell')}</div>
-        </div>
-        <div class="winbtns">
-          <div class="wb">${ico('winMin','xs')}</div>
-          <div class="wb">${ico('winMax','xs')}</div>
-          <div class="wb close">${ico('winClose','xs')}</div>
-        </div>
-      </div>
+      ${topBar(o)}
       <div class="above">
-        ${o.queue ? `<div class="queue">
-          <div class="qhead"><div class="qt">当前播放</div><div class="qn">24 首</div>
-            <div class="qx">${ico('x','sm')}</div></div>
-          <div class="qtabs"><div class="qtab on">播放队列</div><div class="qtab">我喜欢</div></div>
-          <div class="qlist">${TRACKS.map((t, i) => `
-            <div class="qrow ${i === 0 ? 'on' : ''}">
-              <div class="art ${t.art}"></div>
-              <div class="grow ell"><div class="q1 ell">${t.t}</div><div class="q2">${t.a}</div></div>
-              <div class="qd">${t.d}</div>
-            </div>`).join('')}</div>
-          <div class="qfoot">${ico('arrowDown','xs')} 清空队列</div>
-        </div>` : ''}
+        ${o.queue ? queuePanel(o) : ''}
         <div class="content">
           <div class="pagehead">
-            <div><div class="pagetitle">发现</div><div class="pagesub">根据本地曲库生成的每日电台与热门歌单</div></div>
+            <div><div class="pagetitle">发现</div><div class="pagesub">根据本地曲库推荐</div></div>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <div class="pillbtn">${ico('extension','xs')} 插件榜单</div>
+            </div>
           </div>
-          <div class="hero">
-            <div class="glow"></div>
-            <div class="art bigart a10"></div>
-            <div class="tag">每日电台</div>
-            <h2>深夜通勤电台</h2>
-            <p>基于你喜欢和最近播放生成 · 已更新 42 首</p>
-            <div class="heroacts"><div class="btn">${ico('play','sm')} 立即播放</div>
-              <div class="btn ghost">${ico('plus','sm')} 收藏</div></div>
-          </div>
-          <div class="sec"><h3>为你推荐</h3><span class="sub">12 张更新</span>
-            <div class="more">全部 ${ico('chevRight','xs')}</div></div>
-          <div class="covergrid">
-            ${['a2','a3','a4','a5','a6','a7'].map((a, i) => `
-              <div class="card"><div class="cov art ${a}">
-                <div class="playcount">${ico('play','xs')} ${(12 - i * 1.7).toFixed(1)} 万</div>
-                <div class="play">${ico('play','xs')}</div>
-              </div><div class="ct ell">${['都市漫游指南','半岛与公路','花园与雨','未寄出的信','独立阅读室','深夜便利店'][i]}</div>
-              <div class="cs ell">${['新歌合集 · 32 首','概念歌单 · 18 首','节奏与松弛','旧信与邮戳','安静环境声','城市夜曲'][i]}</div></div>`).join('')}
-          </div>
-          <div class="sec"><h3>最近入库</h3><span class="sub">本周 14 首</span>
-            <div class="more">全部 ${ico('chevRight','xs')}</div></div>
-          <div>
-            ${TRACKS.slice(0, 3).map((t, i) => `
-              <div class="minirow">
-                <div class="art ${t.art}"></div>
-                <div class="mt"><div class="ell">${t.t}</div><div class="ma">${t.a} · ${t.al}</div></div>
-                <div class="md">${t.d}</div>
-              </div>`).join('')}
-          </div>
+          ${o.browser ? discoverBrowserOverlay() : discoverBlocks()}
         </div>
       </div>
       ${playerBar(o)}
@@ -571,29 +663,11 @@ const desktopLibrary = (o = {}) => `
         <div class="avatar"></div>
         <div class="usermeta"><div class="un">沈屿</div><div class="ul">本地曲库 · 1,248 首</div></div>
       </div>
-      <div class="navitem">${ico('compass')} 发现</div>
-      <div class="navitem on">${ico('music')} 内容库 <span class="badge">1248</span></div>
-      <div class="navitem">${ico('heart')} 我喜欢 <span class="badge">86</span></div>
-      <div class="navitem">${ico('download')} 已下载 <span class="badge">23</span></div>
-      <div class="navsec">我的歌单 <span class="newbtn">${ico('plus','xs')} 新建</span></div>
-      <div class="plrow"><div class="plcov art a2"></div><span class="ell">深夜通勤电台</span></div>
-      <div class="plrow"><div class="plcov art a4"></div><span class="ell">半岛与公路</span></div>
-      <div class="plrow"><div class="plcov art a5"></div><span class="ell">专注十分钟</span></div>
-      <div class="plrow"><div class="plcov art a7"></div><span class="ell">花园与雨</span></div>
-      <div class="navfoot">${ico('settings')} 设置与插件</div>
+      ${navItems(o)}
+      ${navFoot(o)}
     </aside>
     <div class="main">
-      <div class="topbar">
-        <div class="navarrow dim">${ico('chevLeft')}</div>
-        <div class="navarrow">${ico('chevRight')}</div>
-        <div class="searchbox">${ico('search','sm')} 搜索歌曲、歌手、专辑 <span class="kbd">Ctrl K</span></div>
-        <div class="topright"><div class="topico">${ico('sparkle')}</div></div>
-        <div class="winbtns">
-          <div class="wb">${ico('winMin','xs')}</div>
-          <div class="wb">${ico('winMax','xs')}</div>
-          <div class="wb close">${ico('winClose','xs')}</div>
-        </div>
-      </div>
+      ${topBar(o)}
       <div class="above">
         <div class="content">
           <div class="pagehead">
@@ -748,9 +822,626 @@ const mobileLandscape = () => `
 const DESIGNS = {
   'desktop-discover': () => desktopDiscover({ queue: true, lyric: true }),
   'desktop-library':  () => desktopLibrary({ np: true, lyric: true }),
+  'desktop-search':    () => desktopSearch({ queue: false, lyric: true }),
+  'desktop-playlists': () => desktopPlaylists({ queue: false, lyric: true }),
+  'desktop-downloads': () => desktopDownloads({ queue: false, lyric: true }),
+  'desktop-plugins':   () => desktopPlugins({ queue: false, lyric: true }),
+  'desktop-plugin-import-url': () => desktopPluginImportUrl(),
+  'desktop-plugin-variables':  () => desktopPluginVariables(),
+  'desktop-settings':  () => desktopSettings({ queue: false, lyric: true, setTab: 'general' }),
+  'desktop-settings-appearance': () => desktopSettings({ queue: false, lyric: true, setTab: 'appearance' }),
+  'desktop-settings-shortcuts':  () => desktopSettings({ queue: false, lyric: true, setTab: 'shortcuts' }),
+  'desktop-settings-lyrics':     () => desktopSettings({ queue: false, lyric: true, setTab: 'lyrics' }),
+  'desktop-lyric': () => desktopLyricWindow(),
+  'desktop-discover-browser': () => desktopDiscover({ queue: false, lyric: true, browser: true }),
+  'mobile-overflow':   () => mobileOverflowSheet(),
   'mobile-portrait':  () => mobilePortrait(),
   'mobile-landscape': () => mobileLandscape(),
 };
+
+const navItems = (o = {}) => `
+  <div class="navitem ${o.tab === 'discover' ? 'on' : ''}">${ico('compass')} 发现</div>
+  <div class="navitem ${o.tab === 'library' ? 'on' : ''}">${ico('music')} 内容库 <span class="badge">1248</span></div>
+  <div class="navitem ${o.tab === 'playlists' ? 'on' : ''}">${ico('heart')} 我的音乐 <span class="badge">${o.tab === 'playlists' ? '6 歌单' : '86'}</span></div>
+  <div class="navitem ${o.tab === 'downloads' ? 'on' : ''}">${ico('download')} 下载管理 <span class="badge">${o.tab === 'downloads' ? '3' : ''}</span></div>
+  <div class="navsecrow">工具</div>
+  <div class="navmini">${ico('extension','sm')} 插件<span class="badge" style="margin-left:auto">4</span></div>
+  <div class="navmini">${ico('settings','sm')} 设置</div>`;
+
+const navFoot = (o = {}) => `
+  <div class="navfoot">${ico('disc')} Robyne MVP <span style="margin-left:auto;font-size:11px;color:var(--t4)">v0.1</span></div>`;
+
+const topBar = (o = {}) => `
+  <div class="topbar">
+    <div class="navarrow dim">${ico('chevLeft')}</div>
+    <div class="navarrow">${ico('chevRight')}</div>
+    <div class="searchbox">${ico('search','sm')} 搜索歌曲、歌手、专辑 <span class="kbd">Ctrl K</span></div>
+    <div class="topright">
+      <div class="topico ${o.lyric ? 'on' : ''}" title="桌面歌词">${ico('lyricWin')}</div>
+    </div>
+    <div class="winbtns">
+      <div class="wb">${ico('winMin','xs')}</div>
+      <div class="wb">${ico('winMax','xs')}</div>
+      <div class="wb close">${ico('winClose','xs')}</div>
+    </div>
+  </div>`;
+
+const queuePanel = (o = {}) => `
+  <div class="queue">
+    <div class="qhead"><div class="qt">当前播放</div><div class="qn">6 首</div>
+      <div class="qx">${ico('x','sm')}</div></div>
+    <div class="qtabs"><div class="qtab on">播放队列</div><div class="qtab">红心</div></div>
+    <div class="qlist">${TRACKS.map((t, i) => `
+      <div class="qrow ${i === 0 ? 'on' : ''}">
+        <div class="art ${t.art}"></div>
+        <div class="grow ell"><div class="q1 ell">${t.t}</div><div class="q2">${t.a}</div></div>
+        <div class="qd">${t.d}</div>
+      </div>`).join('')}</div>
+    <div class="qfoot">${ico('arrowDown','xs')} 清空队列</div>
+  </div>`;
+
+const discoverBlocks = () => `
+  <div class="hero" style="height:128px">
+    <div class="glow"></div>
+    <div class="art bigart a10"></div>
+    <div class="tag">插件榜单 · 热歌榜</div>
+    <h2>本周热歌</h2>
+    <p>来自已启用插件 · 点击右侧「插件榜单」浏览全部</p>
+    <div class="heroacts"><div class="btn">${ico('play','sm')} 立即播放</div>
+      <div class="btn ghost">${ico('plus','sm')} 收藏</div></div>
+  </div>
+  <div class="sec"><h3>为你推荐</h3><span class="sub">等待插件数据</span>
+    <div class="more">全部 ${ico('chevRight','xs')}</div></div>
+  <div class="covergrid">
+    ${['a2','a3','a4','a5','a6','a7'].map((a, i) => `
+      <div class="card"><div class="cov art ${a}">
+        <div class="playcount">${ico('play','xs')} 本地</div>
+        <div class="play">${ico('play','xs')}</div>
+      </div><div class="ct ell">${['都市漫游指南','半岛与公路','花园与雨','未寄出的信','独立阅读室','深夜便利店'][i]}</div>
+      <div class="cs ell">启用插件后自动更新</div></div>`).join('')}
+  </div>
+  <div class="sec"><h3>最近入库</h3><span class="sub">本机 · 6 首</span>
+    <div class="more">全部 ${ico('chevRight','xs')}</div></div>
+  <div>
+    ${TRACKS.slice(0, 3).map((t) => `
+      <div class="minirow">
+        <div class="art ${t.art}"></div>
+        <div class="mt"><div class="ell">${t.t}</div><div class="ma">${t.a} · ${t.al}</div></div>
+        <div class="md">${t.d}</div>
+      </div>`).join('')}
+  </div>
+  <div style="padding-top:16px">
+    <div class="hintbox">${ico('extension')}
+      <div>启用音乐插件后，推荐与榜单会自动出现在这里。</div>
+      <div class="pillbtn" style="margin-left:auto">${ico('settings','xs')} 去启用</div></div>
+  </div>`;
+
+const discoverBrowserOverlay = () => `
+  <div class="browser">
+    <div class="bhead">
+      <div class="pillbtn">${ico('chevLeft','xs')} 返回发现</div>
+      <b style="font-size:15px;font-weight:680">插件榜单</b>
+      <div class="pillbtn" style="margin-left:auto">${ico('refresh','xs')} 刷新</div>
+    </div>
+    <div class="two-pane">
+      <div class="pane">
+        <h4>来源</h4>
+        <div class="tagwrap" style="padding-bottom:12px">
+          <span class="tchip on">QQ音乐</span><span class="tchip">网易云</span><span class="tchip">酷狗</span>
+        </div>
+        <div class="segbar" style="margin-bottom:12px"><b class="on">${ico('trophy','sm')} 排行榜</b><b>${ico('grid','sm')} 热门歌单</b></div>
+        <h4>热门歌单标签</h4>
+        <div class="tagwrap" style="padding-bottom:12px">
+          <span class="tchip on">全部</span><span class="tchip">华语</span><span class="tchip">民谣</span>
+          <span class="tchip">电子</span><span class="tchip">安静</span>
+          <span class="tchip">${ico('sliders','xs')} 更多标签</span>
+        </div>
+        <div style="flex:1;min-height:0;overflow:hidden">
+          ${['热歌榜','新歌榜','原创榜'].map((n, i) => `
+            <div class="collist ${i === 0 ? 'on' : ''}">
+              <div class="cov art ${['a1','a3','a5'][i]}"></div>
+              <div class="grow ell"><div class="ct ell">${n}</div><div class="cd">每周五更新 · 100 首</div></div>
+              <div class="cgo">${ico('chevRight','sm')}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+      <div class="pane">
+        <div class="dethead">
+          <div class="cov art a1"></div>
+          <div class="grow ell">
+            <div class="dt ell">热歌榜</div>
+            <div class="dd ell">来自已启用插件的实时榜单</div>
+            <div class="dm">100 首</div>
+          </div>
+          <div class="pillbtn">${ico('refresh','xs')}</div>
+        </div>
+        <div style="flex:1;min-height:0;overflow:hidden">
+          ${TRACKS.map((t) => `
+            <div class="collist">
+              <div class="cov art ${t.art}" style="width:38px;height:38px"></div>
+              <div class="grow ell"><div class="ct ell">${t.t}</div><div class="cd">${t.a}</div></div>
+              <div class="rowacts"><div class="ra">${ico('play','sm')}</div>
+                <div class="ra">${ico('download','sm')}</div></div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+const desktopSearch = (o = {}) => `
+  <div class="board" id="desktop-search" style="width:1280px;height:800px">
+    <aside class="nav">
+      <div class="navbrand">${ico('disc')}<b>Robyne</b></div>
+      <div class="userchip"><div class="avatar"></div>
+        <div class="usermeta"><div class="un">沈屿</div><div class="ul">本地曲库 · 1,248 首</div></div></div>
+      ${navItems({ ...o, tab: 'search' })}
+      ${navFoot(o)}
+    </aside>
+    <div class="main">
+      ${topBar(o)}
+      <div class="above">
+        ${o.queue ? queuePanel(o) : ''}
+        <div class="content">
+          <div class="pagehead">
+            <div><div class="pagetitle">搜索</div><div class="pagesub">跨已启用插件搜索歌曲、歌手、专辑</div></div>
+          </div>
+          <div class="row" style="gap:10px;padding-bottom:14px">
+            <div class="searchbox" style="max-width:none;flex:1;background:var(--surf)">
+              ${ico('search','sm')} 夜航航线 <span class="kbd" style="margin-left:auto">Enter</span></div>
+            <div class="pillbtn primary">${ico('search','xs')} 搜索</div>
+          </div>
+          <div class="tagwrap" style="padding-bottom:14px">
+            <span class="tchip on">全部插件 128</span><span class="tchip">QQ音乐 42</span>
+            <span class="tchip">网易云 36</span><span class="tchip">酷狗 50</span>
+          </div>
+          <div class="mlist" style="flex:1;min-height:0">
+            ${TRACKS.map((t, i) => `
+              <div class="trow" style="grid-template-columns:38px 1fr 190px 130px">
+                <div class="n">${i + 1}</div>
+                <div class="row">
+                  <div class="art ${t.art}"></div>
+                  <div class="grow ell" style="margin-left:12px">
+                    <div class="row"><span class="tt ell">${t.t}</span>
+                      <span class="qchips"><span class="chip">${['QQ音乐','网易云','酷狗'][i % 3]}</span></span></div>
+                    <div class="ta ell">${t.a} · ${t.al}</div>
+                  </div>
+                </div>
+                <div class="talb ell">来自插件</div>
+                <div class="rowacts">
+                  <div class="ra">${ico('play','sm')}</div>
+                  <div class="ra">${ico('download','sm')}</div>
+                  <div class="ra">${ico('moreV','xs')}</div>
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+      ${playerBar(o)}
+    </div>
+  </div>`;
+
+const desktopPlaylists = (o = {}) => `
+  <div class="board" id="desktop-playlists" style="width:1280px;height:800px">
+    <aside class="nav">
+      <div class="navbrand">${ico('disc')}<b>Robyne</b></div>
+      <div class="userchip"><div class="avatar"></div>
+        <div class="usermeta"><div class="un">沈屿</div><div class="ul">本地曲库 · 1,248 首</div></div></div>
+      ${navItems({ ...o, tab: 'playlists' })}
+      ${navFoot(o)}
+    </aside>
+    <div class="main">
+      ${topBar(o)}
+      <div class="above">
+        ${o.queue ? queuePanel(o) : ''}
+        <div class="content">
+          <div class="pagehead">
+            <div><div class="pagetitle">我的音乐</div><div class="pagesub">歌单与红心歌曲</div></div>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <div class="pillbtn primary">${ico('plus','xs')} 新建歌单</div>
+            </div>
+          </div>
+          <div class="plrow2">
+            <div class="cov art a1"></div>
+            <div class="pl"><div class="tt ell">我喜欢的音乐</div>
+              <div class="ta ell">86 首 · 红心歌曲自动收藏</div></div>
+            <div class="pillbtn">${ico('play','xs')} 播放</div>
+          </div>
+          ${['深夜通勤电台','半岛与公路','专注十分钟','花园与雨','未寄出的信'].map((n, i) => `
+            <div class="plrow2">
+              <div class="cov art ${['a2','a4','a5','a7','a3'][i]}"></div>
+              <div class="pl"><div class="tt ell">${n}</div>
+                <div class="ta ell">${18 + i * 7} 首</div></div>
+              <div class="pillbtn">${ico('play','xs')} 播放</div>
+              <div class="ra" style="color:var(--t3)">${ico('moreV','xs')}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+      ${playerBar(o)}
+    </div>
+  </div>`;
+
+const desktopDownloads = (o = {}) => `
+  <div class="board" id="desktop-downloads" style="width:1280px;height:800px">
+    <aside class="nav">
+      <div class="navbrand">${ico('disc')}<b>Robyne</b></div>
+      <div class="userchip"><div class="avatar"></div>
+        <div class="usermeta"><div class="un">沈屿</div><div class="ul">本地曲库 · 1,248 首</div></div></div>
+      ${navItems({ ...o, tab: 'downloads' })}
+      ${navFoot(o)}
+    </aside>
+    <div class="main">
+      ${topBar(o)}
+      <div class="above">
+        ${o.queue ? queuePanel(o) : ''}
+        <div class="content">
+          <div class="pagehead">
+            <div><div class="pagetitle">下载管理</div><div class="pagesub">下载中 2 · 已完成 23</div></div>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <div class="pillbtn">${ico('sliders','xs')} 下载格式</div>
+            </div>
+          </div>
+          <div class="tabs2"><b class="on">下载中</b><b>已完成</b></div>
+          <div class="mlist" style="flex:1;min-height:0">
+            <div class="taskrow">
+              <div class="cov art a1"></div>
+              <div class="tt"><div class="ell">夜航航线</div>
+                <div class="ts">下载中 62%</div>
+                <div class="bar"><i style="width:62%"></i></div></div>
+              <div class="ra" style="color:var(--t3)">${ico('x','sm')}</div>
+            </div>
+            <div class="taskrow">
+              <div class="cov art a5"></div>
+              <div class="tt"><div class="ell">远山的信号塔</div>
+                <div class="ts">转码中</div>
+                <div class="bar"><i style="width:88%"></i></div></div>
+              <div class="ra" style="color:var(--t3)">${ico('x','sm')}</div>
+            </div>
+            <div class="taskrow">
+              <div class="cov art a3"></div>
+              <div class="tt"><div class="ell">城市气象</div>
+                <div class="bad">下载失败 · 连接超时</div></div>
+              <div class="ra" style="color:var(--t3)">${ico('refresh','sm')}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      ${playerBar(o)}
+    </div>
+  </div>`;
+
+// The plugins chrome without its own board wrapper, so the two plugin dialogs
+// can render over the real page instead of over a blank canvas.
+const desktopPluginsChrome = (o = {}) => `
+  <aside class="nav">
+    <div class="navbrand">${ico('disc')}<b>Robyne</b></div>
+    <div class="userchip"><div class="avatar"></div>
+      <div class="usermeta"><div class="un">沈屿</div><div class="ul">本地曲库 · 1,248 首</div></div></div>
+    ${navItems({ ...o, tab: 'plugins' })}
+    ${navFoot(o)}
+  </aside>
+  <div class="main">
+    ${topBar(o)}
+    <div class="above">
+      ${o.queue ? queuePanel(o) : ''}
+      <div class="content">
+        <div class="pagehead">
+          <div><div class="pagetitle">插件</div><div class="pagesub">导入 MusicFree 风格 JavaScript 插件</div></div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <div class="pillbtn">${ico('plus','xs')} 导入文件</div>
+            <div class="pillbtn">${ico('plus','xs')} 导入文件夹</div>
+            <div class="pillbtn primary">${ico('plus','xs')} 从 URL 导入</div>
+          </div>
+        </div>
+        <div class="mlist" style="flex:1;min-height:0">
+          ${[
+            { n:'QQ音乐', v:'v1.2', a:'官方', t:'song,album', on:true },
+            { n:'网易云音乐', v:'v0.9', a:'社区', t:'song,playlist', on:true },
+            { n:'酷狗音乐', v:'v1.0', a:'社区', t:'song', on:false },
+            { n:'咪咕音乐', v:'v0.3', a:'社区', t:'song', on:true, vars:true },
+          ].map((p) => `
+            <div class="plugrow">
+              <div class="pi">${ico('extension')}</div>
+              <div class="grow ell">
+                <div class="tt ell">${p.n}</div>
+                <div class="ta ell">${p.v} · ${p.a} · ${p.t}</div>
+              </div>
+              ${p.vars ? `<div class="ra" style="color:var(--t3)" title="配置">${ico('sliders','sm')}</div>` : ''}
+              <div class="switch ${p.on ? 'on' : ''}"><i></i></div>
+              <div class="ra" style="color:var(--t3)">${ico('download','sm')}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+    ${playerBar(o)}
+  </div>`;
+
+const desktopPlugins = (o = {}) => `
+  <div class="board" id="desktop-plugins" style="width:1280px;height:800px">
+    ${desktopPluginsChrome(o)}
+  </div>`;
+
+const desktopSettings = (o = {}) => `
+  <div class="board" id="desktop-settings" style="width:1280px;height:800px">
+    <aside class="nav">
+      <div class="navbrand">${ico('disc')}<b>Robyne</b></div>
+      <div class="userchip"><div class="avatar"></div>
+        <div class="usermeta"><div class="un">沈屿</div><div class="ul">本地曲库 · 1,248 首</div></div></div>
+      ${navItems({ ...o, tab: 'settings' })}
+      ${navFoot(o)}
+    </aside>
+    <div class="main">
+      ${topBar(o)}
+      <div class="above">
+        ${o.queue ? queuePanel(o) : ''}
+        <div class="content">
+          <div class="pagehead">
+            <div><div class="pagetitle">设置</div><div class="pagesub">常规 · 外观 · 快捷键 · 歌词</div></div>
+          </div>
+          <div class="tabs2">
+            <b class="${o.setTab === 'general' ? 'on' : ''}">常规</b>
+            <b class="${o.setTab === 'appearance' ? 'on' : ''}">外观</b>
+            <b class="${o.setTab === 'shortcuts' ? 'on' : ''}">快捷键</b>
+            <b class="${o.setTab === 'lyrics' ? 'on' : ''}">歌词</b>
+          </div>
+          ${settingsBody(o)}
+        </div>
+      </div>
+      ${playerBar(o)}
+    </div>
+  </div>`;
+
+const settingsBody = (o = {}) => {
+  const tab = o.setTab || 'general';
+  if (tab === 'general') {
+    return `
+      <div>
+        <div class="setrow">
+          <div class="si">${ico('storage','sm')}</div>
+          <div class="st"><div class="s1">缓存大小</div><div class="s2">512 MB</div></div>
+          <div class="sc">${ico('chevRight','sm')}</div>
+        </div>
+        <div class="setrow">
+          <div class="si">${ico('folder','sm')}</div>
+          <div class="st"><div class="s1">缓存位置</div><div class="s2">D:\\Robyne\\cache</div></div>
+          <div class="sc">${ico('folder','sm')}</div>
+        </div>
+        <div class="setrow">
+          <div class="si">${ico('download','sm')}</div>
+          <div class="st"><div class="s1">下载位置</div><div class="s2">D:\\Robyne\\downloads</div></div>
+          <div class="sc">${ico('folder','sm')}</div>
+        </div>
+        <div class="setrow">
+          <div class="si">${ico('music','sm')}</div>
+          <div class="st"><div class="s1">下载格式</div><div class="s2">FLAC</div></div>
+          <div class="sc">${ico('chevRight','sm')}</div>
+        </div>
+      </div>`;
+  }
+  if (tab === 'appearance') {
+    return `
+      <div>
+        <div class="setrow">
+          <div class="st" style="flex:none"><div class="s1">外观模式</div></div>
+          <div class="sc modepick"><div>跟随系统</div><div class="on">深色</div><div>浅色</div></div>
+        </div>
+        <div class="setrow">
+          <div class="st" style="flex:none"><div class="s1">当前皮肤</div><div class="s2">《玄》· 内置旗舰皮肤</div></div>
+          <div class="sc"><span class="chip">v1.0</span></div>
+        </div>
+        <div class="hintbox" style="margin-top:12px">${ico('edit')}
+          <div>编辑 theme.json 或随包资源，客户端会自动重载。</div>
+          <div class="pillbtn" style="margin-left:auto">${ico('copy','xs')} 复制路径</div>
+        </div>
+      </div>`;
+  }
+  if (tab === 'shortcuts') {
+    const rows = [
+      ['播放 / 暂停', 'Space'],
+      ['音量 +', '↑'],
+      ['音量 -', '↓'],
+      ['上一句', '←'],
+      ['本句开头', '← ←'],
+      ['下一句', '→'],
+      ['下一首', null],
+      ['上一首', null],
+      ['桌面歌词', null],
+      ['喜欢 / 取消喜欢', null],
+    ];
+    return `
+      <div>
+        <div class="hintbox" style="margin-bottom:12px">${ico('info')}
+          <div>点击右侧按键重新录制；未设置项显示「未绑定」。</div></div>
+        <div class="kbdlist">
+          ${rows.map(([label, key]) => `
+            <div class="krow">
+              <div class="kn"><div class="s1">${label}</div></div>
+              <div class="kk">${key ? `<span class="kkey">${key}</span>` : '<span class="kkey none">未绑定</span>'}</div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }
+  return `
+    <div>
+      <div class="setrow">
+        <div class="st"><div class="s1">显示桌面歌词</div><div class="s2">支持桌面与播放器同步</div></div>
+        <div class="sc"><div class="switch on"><i></i></div></div>
+      </div>
+      <div class="setrow">
+        <div class="st"><div class="s1">桌面歌词置顶</div><div class="s2">歌词窗口始终位于最前方</div></div>
+        <div class="sc"><div class="switch on"><i></i></div></div>
+      </div>
+      <div class="setrow">
+        <div class="st"><div class="s1">锁定桌面歌词</div><div class="s2">锁定后歌词窗口不可拖动</div></div>
+        <div class="sc"><div class="switch"><i></i></div></div>
+      </div>
+      <div class="setrow">
+        <div class="st"><div class="s1">双排模式</div><div class="s2">显示当前句与下一句的双排歌词</div></div>
+        <div class="sc"><div class="switch"><i></i></div></div>
+      </div>
+      <div class="setrow">
+        <div class="st"><div class="s1">歌词字体大小</div><div class="s2">桌面歌词字号 (12-80)</div></div>
+        <div class="sc stepper"><b>${ico('minus','xs')}</b><span>28</span><b>${ico('plus','xs')}</b></div>
+      </div>
+      <div class="setrow">
+        <div class="st"><div class="s1">歌词颜色</div><div class="s2">当前歌词填充颜色</div></div>
+        <div class="sc swatches"><i class="on" style="background:#FFFFFF"></i>
+          <i style="background:#FF6B4A"></i><i style="background:#5AD0BE"></i></div>
+      </div>
+    </div>`;
+};
+
+const desktopLyricWindow = () => `
+  <div class="board" id="desktop-lyric" style="width:900px;height:220px">
+    <div class="lyricwin">
+      <div class="lwbar">
+        <span>${ico('lyricWin','xs')} 桌面歌词</span>
+        <div class="lwacts">
+          <div class="lw">${ico('prev','xs')}</div>
+          <div class="lw">${ico('play','xs')}</div>
+          <div class="lw">${ico('next','xs')}</div>
+          <div class="lw">${ico('lock','xs')}</div>
+        </div>
+      </div>
+      <div class="lwbody">
+        <div class="lwline dim">城市在收音机里换了一首</div>
+        <div class="lwline now">夜航航线正穿过年轻的云层</div>
+      </div>
+    </div>
+  </div>`;
+
+// Plugin import is a real second-level surface in the app: the plugins page
+// owns three import entries (file / folder / URL) and the URL one opens a
+// dialog. Drawing it keeps the "which entries are second-level" answer honest
+// instead of leaving the import flow to the implementer's imagination.
+const desktopPluginImportUrl = () => `
+  <div class="board" id="desktop-plugin-import-url" style="width:1280px;height:800px">
+    ${desktopPluginsChrome({ queue: false, lyric: true })}
+    <div class="scrim">
+      <div class="dlg" style="width:520px">
+        <div class="dh">
+          <div class="di">${ico('download','sm')}</div>
+          <div style="flex:1;min-width:0">
+            <div class="dt">从 URL 导入插件</div>
+            <div class="ds">下载 JavaScript 插件文件并加入插件列表</div>
+          </div>
+        </div>
+        <div class="db">
+          <div class="field on">
+            <div class="fl">插件 URL</div>
+            <div class="fv">https://example.com/plugin.js</div>
+          </div>
+        </div>
+        <div class="df">
+          <div class="btn ghost">取消</div>
+          <div class="btn primary">导入</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+// Plugins can declare user variables (cookie / token / quality switch), and the
+// app renders them as a per-plugin config dialog. It is the plugins page's
+// second-level surface, reachable only from a row that declares variables.
+const desktopPluginVariables = () => `
+  <div class="board" id="desktop-plugin-variables" style="width:1280px;height:800px">
+    ${desktopPluginsChrome({ queue: false, lyric: true })}
+    <div class="scrim">
+      <div class="dlg" style="width:520px">
+        <div class="dh">
+          <div class="di">${ico('sliders','sm')}</div>
+          <div style="flex:1;min-width:0">
+            <div class="dt">配置 咪咕音乐</div>
+            <div class="ds">该插件声明了 3 个用户变量</div>
+          </div>
+        </div>
+        <div class="db">
+          <div class="vrow">
+            <div class="field">
+              <div class="fl">Cookie</div>
+              <div class="fv" style="color:var(--t3)">登录后的 Cookie 值</div>
+            </div>
+          </div>
+          <div class="vrow">
+            <div class="field">
+              <div class="fl">音质偏好</div>
+              <div class="fv">lossless</div>
+            </div>
+          </div>
+          <div class="vrow">
+            <div style="display:flex;align-items:center;gap:12px;padding:4px 2px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px">启用会员音源</div>
+                <div style="font-size:11px;color:var(--t3);margin-top:2px">关闭后只返回免费可播曲目</div>
+              </div>
+              <div class="switch on"><i></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="df">
+          <div class="btn ghost">取消</div>
+          <div class="btn primary">保存</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+// The phone's tab bar fits four entries; the rest live behind 更多. This is the
+// surface that keeps plugin import reachable on a phone (navigation.mobileOverflow
+// = moreTab), which is why it has to be drawn rather than implied.
+const mobileOverflowSheet = () => `
+  <div class="board" id="mobile-overflow" style="width:400px;height:800px">
+    <div class="m">
+      <div class="mstatus">
+        <div class="st">18:16</div>
+        <div class="st">${ico('signal','xs')}${ico('wifi','xs')}<div class="bat"></div></div>
+      </div>
+      <div class="mhead">
+        <div><div class="hi">发现</div><div class="hs">根据本地曲库推荐</div></div>
+        <div class="avatar"></div>
+      </div>
+      <div class="msearch">${ico('search','sm')} 搜索歌曲、歌手、专辑</div>
+      <div class="mquick">
+        <div class="mq"><div class="mi">${ico('sparkle')}</div>每日电台</div>
+        <div class="mq"><div class="mi t">${ico('trophy')}</div>排行榜</div>
+        <div class="mq"><div class="mi">${ico('grid')}</div>分类歌单</div>
+        <div class="mq"><div class="mi t">${ico('heart')}</div>我喜欢</div>
+      </div>
+      <div class="mbanner">
+        <div class="glow"></div><div class="art bigart a8"></div>
+        <b>深夜通勤电台</b><s>基于你的喜欢与最近播放生成</s>
+        <div class="pb">${ico('play','sm')}</div>
+      </div>
+      <div class="mlist" style="flex:1;min-height:0">
+        ${TRACKS.slice(0, 3).map((t, i) => `
+          <div class="mrow ${i === 0 ? 'on' : ''}">
+            <div class="art ${t.art}"></div>
+            <div class="mm"><div class="t ell">${t.t}</div><div class="s ell">${t.a}</div></div>
+            <div class="fav ${i % 2 === 0 ? 'on' : ''}">${ico('heart')}</div>
+          </div>`).join('')}
+      </div>
+      <div class="mplayer">
+        <div class="art a1"></div>
+        <div class="mm"><div class="t ell">夜航航线</div><div class="s ell">回声电台</div></div>
+        <div class="mb on">${ico('heart')}</div>
+        <div class="mb">${ico('moreV')}</div>
+        <div class="mplay">${ico('pause')}</div>
+        <div class="mb">${ico('queue')}</div>
+      </div>
+      <div class="mnav">
+        <div class="it">${ico('compass','sm')} 发现</div>
+        <div class="it">${ico('music','sm')} 内容库</div>
+        <div class="it">${ico('search','sm')} 搜索</div>
+        <div class="it on">${ico('moreH','sm')} 更多</div>
+      </div>
+      <div class="sheet">
+        <div class="sh"></div>
+        <div class="si2"><div class="sic">${ico('heart','sm')}</div>我的音乐<span class="sbadge">6</span></div>
+        <div class="si2"><div class="sic">${ico('download','sm')}</div>下载管理<span class="sbadge">3</span></div>
+        <div class="si2"><div class="sic">${ico('extension','sm')}</div>插件<span class="sbadge">4</span></div>
+        <div class="si2"><div class="sic">${ico('settings','sm')}</div>设置</div>
+      </div>
+    </div>
+  </div>`;
 
 // Review aid: open with #only=<id> (or ?only=<id>) to render a single board.
 const qs = new URLSearchParams(location.search);
@@ -762,9 +1453,22 @@ if (only && DESIGNS[only]) {
   app.innerHTML = DESIGNS[only]();
 } else {
   app.innerHTML = `
-    <div><div class="label">Desktop · Discover</div>${desktopDiscover({ queue: true, lyric: true })}</div>
-    <div><div class="label">Desktop · Library + Now Playing</div>${desktopLibrary({ np: true, lyric: true })}</div>
+    <div><div class="label">Desktop · 发现（一级入口 + 插件榜单）</div>${desktopDiscover({ queue: true, lyric: true })}</div>
+    <div><div class="label">Desktop · 插件榜单浏览器（发现页二级）</div>${desktopDiscover({ queue: false, lyric: true, browser: true })}</div>
+    <div><div class="label">Desktop · 搜索（插件来源 + 结果）</div>${desktopSearch({ queue: false, lyric: true })}</div>
+    <div><div class="label">Desktop · 内容库 + 沉浸播放页</div>${desktopLibrary({ np: true, lyric: true })}</div>
+    <div><div class="label">Desktop · 我的音乐（歌单 / 红心）</div>${desktopPlaylists({ queue: false, lyric: true })}</div>
+    <div><div class="label">Desktop · 下载管理</div>${desktopDownloads({ queue: false, lyric: true })}</div>
+    <div><div class="label">Desktop · 插件（二级入口）</div>${desktopPlugins({ queue: false, lyric: true })}</div>
+    <div><div class="label">Desktop · 插件 · 从 URL 导入</div>${desktopPluginImportUrl()}</div>
+    <div><div class="label">Desktop · 插件 · 配置用户变量</div>${desktopPluginVariables()}</div>
+    <div><div class="label">Desktop · 设置 · 常规</div>${desktopSettings({ queue: false, lyric: true, setTab: 'general' })}</div>
+    <div><div class="label">Desktop · 设置 · 外观</div>${desktopSettings({ queue: false, lyric: true, setTab: 'appearance' })}</div>
+    <div><div class="label">Desktop · 设置 · 快捷键</div>${desktopSettings({ queue: false, lyric: true, setTab: 'shortcuts' })}</div>
+    <div><div class="label">Desktop · 设置 · 歌词</div>${desktopSettings({ queue: false, lyric: true, setTab: 'lyrics' })}</div>
+    <div><div class="label">Desktop · 桌面歌词窗口</div>${desktopLyricWindow()}</div>
     <div><div class="label">Mobile · Portrait</div>${mobilePortrait()}</div>
+    <div><div class="label">Mobile · 更多（溢出入口）</div>${mobileOverflowSheet()}</div>
     <div><div class="label">Mobile · Landscape</div>${mobileLandscape()}</div>`;
 }
 </script>

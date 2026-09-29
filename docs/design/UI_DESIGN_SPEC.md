@@ -1,6 +1,7 @@
 # Robyne 旗舰 UI 视觉设计稿
 
-> 状态：**视觉定稿候选 · 与皮肤系统并行演进，作为阶段 1 压力测试**
+> 状态：**已定稿 · 已由《玄》皮肤与旗舰 UI 实现**（阶段 2 完成）
+> 本文仍是视觉判定的权威：实现与本文冲突时，以本文为准并改代码。
 > 关联：`docs/THEME_ROADMAP.md`（OPEN-1 / D2 / D4 / D6 / D7）、`docs/ADR-001-responsive-window-size-class.md`
 
 ---
@@ -330,8 +331,18 @@ Robyne 的标志性识别不是固定色块，而是「封面驱动氛围」：
 
 视觉稿文件：
 
+可交互 HTML：`docs/design/mockups/index.html`（可在浏览器打开，或用 Chrome headless 按画板截图）
+画板清单与静态导出文件见 `docs/design/mockups/README.md`。
+
+主要静态导出：
+
 - `docs/design/mockups/desktop-discover.png`
 - `docs/design/mockups/desktop-library.png`
+- `docs/design/mockups/desktop-search.png`
+- `docs/design/mockups/desktop-playlists.png`
+- `docs/design/mockups/desktop-downloads.png`
+- `docs/design/mockups/desktop-plugins.png`
+- `docs/design/mockups/desktop-settings.png`
+- `docs/design/mockups/desktop-lyric.png`
 - `docs/design/mockups/mobile-portrait.png`
 - `docs/design/mockups/mobile-landscape.png`
-- 可交互 HTML：`docs/design/mockups/index.html`
