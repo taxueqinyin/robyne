@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:robyne/app/app.dart';
 import 'package:robyne/core/result/result.dart';
+import 'package:robyne/core/theme/domain/theme_layout_override.dart';
 import 'package:robyne/features/downloads/domain/download_audio_format.dart';
 import 'package:robyne/features/lyrics/application/lyrics_providers.dart';
 import 'package:robyne/features/lyrics/domain/lyric_document.dart';
@@ -137,6 +138,7 @@ class _SeededSettingsController extends SettingsController {
       activeThemeId: UserSettings.defaultActiveThemeId,
       themeModeOverrideName: UserSettings.defaultThemeModeOverrideName,
       themeSettingValues: const <String, Object>{},
+      themeLayoutOverrides: const <String, ThemeLayoutOverride>{},
     );
   }
 
