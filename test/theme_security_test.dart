@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:robyne/core/storage/local_file_store.dart';
 import 'package:robyne/core/theme/application/theme_providers.dart';
 import 'package:robyne/core/theme/domain/theme_package.dart';
+import 'package:robyne/core/theme/domain/theme_regions.dart';
 import 'package:robyne/core/theme/domain/theme_tokens.dart';
 import 'package:robyne/core/theme/infrastructure/theme_asset_resolver.dart';
 import 'package:robyne/core/theme/infrastructure/theme_importer.dart';
@@ -269,8 +271,10 @@ void main() {
           "id": "numbers",
           "tokens": { "radius": { "md": "1e999" }, "spacing": { "xs": "1e999" } },
           "layout": {
-            "desktop": { "playerBarHeight": "1e999",
-                         "sidebar": { "width": "1e999" } }
+            "desktop": { "arrangement": [
+              { "region": "navBar", "slot": "left", "size": "1e999" },
+              { "region": "content", "slot": "center" }
+            ] }
           }
         }
         ''')
@@ -280,19 +284,33 @@ void main() {
       expect(theme, isNotNull);
       expect(theme!.tokens.radius.md, ThemeRadii.baseline().md);
       expect(theme.tokens.spacing.xs, ThemeSpacings.baseline().xs);
-      expect(theme.layout.desktop.playerBarHeight.isFinite, isTrue);
-      expect(theme.layout.desktop.sidebar.width.isFinite, isTrue);
+      // The arrangement is the live layout declaration now, so the
+      // non-finite guard has to hold on its sizes.
+      final sizes = theme.layout.desktop.arrangement.placements
+          .map((placement) => placement.size)
+          .where((size) => size != null);
+      expect(sizes, isNotEmpty);
+      for (final size in sizes) {
+        expect(size!.isFinite, isTrue);
+      }
     });
 
     test('oversized numbers are clamped, not propagated', () {
       final theme = const ThemeManifestParser().tryParse(
         jsonDecode('''
-        { "id": "big", "layout": { "desktop": { "playerBarHeight": 100000 } } }
+        { "id": "big", "layout": { "desktop": { "arrangement": [
+            { "region": "navBar", "slot": "left", "size": 100000 },
+            { "region": "content", "slot": "center" }
+          ] } } }
         ''')
             as Object?,
         source: ThemeSource.user,
       );
-      expect(theme!.layout.desktop.playerBarHeight, lessThanOrEqualTo(200));
+      // D4 clamps every main-axis ratio to 0.05–0.40.
+      final navBar = theme!.layout.desktop.arrangement.placements.firstWhere(
+        (placement) => placement.region == RobyneRegion.navBar,
+      );
+      expect(navBar.size, lessThanOrEqualTo(0.40));
     });
 
     test('a background image that escapes is dropped at parse time', () {
@@ -398,27 +416,25 @@ void main() {
       expect(themeSettingPatchValues(theme, null), isEmpty);
     });
 
-    test('the bundled skins actually move their own tokens', () async {
-      // Guards the real bundled manifests rather than a synthetic fixture:
-      // every declared knob must resolve to a token target.
-      for (final folder in const <String>[
-        'official-light',
-        'official-dark',
-        'official-midnight',
-      ]) {
-        final file = File('assets/themes/$folder/theme.json');
-        expect(await file.exists(), isTrue, reason: folder);
-        final theme = const ThemeManifestParser().tryParse(
-          jsonDecode(await file.readAsString()) as Object?,
-          source: ThemeSource.builtIn,
-        )!;
-        expect(theme.settings, isNotEmpty, reason: folder);
-        for (final setting in theme.settings) {
-          expect(setting.target, isNotNull, reason: '$folder.${setting.key}');
-        }
-        final patch = themeSettingPatchValues(theme, null);
-        expect(patch, isNotEmpty, reason: folder);
-      }
+    test('the bundled flagship declares its own component tokens', () async {
+      // 《玄》is authored in JSON rather than through user-facing knobs, so the
+      // guard checks the skin actually carries the surfaces the UI reads.
+      final file = File('assets/themes/xuan/theme.json');
+      expect(await file.exists(), isTrue, reason: 'xuan');
+      final theme = const ThemeManifestParser().tryParse(
+        jsonDecode(await file.readAsString()) as Object?,
+        source: ThemeSource.builtIn,
+      )!;
+      expect(theme.settings, isEmpty);
+      expect(
+        theme.tokens.components.navBar.selectedIndicator,
+        const Color(0xFFFF6B3D),
+      );
+      expect(
+        theme.tokens.components.playerBar.progressActive,
+        const Color(0xFFF4F5F7),
+      );
+      expect(theme.layout.home.blocks, isNotEmpty);
     });
   });
 

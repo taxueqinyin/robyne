@@ -155,14 +155,12 @@ class FileThemeRepository implements ThemeRepository {
 /// Built-in skins travel through exactly the same parser and models as user
 /// skins: the official UI is itself just another theme package.
 class BuiltInThemeRepository implements ThemeRepository {
-  const BuiltInThemeRepository()
-    : _ids = const <String>[
-        'official.light',
-        'official.dark',
-        'official.midnight',
-      ];
+  const BuiltInThemeRepository() : _ids = const <String>['xuan'];
 
   static const String _assetRoot = 'assets/themes';
+
+  /// The id every unknown request falls back to.
+  static const String _fallbackId = 'xuan';
 
   final List<String> _ids;
 
@@ -180,6 +178,16 @@ class BuiltInThemeRepository implements ThemeRepository {
 
   @override
   Future<ThemePackage?> loadTheme(String id) async {
+    // Only registered ids are built in. An unknown one must return null so
+    // the controller falls through to 《玄》 instead of being handed a
+    // synthesised stand-in.
+    //
+    // This is what made removing the old skins unsafe: persisted settings
+    // still named them, and a stand-in for any id wins over the fallback, so
+    // the app resurrected the retired light skin instead of loading 《玄》.
+    if (!_ids.contains(id)) {
+      return null;
+    }
     // Uses the shared id -> directory mapping so this always agrees with
     // ThemeAssetResolver's built-in resolution.
     final folder = ThemePathGuard.directoryName(id);
@@ -210,18 +218,23 @@ class BuiltInThemeRepository implements ThemeRepository {
   @override
   Future<bool> deleteTheme(String id) async => false;
 
+  /// The stand-in used when a *registered* skin's own manifest is missing.
+  ///
+  /// It keeps the requested id and name rather than inventing a different
+  /// skin: a placeholder that renames itself is how "the skin didn't load"
+  /// turns into "why is my skin called 亮色?". Callers can still tell it apart
+  /// through [ThemePackage.source] and the empty [ThemePackage.strings].
   ThemePackage _synthetic(String id) {
-    final isDark = !id.contains('light');
     return ThemePackage(
       id: id,
-      name: isDark ? 'Robyne 暗色' : 'Robyne 亮色',
+      name: id == _fallbackId ? '玄' : id,
       author: 'Robyne',
       authorUrl: null,
       version: '1.0.0',
       description: '内置皮肤',
-      preview: isDark ? '#14161A' : '#F7F8FA',
-      tags: <String>[isDark ? 'dark' : 'light'],
-      mode: isDark ? ThemeModePreference.dark : ThemeModePreference.light,
+      preview: '#0B0C0E',
+      tags: const <String>['dark', 'flagship'],
+      mode: ThemeModePreference.dark,
       schemaVersion: 1,
       tokens: const ThemeTokens.baseline(),
       layout: const ThemeLayout.baseline(),

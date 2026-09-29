@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,12 +29,51 @@ final themeRepositoryProvider = Provider<ThemeRepository>((ref) {
 final themeControllerProvider =
     AsyncNotifierProvider<ThemeController, ThemeState>(ThemeController.new);
 
+/// One transient fallback message, independent from the resolved theme.
+///
+/// Self-healing rewrites the persisted skin id and rebuilds
+/// [themeControllerProvider]. If the notice lived in [ThemeState], that
+/// rebuild could either clear it immediately or restart its lifetime. Keeping
+/// the event here lets it stay visible for a fixed window and then disappear.
+final themeFallbackNoticeProvider =
+    NotifierProvider<ThemeFallbackNoticeNotifier, String?>(
+      ThemeFallbackNoticeNotifier.new,
+    );
+
+class ThemeFallbackNoticeNotifier extends Notifier<String?> {
+  static const Duration _visibleDuration = Duration(seconds: 4);
+
+  Timer? _hideTimer;
+
+  @override
+  String? build() {
+    ref.onDispose(() => _hideTimer?.cancel());
+    return null;
+  }
+
+  void show(String message) {
+    _hideTimer?.cancel();
+    state = message;
+    _hideTimer = Timer(_visibleDuration, () {
+      if (ref.mounted) {
+        state = null;
+      }
+    });
+  }
+
+  void clear() {
+    _hideTimer?.cancel();
+    state = null;
+  }
+}
+
 /// The active skin plus the catalog of available skins.
 class ThemeState {
   const ThemeState({
     required this.package,
     required this.available,
     required this.lastError,
+    this.showFallbackNotice = false,
   });
 
   final ThemePackage package;
@@ -42,10 +82,14 @@ class ThemeState {
   /// Set when the requested skin could not be loaded and a fallback was used.
   final String? lastError;
 
+  /// True only for the fallback event that has not been healed yet.
+  final bool showFallbackNotice;
+
   ThemeState copyWith({
     ThemePackage? package,
     List<ThemePackage>? available,
     Object? lastError = _sentinel,
+    Object? showFallbackNotice = _sentinel,
   }) {
     return ThemeState(
       package: package ?? this.package,
@@ -53,6 +97,9 @@ class ThemeState {
       lastError: identical(lastError, _sentinel)
           ? this.lastError
           : lastError as String?,
+      showFallbackNotice: identical(showFallbackNotice, _sentinel)
+          ? this.showFallbackNotice
+          : showFallbackNotice as bool,
     );
   }
 
@@ -63,7 +110,7 @@ class ThemeController extends AsyncNotifier<ThemeState> {
   /// Last id that resolved to a real package. Drives the fallback policy.
   ThemePackage? _lastGood;
 
-  static const String _fallbackId = 'official.light';
+  static const String _fallbackId = 'xuan';
 
   @override
   Future<ThemeState> build() async {
@@ -71,16 +118,36 @@ class ThemeController extends AsyncNotifier<ThemeState> {
     final available = await repository.listThemes();
     final requestedId = ref.watch(activeThemeIdProvider);
     final resolved = await _resolve(repository, requestedId, available);
+    final showNotice =
+        resolved.showFallbackNotice || resolved.package.id != requestedId;
+    if (resolved.package.id != requestedId) {
+      // A retired or missing id should not repeat the warning on every
+      // launch. Heal the persisted choice once, then future launches read
+      // the resolved id directly.
+      unawaited(
+        ref
+            .read(settingsControllerProvider.notifier)
+            .setActiveThemeId(resolved.package.id),
+      );
+    }
+    if (showNotice && resolved.lastError != null) {
+      ref.read(themeFallbackNoticeProvider.notifier).show(resolved.lastError!);
+    }
     _lastGood = resolved.package;
-    return resolved;
+    return resolved.copyWith(showFallbackNotice: showNotice);
   }
 
   /// Re-reads the catalog, e.g. after an import or deletion.
   Future<void> refresh() async {
+    ref.read(themeFallbackNoticeProvider.notifier).clear();
     final repository = ref.read(themeRepositoryProvider);
     final available = await repository.listThemes();
     final currentId = state.value?.package.id ?? _fallbackId;
-    final resolved = await _resolve(repository, currentId, available);
+    final resolved = await _resolve(repository, currentId, available).then((
+      resolved,
+    ) {
+      return resolved.copyWith(showFallbackNotice: false);
+    });
     _lastGood = resolved.package;
     state = AsyncData(resolved);
   }
@@ -91,8 +158,14 @@ class ThemeController extends AsyncNotifier<ThemeState> {
     final repository = ref.read(themeRepositoryProvider);
     final available = previous?.available ?? await repository.listThemes();
     final resolved = await _resolve(repository, id, available);
+    final notice = resolved.lastError != null;
+    if (notice) {
+      ref.read(themeFallbackNoticeProvider.notifier).show(resolved.lastError!);
+    } else {
+      ref.read(themeFallbackNoticeProvider.notifier).clear();
+    }
     _lastGood = resolved.package;
-    state = AsyncData(resolved);
+    state = AsyncData(resolved.copyWith(showFallbackNotice: notice));
     await ref
         .read(settingsControllerProvider.notifier)
         .setActiveThemeId(resolved.package.id);
@@ -117,12 +190,16 @@ class ThemeController extends AsyncNotifier<ThemeState> {
         requested ?? byId[requestedId] ?? _lastGood ?? byId[_fallbackId];
     if (chosen != null) {
       final error = (requested == null && chosen.id != requestedId)
-          ? '皮肤 “$requestedId” 加载失败，已回退到 “${chosen.name}”'
+          // "Failed" would be wrong for a *retired* id: nothing is broken, the
+          // skin simply is not shipped any more. This message is consumed only
+          // by the one launch that has not healed its persisted id yet.
+          ? '皮肤 “$requestedId” 不存在，已使用 “${chosen.name}”'
           : null;
       return ThemeState(
         package: chosen,
         available: available,
         lastError: error,
+        showFallbackNotice: false,
       );
     }
 
@@ -135,6 +212,7 @@ class ThemeController extends AsyncNotifier<ThemeState> {
       package: availableList.first,
       available: availableList,
       lastError: '无法加载任何皮肤，已使用内置默认皮肤',
+      showFallbackNotice: true,
     );
   }
 
@@ -145,14 +223,14 @@ class ThemeController extends AsyncNotifier<ThemeState> {
     }
     return ThemePackage(
       id: _fallbackId,
-      name: 'Robyne 默认',
+      name: '玄',
       author: 'Robyne',
       authorUrl: null,
       version: '1.0.0',
       description: '内置默认皮肤',
-      preview: '#F7F8FA',
-      tags: const <String>['light'],
-      mode: ThemeModePreference.light,
+      preview: '#0B0C0E',
+      tags: const <String>['dark', 'flagship'],
+      mode: ThemeModePreference.dark,
       schemaVersion: 1,
       tokens: const ThemeTokens.baseline(),
       layout: const ThemeLayout.baseline(),

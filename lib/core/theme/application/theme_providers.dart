@@ -4,9 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../features/settings/domain/user_settings.dart';
 import '../../../features/settings/application/settings_providers.dart';
 import '../domain/theme_layout.dart';
+import '../domain/theme_components.dart';
+import '../domain/theme_icons.dart';
 import '../domain/theme_package.dart';
+import '../domain/theme_navigation.dart';
+import '../domain/theme_strings.dart';
 import '../domain/theme_tokens.dart';
 import '../infrastructure/theme_importer.dart';
+import '../infrastructure/theme_exporter.dart';
 import '../infrastructure/theme_font_loader.dart';
 import '../infrastructure/theme_path_guard.dart';
 import '../infrastructure/token_patcher.dart';
@@ -17,12 +22,54 @@ import 'theme_mode_providers.dart';
 /// The id of the skin the user picked, persisted through [UserSettings].
 final activeThemeIdProvider = Provider<String>((ref) {
   final settings = ref.watch(settingsControllerProvider).value;
-  return settings?.activeThemeId ?? 'official.light';
+  return settings?.activeThemeId ?? 'xuan';
 });
 
-/// The [ThemePackage] currently in effect.
-final activeThemePackageProvider = Provider<ThemePackage>((ref) {
+/// The skin as authored, before any user L2 layout override.
+///
+/// Tests override this provider directly; [activeThemePackageProvider] only
+/// adds the persisted override on top, so both `overrideWithValue` and the
+/// production path compose correctly.
+final baseThemePackageProvider = Provider<ThemePackage>((ref) {
   return ref.watch(themeControllerProvider).value?.package ?? _placeholder;
+});
+
+/// The [ThemePackage] currently in effect, including the user's L2 layout.
+final activeThemePackageProvider = Provider<ThemePackage>((ref) {
+  final package = ref.watch(baseThemePackageProvider);
+  final settings = ref.watch(settingsControllerProvider);
+  final override = settings.maybeWhen(
+    data: (value) => value.themeLayoutOverrides[package.id],
+    orElse: () => null,
+  );
+  return override == null ? package : override.apply(package);
+});
+
+/// The [RobyneRegion.content] presentation for one destination.
+///
+/// The design's §2.5 table is per surface — 本地库 uses `list`, 发现页 uses
+/// `grid`, a recommendation strip uses `banner` — so reading one global value
+/// forced a skin to pick a single look for every page it does not own.
+///
+/// It is a *style of the content region*, not a region of its own, which is
+/// why a skin cannot invent a "recommendation region" — it can only restyle
+/// `content`, and it can do so per destination.
+final contentStyleForProvider =
+    Provider.family<ThemeListStyle, ThemeContentSurface>((ref, surface) {
+      return ref
+          .watch(activeThemePackageProvider)
+          .layout
+          .content
+          .styleFor(surface);
+    });
+
+/// The content region's geometry in effect for the active skin.
+///
+/// Gutters, row heights and card sizing used to be literals inside feature
+/// pages, so "make the rows a bit shorter" was a code change rather than a
+/// manifest edit.
+final activeThemeContentMetricsProvider = Provider<ThemeContentMetrics>((ref) {
+  return ref.watch(activeThemeTokensProvider).components.content;
 });
 
 /// Knob values in effect for the active skin, keyed by [ThemeSetting.key].
@@ -101,11 +148,73 @@ final activeThemeTokensProvider = Provider<ThemeTokens>((ref) {
   return const TokenPatcher().apply(package.tokens, values);
 });
 
+/// The chrome strings in effect for the active skin.
+///
+/// Call sites read a slot through this rather than holding a literal, so a
+/// skin that renames `nav.library` renames it everywhere the label appears.
+final activeThemeStringsProvider = Provider<ThemeStrings>((ref) {
+  return ref.watch(activeThemePackageProvider).strings;
+});
+
+/// The navigation entries the active skin hides, per form factor.
+final activeThemeNavigationProvider = Provider<ThemeNavigation>((ref) {
+  return ref.watch(activeThemePackageProvider).navigation;
+});
+
+/// The active skin's motion rhythm: how long transitions take and how they
+/// ease.
+///
+/// Exposed as a provider so animated surfaces read one shared answer instead
+/// of each inventing a duration. Before this, `components.motion` was parsed,
+/// exported and round-tripped by tests while no widget read it, so a skin
+/// could declare a rhythm that changed nothing on screen.
+final activeThemeMotionProvider = Provider<ThemeMotionComponents>((ref) {
+  return ref.watch(activeThemeTokensProvider).components.motion;
+});
+
+/// The chrome glyphs the active skin redraws.
+///
+/// Call sites render through `ThemeIconView` rather than an `Icon` literal, so
+/// a skin that redraws `play` changes it everywhere it appears.
+final activeThemeIconsProvider = Provider<ThemeIcons>((ref) {
+  return ref.watch(activeThemePackageProvider).icons;
+});
+
+/// Registers the active skin's icon font and returns its family name.
+///
+/// `null` until the load settles or when the skin ships no icon font. Icon
+/// declarations fall back to Material `codePoint`s and then to the built-in
+/// glyph, so a font that fails to load costs a skin its custom shapes but
+/// never a control.
+final activeSkinIconFontFamilyProvider = FutureProvider<String?>((ref) async {
+  final package = ref.watch(activeThemePackageProvider);
+  return const ThemeFontLoader().loadIconFamilyFor(package);
+});
+
 /// The skin's declared brightness preference, needed so the resolver can
 /// adapt neutrals when the user forces the opposite mode.
 final activeThemeModePreferenceProvider = Provider<ThemeModePreference>((ref) {
   return ref.watch(activeThemePackageProvider).mode;
 });
+
+/// Whether a skin authored for [preference] can render [mode].
+///
+/// A single-brightness skin may still let the user choose "follow skin"; it
+/// just cannot be forced into the opposite brightness without looking like a
+/// different, broken skin. Keeping this rule next to the resolver means the
+/// settings control and the actual theme resolution cannot drift apart.
+extension ThemeModePreferenceSupport on ThemeModePreference {
+  bool supports(ThemeMode mode) {
+    if (mode == ThemeMode.system) {
+      return true;
+    }
+    return switch (this) {
+      ThemeModePreference.auto => true,
+      ThemeModePreference.light => mode != ThemeMode.dark,
+      ThemeModePreference.dark => mode != ThemeMode.light,
+    };
+  }
+}
 
 /// Applies the resolved typography (skin font, when loaded) onto [tokens].
 ThemeTokens _withResolvedFont(ThemeTokens tokens, ThemeTypography typography) {
@@ -119,7 +228,12 @@ final lightThemeDataProvider = Provider<ThemeData>((ref) {
     ref.watch(resolvedThemeTypographyProvider),
   );
   final mode = ref.watch(activeThemeModePreferenceProvider);
-  return const TokenResolver().resolve(tokens, Brightness.light, mode);
+  return const TokenResolver().resolve(
+    tokens,
+    Brightness.light,
+    mode,
+    ref.watch(activeThemeStringsProvider),
+  );
 });
 
 /// Resolved Material dark theme for the active skin.
@@ -129,17 +243,34 @@ final darkThemeDataProvider = Provider<ThemeData>((ref) {
     ref.watch(resolvedThemeTypographyProvider),
   );
   final mode = ref.watch(activeThemeModePreferenceProvider);
-  return const TokenResolver().resolve(tokens, Brightness.dark, mode);
+  return const TokenResolver().resolve(
+    tokens,
+    Brightness.dark,
+    mode,
+    ref.watch(activeThemeStringsProvider),
+  );
 });
 
 /// Brightness chosen by combining the user override, the skin preference and
 /// the platform setting. See [ThemeModePreference].
+///
+/// "跟随皮肤" (`ThemeMode.system`) is not the same as "跟随系统": it defers to
+/// the skin first, and only an `auto` skin passes the decision on to the
+/// platform. A dark-only skin therefore stays dark even when the OS is in
+/// light mode, which is what makes the label honest.
 final themeModeProvider = Provider<ThemeMode>((ref) {
   final override = ref.watch(themeModeOverrideProvider);
-  if (override != ThemeMode.system) {
+  final preference = ref.watch(activeThemeModePreferenceProvider);
+  if (override == ThemeMode.system) {
+    return switch (preference) {
+      ThemeModePreference.light => ThemeMode.light,
+      ThemeModePreference.dark => ThemeMode.dark,
+      ThemeModePreference.auto => ThemeMode.system,
+    };
+  }
+  if (preference.supports(override)) {
     return override;
   }
-  final preference = ref.watch(activeThemePackageProvider).mode;
   return switch (preference) {
     ThemeModePreference.light => ThemeMode.light,
     ThemeModePreference.dark => ThemeMode.dark,
@@ -148,18 +279,24 @@ final themeModeProvider = Provider<ThemeMode>((ref) {
 });
 
 /// Used before the very first settings load completes.
+///
+/// The shell paints on the first frame, a few milliseconds before the skin
+/// arrives, so this stand-in has to look like where the app is going rather
+/// than like a generic default. `ThemeTokens.baseline()` is the *light*
+/// palette; pairing it with a dark mode preference is what made every cold
+/// start flash white before settling into《玄》.
 final ThemePackage _placeholder = ThemePackage(
-  id: 'official.light',
-  name: 'Robyne',
+  id: 'xuan',
+  name: '玄',
   author: 'Robyne',
   authorUrl: null,
   version: '1.0.0',
   description: '',
   preview: null,
   tags: const <String>[],
-  mode: ThemeModePreference.light,
+  mode: ThemeModePreference.dark,
   schemaVersion: 1,
-  tokens: const ThemeTokens.baseline(),
+  tokens: const ThemeTokens.darkBaseline(),
   layout: const ThemeLayout.baseline(),
   settings: const <ThemeSetting>[],
   assets: const ThemeAssets.empty(),
@@ -226,6 +363,34 @@ final themeImporterProvider = Provider<ThemeImporter>((ref) {
   );
 });
 
+/// Copies a loaded skin into the user themes directory.
+///
+/// Backs the D5 promise that an official skin has no privileges: whatever a
+/// built-in skin can do, a copy living in the user directory can do too.
+final themeExporterProvider = Provider<ThemeExporter>((ref) {
+  return ThemeExporter(
+    themesDirectory: () =>
+        ref.read(themeRepositoryProvider).userThemesDirectory(),
+  );
+});
+
+/// The directory a skin author edits to hot-reload the active skin.
+///
+/// Skin authoring happens in files, not in the client, so the appearance panel
+/// has to be able to say *which* file. A built-in skin has no editable path:
+/// its manifest is compiled into the bundle, and the answer for it is
+/// "duplicate it first".
+final userThemesDirectoryPathProvider = FutureProvider<String?>((ref) async {
+  try {
+    final directory = await ref
+        .watch(themeRepositoryProvider)
+        .userThemesDirectory();
+    return directory.path;
+  } on Object {
+    return null;
+  }
+});
+
 /// Imports a skin from a folder or a `.rtheme` archive.
 ///
 /// Returns the error message on failure, or `null` on success.
@@ -250,5 +415,19 @@ class ThemeImportController {
   Future<void> delete(String id) async {
     await _ref.read(themeRepositoryProvider).deleteTheme(id);
     await _ref.read(themeControllerProvider.notifier).refresh();
+  }
+
+  /// Copies [theme] into the user directory and switches to the copy.
+  ///
+  /// Adopting the copy is what proves the promise: from here on the app
+  /// renders a skin loaded through exactly the path a community skin uses.
+  Future<String?> duplicate(ThemePackage theme) async {
+    final result = await _ref.read(themeExporterProvider).export(theme);
+    if (!result.isSuccess) {
+      return result.error?.message ?? '复制失败';
+    }
+    await _ref.read(themeControllerProvider.notifier).refresh();
+    await _ref.read(themeControllerProvider.notifier).selectTheme(theme.id);
+    return null;
   }
 }

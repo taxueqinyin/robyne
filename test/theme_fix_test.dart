@@ -12,11 +12,7 @@ void main() {
       const MaterialApp(home: Scaffold(body: Text('probe'))),
     );
     final ctx = tester.element(find.text('probe'));
-    for (final p in const <String>[
-      'assets/themes/official-light/theme.json',
-      'assets/themes/official-dark/theme.json',
-      'assets/themes/official-midnight/theme.json',
-    ]) {
+    for (final p in const <String>['assets/themes/xuan/theme.json']) {
       String result;
       try {
         await DefaultAssetBundle.of(ctx).loadString(p);

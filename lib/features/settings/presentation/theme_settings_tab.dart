@@ -1,146 +1,205 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/application/theme_controller.dart';
 import '../../../core/theme/application/theme_mode_providers.dart';
 import '../../../core/theme/application/theme_providers.dart';
-import '../../../core/theme/domain/theme_layout.dart';
 import '../../../core/theme/domain/theme_package.dart';
+import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/domain/theme_tokens.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
-import '../../../core/theme/presentation/theme_setting_control.dart';
-import 'package:file_picker/file_picker.dart';
 
-import '../application/settings_providers.dart';
-
-/// Lets the user pick a skin, force light/dark, and see the knobs a skin
-/// exposes. This doubles as the discovery surface for community skins.
+/// Read-only appearance panel.
+///
+/// The flagship UI ships as the single built-in skin `xuan`. Skin authoring
+/// happens in `theme.json`; the client deliberately does not expose colour,
+/// radius or layout editors. A future editor can return as a separate
+/// authoring surface without leaking authoring controls into daily use.
 class ThemeSettingsTab extends ConsumerWidget {
   const ThemeSettingsTab({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeState = ref.watch(themeControllerProvider);
+    final fallbackNotice = ref.watch(themeFallbackNoticeProvider);
     final tokens = ref.watch(activeThemeTokensProvider);
-    final textTheme = Theme.of(context).textTheme;
+    final strings = ref.watch(activeThemeStringsProvider);
+    final resolved = RobyneTheme.of(context).tokens;
+    final colors = resolved.color;
 
     return themeState.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(child: Text('皮肤加载失败！')),
+      error: (error, _) => Center(
+        child: Text(
+          strings.resolve(ThemeStringKey.settingsAppearanceLoadFailed),
+          style: TextStyle(color: colors.danger),
+        ),
+      ),
       data: (state) {
-        final available = state.available;
         final active = state.package;
         return ListView(
           children: <Widget>[
-            if (state.lastError != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: _ThemeBanner(message: state.lastError!),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: fallbackNotice != null
+                  ? Padding(
+                      key: ValueKey<String>(fallbackNotice),
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _ThemeBanner(message: fallbackNotice),
+                    )
+                  : const SizedBox.shrink(key: ValueKey<String>('no-banner')),
+            ),
+            Text(
+              strings.resolve(ThemeStringKey.settingsAppearanceMode),
+              style: TextStyle(
+                fontSize: resolved.typography.resolvedSectionTitleSize,
+                fontWeight: FontWeight.w700,
+                color: colors.textPrimary,
               ),
-            Text('外观模式', style: textTheme.titleMedium),
+            ),
             const SizedBox(height: 8),
             const _ThemeModeSelector(),
             const SizedBox(height: 24),
-            Row(
-              children: <Widget>[
-                Text('皮肤', style: textTheme.titleMedium),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '共 ${available.length} 个，内置即官方 UI 本身',
-                    style: textTheme.bodySmall,
-                  ),
-                ),
-              ],
+            Text(
+              strings.resolve(ThemeStringKey.settingsAppearanceActive),
+              style: TextStyle(
+                fontSize: resolved.typography.resolvedSectionTitleSize,
+                fontWeight: FontWeight.w700,
+                color: colors.textPrimary,
+              ),
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: <Widget>[
-                for (final theme in available)
-                  _ThemeCard(
-                    theme: theme,
-                    selected: theme.id == active.id,
-                    onTap: () => ref
-                        .read(themeControllerProvider.notifier)
-                        .selectTheme(theme.id),
-                  ),
-              ],
-            ),
-            if (active.settings.isNotEmpty) ...<Widget>[
-              const SizedBox(height: 24),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      '「${active.name}」可调项',
-                      style: textTheme.titleMedium,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text('由皮肤作者声明，调整后立即生效', style: textTheme.bodySmall),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => _resetKnobs(ref, active),
-                    icon: const Icon(Icons.restart_alt, size: 16),
-                    label: const Text('恢复默认'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Consumer(
-                builder: (context, ref, _) {
-                  final values = ref.watch(activeThemeSettingValuesProvider);
-                  return Column(
-                    children: <Widget>[
-                      for (final setting in active.settings)
-                        ThemeSettingControl(
-                          theme: active,
-                          setting: setting,
-                          value: values[setting.key] ?? setting.defaultValue,
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ],
-            const SizedBox(height: 24),
-            Row(
-              children: <Widget>[
-                Text('管理', style: textTheme.titleMedium),
-                const Spacer(),
-                OutlinedButton.icon(
-                  onPressed: () => _importTheme(ref, context),
-                  icon: const Icon(Icons.file_open_outlined, size: 16),
-                  label: const Text('导入皮肤'),
-                ),
-                if (active.source == ThemeSource.user) ...<Widget>[
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => _deleteTheme(ref, context, active),
-                    icon: const Icon(Icons.delete_outline, size: 16),
-                    label: const Text('删除'),
-                  ),
-                ],
-              ],
+            _ActiveThemeCard(
+              name: active.name,
+              description: active.description,
+              author: active.author,
+              version: active.version,
+              tokens: active.tokens,
             ),
             const SizedBox(height: 24),
-            Text('布局', style: textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text('皮肤声明的骨架参数；桌面与手机可分别指定。', style: textTheme.bodySmall),
+            Text(
+              strings.resolve(ThemeStringKey.settingsAppearanceSpec),
+              style: TextStyle(
+                fontSize: resolved.typography.resolvedSectionTitleSize,
+                fontWeight: FontWeight.w700,
+                color: colors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              strings.resolve(ThemeStringKey.settingsAppearanceSpecBody),
+              style: TextStyle(fontSize: 12, color: colors.textMuted),
+            ),
             const SizedBox(height: 12),
-            _LayoutSummary(layout: active.layout),
+            const _AuthoringHint(),
             const SizedBox(height: 24),
-            Text('当前 Tokens', style: textTheme.titleMedium),
+            Text(
+              strings.resolve(ThemeStringKey.settingsAppearanceTokens),
+              style: TextStyle(
+                fontSize: resolved.typography.resolvedSectionTitleSize,
+                fontWeight: FontWeight.w700,
+                color: colors.textPrimary,
+              ),
+            ),
             const SizedBox(height: 12),
             _TokenPreview(tokens: tokens),
           ],
         );
       },
+    );
+  }
+}
+
+/// Read-only pointer to the skin file a creator edits.
+///
+/// This is deliberately not a control: the flagship client has no colour,
+/// radius or layout editor. It answers the one question a creator has —
+/// "where is the file?" — and nothing else. The path is copied, never opened,
+/// so the panel cannot become a file browser by accident.
+class _AuthoringHint extends ConsumerWidget {
+  const _AuthoringHint();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // This panel renders inside the app shell, which always publishes the
+    // resolved skin, so the tokens are read directly instead of through a
+    // hard-coded Material fallback that skins could not restyle.
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final strings = ref.watch(activeThemeStringsProvider);
+    final path = ref.watch(userThemesDirectoryPathProvider);
+    final directory = path.value;
+    final activeId = ref.watch(activeThemePackageProvider).id;
+    final line = directory == null
+        ? strings.resolve(ThemeStringKey.settingsAppearanceDirectoryUnavailable)
+        : <String>[
+            directory,
+            activeId,
+            'theme.json',
+          ].join(Platform.pathSeparator);
+    final copyable = directory == null ? null : line;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.surfaceBase,
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+        border: Border.all(color: colors.borderSubtle),
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.edit_note_outlined, size: 18, color: colors.textMuted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  '保存即生效',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  line,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: colors.textMuted,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  ref.watch(activeThemePackageProvider).source ==
+                          ThemeSource.builtIn
+                      ? '内置皮肤打包进 App，先复制到皮肤目录再编辑。'
+                      : '编辑 theme.json 或随包资源，客户端会自动重载。',
+                  style: TextStyle(fontSize: 11, color: colors.textMuted),
+                ),
+              ],
+            ),
+          ),
+          if (directory != null)
+            if (copyable != null)
+              IconButton(
+                key: const Key('theme-authoring-copy-path'),
+                tooltip: '复制路径',
+                icon: const Icon(Icons.content_copy, size: 16),
+                color: colors.textMuted,
+                onPressed: () =>
+                    Clipboard.setData(ClipboardData(text: copyable)),
+              ),
+        ],
+      ),
     );
   }
 }
@@ -156,6 +215,7 @@ class _ThemeBanner extends StatelessWidget {
     final warning = tokens?.color.warning ?? Colors.amber;
     final radius = tokens?.radius.md ?? 8;
     return Container(
+      key: const Key('theme-fallback-banner'),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: warning.withValues(alpha: 0.15),
@@ -179,271 +239,121 @@ class _ThemeModeSelector extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final override = ref.watch(themeModeOverrideProvider);
+    final activeSkin = ref.watch(activeThemePackageProvider);
+    final supportsLight = activeSkin.mode.supports(ThemeMode.light);
+    final supportsDark = activeSkin.mode.supports(ThemeMode.dark);
+    final selectedMode = activeSkin.mode.supports(override)
+        ? override
+        : ThemeMode.system;
+    final strings = ref.watch(activeThemeStringsProvider);
     return SegmentedButton<ThemeMode>(
-      segments: const <ButtonSegment<ThemeMode>>[
+      segments: <ButtonSegment<ThemeMode>>[
         ButtonSegment<ThemeMode>(
           value: ThemeMode.system,
-          icon: Icon(Icons.brightness_auto_outlined),
-          label: Text('跟随皮肤'),
+          icon: const Icon(Icons.brightness_auto_outlined),
+          label: Text(strings.resolve(ThemeStringKey.appearanceModeSystem)),
         ),
         ButtonSegment<ThemeMode>(
           value: ThemeMode.light,
-          icon: Icon(Icons.light_mode_outlined),
-          label: Text('亮色'),
+          icon: const Icon(Icons.light_mode_outlined),
+          label: Text(strings.resolve(ThemeStringKey.appearanceModeLight)),
+          enabled: supportsLight,
         ),
         ButtonSegment<ThemeMode>(
           value: ThemeMode.dark,
-          icon: Icon(Icons.dark_mode_outlined),
-          label: Text('暗色'),
+          icon: const Icon(Icons.dark_mode_outlined),
+          label: Text(strings.resolve(ThemeStringKey.appearanceModeDark)),
+          enabled: supportsDark,
         ),
       ],
-      selected: <ThemeMode>{override},
+      selected: <ThemeMode>{selectedMode},
       onSelectionChanged: (selection) {
-        ref.read(themeModeOverrideProvider.notifier).set(selection.first);
+        final mode = selection.first;
+        // The segment is disabled in the UI, but keep the guard here as well:
+        // programmatic selection must not force an unsupported brightness.
+        if (!activeSkin.mode.supports(mode)) {
+          ref.read(themeModeOverrideProvider.notifier).set(ThemeMode.system);
+          return;
+        }
+        ref.read(themeModeOverrideProvider.notifier).set(mode);
       },
     );
   }
 }
 
-class _ThemeCard extends StatelessWidget {
-  const _ThemeCard({
-    required this.theme,
-    required this.selected,
-    required this.onTap,
+class _ActiveThemeCard extends StatelessWidget {
+  const _ActiveThemeCard({
+    required this.name,
+    required this.description,
+    required this.author,
+    required this.version,
+    required this.tokens,
   });
 
-  final ThemePackage theme;
-  final bool selected;
-  final VoidCallback onTap;
-
-  Color? _previewColor() {
-    final preview = theme.preview;
-    if (preview == null || !preview.startsWith('#')) {
-      return null;
-    }
-    final hex = preview.substring(1);
-    final buffer = StringBuffer();
-    if (hex.length == 3) {
-      buffer.write('FF');
-      for (final unit in hex.split('')) {
-        buffer.write(unit * 2);
-      }
-    } else if (hex.length == 6) {
-      buffer.write('FF$hex');
-    } else if (hex.length == 8) {
-      buffer.write(hex);
-    } else {
-      return null;
-    }
-    final parsed = int.tryParse(buffer.toString(), radix: 16);
-    return parsed == null ? null : Color(parsed);
-  }
+  final String name;
+  final String description;
+  final String author;
+  final String version;
+  final ThemeTokens tokens;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = theme.tokens;
-    final brand = tokens.color.brandBase;
-    final background = tokens.color.backgroundBase;
-    final previewColor = _previewColor() ?? background;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(tokens.radius.md),
-      child: LayoutBuilder(
-        builder: (context, constraints) => AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          // The card was pinned to 168dp; two of those plus spacing overflow a
-          // 400dp phone. Prefer the declared width, but never exceed the
-          // available one. See ADR-001 decision D4.
-          width: constraints.maxWidth.isFinite && constraints.maxWidth < 168
-              ? constraints.maxWidth
-              : 168,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: tokens.color.surfaceBase,
-            borderRadius: BorderRadius.circular(tokens.radius.md),
-            border: Border.all(
-              color: selected ? brand : tokens.color.borderDefault,
-              width: selected ? 2 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Container(
-                height: 72,
-                decoration: BoxDecoration(
-                  color: previewColor,
-                  borderRadius: BorderRadius.circular(tokens.radius.sm),
-                  gradient: LinearGradient(
-                    colors: <Color>[background, brand.withValues(alpha: 0.35)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: selected
-                    ? Align(
-                        alignment: Alignment.topRight,
-                        child: Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Icon(
-                            Icons.check_circle,
-                            color: brand,
-                            size: 18,
-                          ),
-                        ),
-                      )
-                    : null,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                theme.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: tokens.color.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                theme.author.isEmpty ? '未知作者' : theme.author,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: tokens.color.textMuted),
-              ),
-              if (theme.source == ThemeSource.builtIn) ...<Widget>[
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: brand.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(tokens.radius.sm),
-                  ),
-                  child: Text(
-                    '内置',
-                    style: TextStyle(fontSize: 10, color: brand),
-                  ),
-                ),
-              ],
-            ],
-          ),
+    final colors = tokens.color;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: <Color>[
+            colors.backgroundElevated,
+            colors.brandBase.withValues(alpha: 0.18),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(tokens.radius.lg),
+        border: Border.all(color: colors.borderSubtle),
       ),
-    );
-  }
-}
-
-void _resetKnobs(WidgetRef ref, ThemePackage theme) {
-  for (final setting in theme.settings) {
-    ref
-        .read(settingsControllerProvider.notifier)
-        .setThemeSettingValue(theme.id, setting.key, null);
-  }
-}
-
-Future<void> _importTheme(WidgetRef ref, BuildContext context) async {
-  final path = await FilePicker.getDirectoryPath(dialogTitle: '选择皮肤文件夹');
-  if (path == null) {
-    return;
-  }
-  final error = await ref.read(themeImportControllerProvider).importFrom(path);
-  if (context.mounted) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(error ?? '导入成功')));
-  }
-}
-
-Future<void> _deleteTheme(
-  WidgetRef ref,
-  BuildContext context,
-  ThemePackage theme,
-) async {
-  // Deleting a skin removes its whole directory, so ask first: the action is
-  // irreversible and there is no undo.
-  final confirmed =
-      await showAdaptiveDialog<bool>(
-        context: context,
-        builder: (dialogContext) {
-          return AlertDialog.adaptive(
-            title: const Text('删除皮肤'),
-            content: Text('「${theme.name}」将被永久删除，此操作无法撤销。'),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: const Text('删除'),
-              ),
-            ],
-          );
-        },
-      ) ??
-      false;
-  if (!confirmed) {
-    return;
-  }
-  await ref.read(themeImportControllerProvider).delete(theme.id);
-  if (context.mounted) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('已删除「${theme.name}」')));
-  }
-}
-
-class _LayoutSummary extends StatelessWidget {
-  const _LayoutSummary({required this.layout});
-
-  final ThemeLayout layout;
-
-  Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: <Widget>[
-          SizedBox(
-            width: 130,
-            child: Text(label, style: const TextStyle(fontSize: 12)),
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: colors.brandBase,
+              borderRadius: BorderRadius.circular(tokens.radius.md),
+            ),
+            child: Icon(Icons.graphic_eq, color: colors.onBrand, size: 30),
           ),
+          const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '$author · v$version',
+                  style: TextStyle(fontSize: 11, color: colors.textMuted),
+                ),
+              ],
             ),
           ),
         ],
       ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final d = layout.desktop;
-    final m = layout.mobile;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('桌面', style: Theme.of(context).textTheme.bodyMedium),
-        _row('侧栏位置', d.sidebar.position.name),
-        _row('侧栏宽度', d.sidebar.effectiveWidth.toStringAsFixed(0)),
-        _row('标签显示', d.sidebar.labelMode.name),
-        _row('播放条高度', d.playerBarHeight.toStringAsFixed(0)),
-        const SizedBox(height: 8),
-        Text('手机', style: Theme.of(context).textTheme.bodyMedium),
-        _row('导航', m.navigation.name),
-        _row('播放条高度', m.playerBarHeight.toStringAsFixed(0)),
-        _row('紧凑模式', m.playerBarCompact ? '开' : '关'),
-        const SizedBox(height: 8),
-        Text('内容', style: Theme.of(context).textTheme.bodyMedium),
-        _row('列表样式', layout.content.listStyle.name),
-        _row('密度', layout.content.density.name),
-      ],
     );
   }
 }
@@ -463,9 +373,9 @@ class _TokenPreview extends StatelessWidget {
       ),
       MapEntry<String, Color>('surfaceBase', tokens.color.surfaceBase),
       MapEntry<String, Color>('brandBase', tokens.color.brandBase),
+      MapEntry<String, Color>('accentBase', tokens.color.accentBase),
       MapEntry<String, Color>('textPrimary', tokens.color.textPrimary),
-      MapEntry<String, Color>('textSecondary', tokens.color.textSecondary),
-      MapEntry<String, Color>('borderDefault', tokens.color.borderDefault),
+      MapEntry<String, Color>('borderSubtle', tokens.color.borderSubtle),
       MapEntry<String, Color>('success', tokens.color.success),
       MapEntry<String, Color>('danger', tokens.color.danger),
     ];

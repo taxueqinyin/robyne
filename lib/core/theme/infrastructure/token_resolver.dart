@@ -1,8 +1,24 @@
 import 'package:flutter/material.dart';
 
+import 'dart:math' as math;
+
 import '../domain/theme_components.dart';
 import '../domain/theme_package.dart';
+import '../domain/theme_strings.dart';
 import '../domain/theme_tokens.dart';
+
+/// Flutter values derived from a skin's motion tokens.
+///
+/// [ThemeMotionCurve] publishes control points rather than a `Curve` so the
+/// domain layer stays free of widget-library imports; this is the one place
+/// that turns them into something animatable, so two call sites cannot
+/// disagree about what "standard" means.
+extension ThemeMotionCurveX on ThemeMotionCurve {
+  Curve get toCurve {
+    final points = controlPoints;
+    return Cubic(points.$1, points.$2, points.$3, points.$4);
+  }
+}
 
 /// Derives Flutter themes from [ThemeTokens].
 ///
@@ -22,6 +38,34 @@ class TokenResolver {
   /// "unset", not "paint nothing".
   static Color _opaqueOr(Color value, Color fallback) {
     return value.a > 0 ? value : fallback;
+  }
+
+  /// Picks black or white, whichever reads better on [background].
+  ///
+  /// Skins author `accent.base` freely, and a pale mint or bright yellow is a
+  /// legitimate choice; hard-coding white text on those is how "skinnable"
+  /// turns into "unreadable in this skin". WCAG relative luminance decides.
+  static Color contrastOn(Color background) {
+    final luminance = _relativeLuminance(background.withAlpha(0xFF));
+    // Branch point mirrors the WCAG formula's crossover for black vs white.
+    return luminance > 0.179
+        ? const Color(0xFF141517)
+        : const Color(0xFFFFFFFF);
+  }
+
+  /// WCAG relative luminance, in 0..1.
+  static double _relativeLuminance(Color color) {
+    double channel(double value) {
+      final normalized = value / 255;
+      if (normalized <= 0.03928) {
+        return normalized / 12.92;
+      }
+      return math.pow((normalized + 0.055) / 1.055, 2.4).toDouble();
+    }
+
+    return 0.2126 * channel(color.r) +
+        0.7152 * channel(color.g) +
+        0.0722 * channel(color.b);
   }
 
   /// The brightness a skin was authored for.
@@ -79,27 +123,17 @@ class TokenResolver {
   static final ThemeColors _lightNeutrals = ThemeColors.baseline();
 
   /// Neutral palette used when a light (or auto) skin renders in dark mode.
-  static final ThemeColors _darkNeutrals = ThemeColors.baseline().copyWith(
-    backgroundBase: const Color(0xFF14161A),
-    backgroundElevated: const Color(0xFF1C1F24),
-    backgroundSunken: const Color(0xFF0F1114),
-    surfaceBase: const Color(0xFF1C1F24),
-    surfaceHover: const Color(0x14FFFFFF),
-    surfaceActive: const Color(0x1FFFFFFF),
-    surfaceSelected: const Color(0xFF2B4A7A),
-    textPrimary: const Color(0xFFE8EAED),
-    textSecondary: const Color(0xFFA8AEB8),
-    textMuted: const Color(0xFF7A8089),
-    textDisabled: const Color(0xFF565B63),
-    borderSubtle: const Color(0x0DFFFFFF),
-    borderDefault: const Color(0x1AFFFFFF),
-    borderStrong: const Color(0x29FFFFFF),
-  );
+  ///
+  /// Defined on [ThemeColors] rather than here so the pre-load stand-in can
+  /// use the exact same palette: a "dark default" invented twice is a
+  /// "dark default" that disagrees with itself.
+  static const ThemeColors _darkNeutrals = ThemeColors.darkBaseline();
 
   ThemeData resolve(
     ThemeTokens tokens,
     Brightness brightness, [
     ThemeModePreference skinMode = ThemeModePreference.auto,
+    ThemeStrings? strings,
   ]) {
     final adapted = adaptToBrightness(tokens, brightness, skinMode);
     final c = adapted.color;
@@ -133,6 +167,9 @@ class TokenResolver {
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.all(Radius.circular(md)),
     );
+    final fullShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.all(Radius.circular(tokens.radius.full)),
+    );
 
     final base = ThemeData(
       useMaterial3: true,
@@ -148,7 +185,9 @@ class TokenResolver {
       disabledColor: c.textDisabled,
       fontFamily: family,
       brightness: brightness,
-      extensions: <ThemeExtension<dynamic>>[RobyneTheme(tokens)],
+      extensions: <ThemeExtension<dynamic>>[
+        RobyneTheme(tokens, strings: strings ?? ThemeStrings.empty()),
+      ],
     );
 
     return base.copyWith(
@@ -237,6 +276,16 @@ class TokenResolver {
         inactiveTrackColor: comp.playerBar.progressTrack,
         thumbColor: comp.playerBar.progressActive,
       ),
+      chipTheme: ChipThemeData(
+        backgroundColor: c.surfaceBase,
+        selectedColor: comp.list.itemSelected,
+        checkmarkColor: comp.navBar.selectedItem,
+        deleteIconColor: c.textMuted,
+        labelStyle: TextStyle(color: c.textSecondary, fontSize: 12),
+        secondaryLabelStyle: TextStyle(color: c.textPrimary, fontSize: 12),
+        side: BorderSide(color: c.borderDefault),
+        shape: fullShape,
+      ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: comp.playerBar.progressActive,
         linearTrackColor: comp.playerBar.progressTrack,
@@ -279,6 +328,10 @@ class TokenResolver {
         ? Typography.material2021().white.apply(fontFamily: family)
         : Typography.material2021().black.apply(fontFamily: family);
     final c = tokens.color;
+    // A role size is the skin's *intent*; the global `scale` still multiplies
+    // it, so a skin can set a voice and a user-facing size knob still works.
+    final type = tokens.typography;
+    double role(double value) => value * scale;
     final sized = base.copyWith(
       displayLarge: base.displayLarge?.copyWith(
         color: c.textPrimary,
@@ -291,29 +344,33 @@ class TokenResolver {
       ),
       headlineMedium: base.headlineMedium?.copyWith(
         color: c.textPrimary,
-        fontSize: (base.headlineMedium?.fontSize ?? 28) * scale,
-        fontWeight: FontWeight.values[tokens.typography.titleWeight ~/ 100],
+        fontSize: role(type.resolvedPageTitleSize),
+        fontWeight: FontWeight.values[type.titleWeight ~/ 100],
       ),
       titleLarge: base.titleLarge?.copyWith(
         color: c.textPrimary,
-        fontSize: (base.titleLarge?.fontSize ?? 22) * scale,
-        fontWeight: FontWeight.values[tokens.typography.titleWeight ~/ 100],
+        fontSize: role(type.resolvedSectionTitleSize),
+        fontWeight: FontWeight.values[type.titleWeight ~/ 100],
       ),
       titleMedium: base.titleMedium?.copyWith(
         color: c.textPrimary,
-        fontSize: (base.titleMedium?.fontSize ?? 16) * scale,
+        fontSize: role(type.resolvedListPrimarySize),
+        fontWeight: FontWeight.values[type.bodyWeight ~/ 100],
       ),
       bodyLarge: base.bodyLarge?.copyWith(
         color: c.textPrimary,
-        fontSize: (base.bodyLarge?.fontSize ?? 16) * scale,
+        fontSize: role(type.resolvedListPrimarySize),
+        fontWeight: FontWeight.values[type.bodyWeight ~/ 100],
       ),
       bodyMedium: base.bodyMedium?.copyWith(
         color: c.textSecondary,
-        fontSize: (base.bodyMedium?.fontSize ?? 14) * scale,
+        fontSize: role(type.resolvedListSecondarySize),
+        fontWeight: FontWeight.values[type.bodyWeight ~/ 100],
       ),
       bodySmall: base.bodySmall?.copyWith(
         color: c.textMuted,
-        fontSize: (base.bodySmall?.fontSize ?? 12) * scale,
+        fontSize: role(type.resolvedLabelSize),
+        fontWeight: FontWeight.values[type.resolvedLabelWeight ~/ 100],
       ),
       labelLarge: base.labelLarge?.copyWith(
         color: c.textPrimary,
@@ -326,15 +383,17 @@ class TokenResolver {
 
 /// Exposes the active [ThemeTokens] to widgets through `Theme.of(context)`.
 class RobyneTheme extends ThemeExtension<RobyneTheme> {
-  const RobyneTheme(this.tokens);
+  const RobyneTheme(this.tokens, {this.strings = const ThemeStrings.empty()});
 
   final ThemeTokens tokens;
+  final ThemeStrings strings;
 
   static RobyneTheme of(BuildContext context) {
     final extension = Theme.of(context).extension<RobyneTheme>();
     // Themes are always resolved through TokenResolver, but keep a safe
     // baseline for widgets rendered outside that pipeline (e.g. tests).
-    return extension ?? const RobyneTheme(ThemeTokens.baseline());
+    return extension ??
+        const RobyneTheme(ThemeTokens.baseline(), strings: ThemeStrings.empty());
   }
 
   /// Null-tolerant variant for widgets that may render before the theme is
@@ -344,8 +403,11 @@ class RobyneTheme extends ThemeExtension<RobyneTheme> {
   }
 
   @override
-  RobyneTheme copyWith({ThemeTokens? tokens}) {
-    return RobyneTheme(tokens ?? this.tokens);
+  RobyneTheme copyWith({ThemeTokens? tokens, ThemeStrings? strings}) {
+    return RobyneTheme(
+      tokens ?? this.tokens,
+      strings: strings ?? this.strings,
+    );
   }
 
   @override
@@ -353,7 +415,10 @@ class RobyneTheme extends ThemeExtension<RobyneTheme> {
     if (other == null) {
       return this;
     }
-    return RobyneTheme(_lerpTokens(tokens, other.tokens, t));
+    return RobyneTheme(
+      _lerpTokens(tokens, other.tokens, t),
+      strings: t < 0.5 ? strings : other.strings,
+    );
   }
 
   static ThemeTokens _lerpTokens(ThemeTokens a, ThemeTokens b, double t) {
@@ -399,6 +464,9 @@ class RobyneTheme extends ThemeExtension<RobyneTheme> {
       brandHover: Color.lerp(a.brandHover, b.brandHover, t),
       brandMuted: Color.lerp(a.brandMuted, b.brandMuted, t),
       onBrand: Color.lerp(a.onBrand, b.onBrand, t),
+      accentBase: Color.lerp(a.accentBase, b.accentBase, t),
+      accentMuted: Color.lerp(a.accentMuted, b.accentMuted, t),
+      onAccent: Color.lerp(a.onAccent, b.onAccent, t),
       textPrimary: Color.lerp(a.textPrimary, b.textPrimary, t),
       textSecondary: Color.lerp(a.textSecondary, b.textSecondary, t),
       textMuted: Color.lerp(a.textMuted, b.textMuted, t),

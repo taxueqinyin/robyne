@@ -51,6 +51,20 @@ dependencies:
   audio_metadata_reader: ^1.6.0
   desktop_multi_window: ^0.3.0
   window_manager: ^0.5.2
+  # `window_manager` re-exports display queries on some platforms but not on
+  # Windows, and the tray panel needs the monitor work area (screen minus the
+  # taskbar) to anchor itself. Declared explicitly so the dependency is ours,
+  # not something inherited by accident.
+  screen_retriever: ^0.2.2
+  # 0.6.x routes tray callbacks through nativeapi FFI. On Windows those
+  # callbacks arrive on the native message thread, while the Dart binding uses
+  # NativeCallable.isolateLocal, which aborts the isolate with
+  # "Cannot invoke native callback outside an isolate". 0.5.3 still uses the
+  # platform MethodChannel and is the version whose Windows click events are
+  # safe.
+  tray_manager: 0.5.3
+  nativeapi: ^0.2.7
+  image: ^4.8.0
   archive: ^4.3.0
 
 dev_dependencies:
@@ -88,9 +102,13 @@ flutter:
   assets:
     - assets/js/
     - test_files/
-    - assets/themes/official-light/theme.json
-    - assets/themes/official-dark/theme.json
-    - assets/themes/official-midnight/theme.json
+    - assets/branding/
+    - windows/runner/resources/app_icon.ico
+    # 《玄》 is the only bundled skin. The retired `official-*` directories are
+    # left on disk for reference but are no longer shipped or registered, so a
+    # fresh install has exactly one built-in skin (see BuiltInThemeRepository).
+    - assets/themes/xuan/theme.json
+    - assets/themes/xuan/assets/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

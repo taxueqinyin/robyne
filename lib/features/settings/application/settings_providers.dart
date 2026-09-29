@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/domain/theme_layout_override.dart';
 import '../../downloads/domain/download_audio_format.dart';
 import '../domain/lyric_settings.dart';
 import '../domain/shortcut_action.dart';
@@ -30,6 +31,34 @@ class SettingsController extends AsyncNotifier<UserSettings> {
   Future<void> setCacheSizeBytes(int bytes) async {
     state = AsyncData(
       await ref.read(settingsRepositoryProvider).setCacheSizeBytes(bytes),
+    );
+  }
+
+  /// Pins how opening an online collection treats the queue.
+  Future<void> setPlaylistOpenAction(PlaylistOpenAction action) async {
+    state = AsyncData(
+      await ref.read(settingsRepositoryProvider).setPlaylistOpenAction(action),
+    );
+  }
+
+  /// Remembers whether the queue panel is docked between launches.
+  Future<void> setQueuePanelVisible(bool visible) async {
+    state = AsyncData(
+      await ref.read(settingsRepositoryProvider).setQueuePanelVisible(visible),
+    );
+  }
+
+  /// Remembers what the desktop close button should do after the first ask.
+  Future<void> setTrayCloseAction(TrayCloseAction action) async {
+    state = AsyncData(
+      await ref.read(settingsRepositoryProvider).setTrayCloseAction(action),
+    );
+  }
+
+  /// Persists an explicit rail width, or resets to the active skin's ratio.
+  Future<void> setSidebarWidth(double? width) async {
+    state = AsyncData(
+      await ref.read(settingsRepositoryProvider).setSidebarWidth(width),
     );
   }
 
@@ -72,6 +101,17 @@ class SettingsController extends AsyncNotifier<UserSettings> {
       await ref
           .read(settingsRepositoryProvider)
           .setThemeSettingValue(themeId, key, value),
+    );
+  }
+
+  Future<void> setThemeLayoutOverride(
+    String themeId,
+    ThemeLayoutOverride? override,
+  ) async {
+    state = AsyncData(
+      await ref
+          .read(settingsRepositoryProvider)
+          .setThemeLayoutOverride(themeId, override),
     );
   }
 

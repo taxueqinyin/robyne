@@ -13,11 +13,7 @@ class _BundleRepository implements ThemeRepository {
   @override
   Future<List<ThemePackage>> listThemes() async {
     final out = <ThemePackage>[];
-    for (final id in const <String>[
-      'official.light',
-      'official.dark',
-      'official.midnight',
-    ]) {
+    for (final id in const <String>['xuan']) {
       final t = await loadTheme(id);
       if (t != null) out.add(t);
     }
@@ -45,33 +41,24 @@ class _BundleRepository implements ThemeRepository {
 }
 
 void main() {
-  test('REGRESSION: every official skin is visually distinct', () async {
+  test('REGRESSION: the flagship skin resolves its own palette', () async {
     final themes = await _BundleRepository().listThemes();
-    expect(themes.length, 3, reason: 'all three bundled skins must load');
+    expect(themes, hasLength(1), reason: '《玄》is the single built-in skin');
 
     const resolver = TokenResolver();
-    final backgrounds = <Color>{};
-    final brands = <Color>{};
-    for (final theme in themes) {
-      final resolved = resolver.resolve(
-        theme.tokens,
-        TokenResolver.naturalBrightness(theme.mode),
-        theme.mode,
-      );
-      backgrounds.add(resolved.scaffoldBackgroundColor);
-      brands.add(resolved.colorScheme.primary);
-    }
-    // The bug was that all skins degraded to one identical baseline palette,
-    // so switching appeared to do nothing.
-    expect(
-      backgrounds.length,
-      themes.length,
-      reason: 'each skin must render a distinct background',
+    final theme = themes.single;
+    final resolved = resolver.resolve(
+      theme.tokens,
+      TokenResolver.naturalBrightness(theme.mode),
+      theme.mode,
     );
+    // The bug was that a skin degraded to the baseline palette, so the
+    // flagship looked like a default Material app instead of《玄》.
+    expect(resolved.scaffoldBackgroundColor, const Color(0xFF0B0C0E));
+    expect(resolved.colorScheme.primary, const Color(0xFFFF6B3D));
     expect(
-      brands.length,
-      themes.length,
-      reason: 'each skin must render a distinct brand colour',
+      theme.tokens.components.navBar.selectedIndicator,
+      const Color(0xFFFF6B3D),
     );
   });
 
@@ -85,6 +72,9 @@ void main() {
         theme.mode,
       );
       final dark = resolver.resolve(theme.tokens, Brightness.dark, theme.mode);
+      // A single-mode skin keeps its authored palette in its own brightness
+      // and derives the other one; a dark skin must not silently render its
+      // dark background in light mode.
       expect(
         light.scaffoldBackgroundColor,
         isNot(dark.scaffoldBackgroundColor),

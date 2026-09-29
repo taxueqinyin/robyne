@@ -1,9 +1,15 @@
 import 'dart:ui';
 
 import '../domain/theme_components.dart';
+import '../domain/theme_icons.dart';
+import '../domain/theme_home.dart';
 import '../domain/theme_layout.dart';
+import '../domain/theme_navigation.dart';
 import '../domain/theme_package.dart';
+import '../domain/theme_regions.dart';
+import '../domain/theme_strings.dart';
 import '../domain/theme_tokens.dart';
+import 'token_resolver.dart';
 import 'theme_path_guard.dart';
 
 /// Parses `theme.json` into a [ThemePackage].
@@ -49,7 +55,22 @@ class ThemeManifestParser {
       tokens: _tokens(tokensRaw is Map ? tokensRaw : null),
       layout: _layout(raw['layout'] is Map ? raw['layout'] as Map : null),
       settings: _settings(raw['settings']),
-      assets: _assets(assetsRaw is Map ? assetsRaw : null),
+      assets: _assets(
+        assetsRaw is Map ? assetsRaw : null,
+        iconFontFamily: _iconFontFamily(assetsRaw),
+      ),
+      // The whole `navigation` object goes through, not just `hidden`: the
+      // hidden set and the overflow slot are one decision, and the parser is
+      // the only layer that sees the raw JSON.
+      navigation: ThemeNavigation.parse(raw['navigation']),
+      // Screen untrusted text with this parser's own `_bounded`, so a manifest
+      // is length-capped by one rule rather than by whichever reader it hit.
+      strings: ThemeStrings.parse(
+        raw['strings'],
+        readText: _bounded,
+        maxLength: _maxShortText,
+      ),
+      icons: ThemeIcons.parse(raw['icons']),
       source: source,
     );
   }
@@ -120,6 +141,60 @@ class ThemeManifestParser {
       card: _card(raw['card'] is Map ? raw['card'] as Map : null),
       list: _list(raw['list'] is Map ? raw['list'] as Map : null),
       motion: _motion(raw['motion'] is Map ? raw['motion'] as Map : null),
+      ambient: _ambient(raw['ambient'] is Map ? raw['ambient'] as Map : null),
+      content: _contentMetrics(
+        raw['content'] is Map ? raw['content'] as Map : null,
+      ),
+    );
+  }
+
+  /// Parses `components.content`, the content region's geometry.
+  ///
+  /// Bounded so a skin cannot make a row 4dp (untappable) or 400dp (one row
+  /// per screen), and a gutter wide enough to leave no content column.
+  static ThemeContentMetrics? _contentMetrics(Map? raw) {
+    if (raw == null) {
+      return null;
+    }
+    const base = ThemeContentMetrics.baseline();
+    return base.copyWith(
+      gutter: _doubleRangedOrNull(raw['gutter'], 0, 96),
+      gutterCompact: _doubleRangedOrNull(raw['gutterCompact'], 0, 96),
+      rowHeight: _doubleRangedOrNull(raw['rowHeight'], 32, 160),
+      rowHeightCompact: _doubleRangedOrNull(raw['rowHeightCompact'], 32, 160),
+      cardMinWidth: _doubleRangedOrNull(raw['cardMinWidth'], 80, 480),
+      cardMinWidthCompact: _doubleRangedOrNull(
+        raw['cardMinWidthCompact'],
+        80,
+        480,
+      ),
+      cardGap: _doubleRangedOrNull(raw['cardGap'], 0, 64),
+      cardGapCompact: _doubleRangedOrNull(raw['cardGapCompact'], 0, 64),
+      sectionGap: _doubleRangedOrNull(raw['sectionGap'], 0, 96),
+      navIconSize: _doubleRangedOrNull(raw['navIconSize'], 12, 40),
+      logoSize: _doubleRangedOrNull(raw['logoSize'], 12, 64),
+      avatarSize: _doubleRangedOrNull(raw['avatarSize'], 16, 96),
+    );
+  }
+
+  /// Parses `components.ambient`, the cover-driven wash from design §3.4.
+  ///
+  /// `strength` is clamped to the 0..0.6 the design allows: a wash strong
+  /// enough to swallow the text would make every page unreadable, and the
+  /// atmosphere layer is explicitly not allowed to decide readability.
+  static ThemeAmbientComponents? _ambient(Map? raw) {
+    if (raw == null) {
+      return null;
+    }
+    const base = ThemeAmbientComponents.baseline();
+    return base.copyWith(
+      // `_bool` also accepts "true"/"false" strings, which is what a hand
+      // edited manifest is most likely to contain.
+      enabled: _bool(raw['enabled']),
+      strength: _doubleRangedOrNull(raw['strength'], 0, 0.6),
+      heightFraction: _doubleRangedOrNull(raw['heightFraction'], 0.05, 1),
+      blur: _doubleRangedOrNull(raw['blur'], 0, 200),
+      color: _color(raw['color']),
     );
   }
 
@@ -135,6 +210,9 @@ class ThemeManifestParser {
       gradient: _gradient(raw['gradient']),
       selectedItem: _color(raw['selectedItem']),
       selectedIndicator: _color(raw['selectedIndicator']),
+      selectedIndicatorFill: _color(raw['selectedIndicatorFill']),
+      showProfile: _bool(raw['showProfile']),
+      showPlaylistGroup: _bool(raw['showPlaylistGroup']),
     );
   }
 
@@ -256,6 +334,13 @@ class ThemeManifestParser {
     return parsed.round().clamp(min, max);
   }
 
+  /// Clamped double that stays `null` when the field is absent, so a partial
+  /// component group keeps its baseline instead of snapping to zero.
+  static double? _doubleRangedOrNull(Object? value, double min, double max) {
+    final parsed = _ranged(value, min, max);
+    return parsed?.clamp(min, max);
+  }
+
   static ThemeLayout _layout(Map? raw) {
     const baseline = ThemeLayout.baseline();
     if (raw == null) {
@@ -264,10 +349,15 @@ class ThemeManifestParser {
     final desktopRaw = raw['desktop'];
     final mobileRaw = raw['mobile'];
     final contentRaw = raw['content'];
+    final homeRaw = raw['home'];
     return baseline.copyWith(
       desktop: _desktopLayout(desktopRaw is Map ? desktopRaw : null),
       mobile: _mobileLayout(mobileRaw is Map ? mobileRaw : null),
       content: _contentLayout(contentRaw is Map ? contentRaw : null),
+      // The whole `home` object goes through, not just `blocks`: a skin may
+      // shape each form factor's composition independently, and the parser is
+      // the only layer that sees the raw JSON.
+      home: ThemeHomeLayout.parse(homeRaw),
     );
   }
 
@@ -276,13 +366,11 @@ class ThemeManifestParser {
     if (raw == null) {
       return baseline;
     }
-    final sidebarRaw = raw['sidebar'];
     return baseline.copyWith(
-      sidebar: _sidebarLayout(sidebarRaw is Map ? sidebarRaw : null),
-      playerBarPosition: ThemePlayerBarPosition.fromName(
-        _string(raw['playerBarPosition']),
+      arrangement: RobyneArrangement.parse(
+        raw['arrangement'],
+        formFactor: RobyneFormFactor.desktop,
       ),
-      playerBarHeight: _ranged(raw['playerBarHeight'], 32, 200),
     );
   }
 
@@ -292,22 +380,10 @@ class ThemeManifestParser {
       return baseline;
     }
     return baseline.copyWith(
-      navigation: ThemeMobileNavigation.fromName(_string(raw['navigation'])),
-      playerBarHeight: _ranged(raw['playerBarHeight'], 32, 200),
-      playerBarCompact: _bool(raw['playerBarCompact']),
-    );
-  }
-
-  static ThemeSidebarLayout _sidebarLayout(Map? raw) {
-    const baseline = ThemeSidebarLayout.baseline();
-    if (raw == null) {
-      return baseline;
-    }
-    return baseline.copyWith(
-      position: ThemeSidebarPosition.fromName(_string(raw['position'])),
-      width: _ranged(raw['width'], 56, 400),
-      collapsible: _bool(raw['collapsible']),
-      labelMode: ThemeRailLabelMode.fromName(_string(raw['labelMode'])),
+      arrangement: RobyneArrangement.parse(
+        raw['arrangement'],
+        formFactor: RobyneFormFactor.mobile,
+      ),
     );
   }
 
@@ -319,7 +395,42 @@ class ThemeManifestParser {
     return baseline.copyWith(
       listStyle: ThemeListStyle.fromName(_string(raw['listStyle'])),
       density: ThemeDensity.fromName(_string(raw['density'])),
+      styles: _contentStyles(raw['styles']),
     );
+  }
+
+  /// Parses `layout.content.styles`, the per-destination presentation map.
+  ///
+  /// The design's §2.5 table is per surface ("本地库 uses `list`, 发现页 uses
+  /// `grid`"), so a single global `listStyle` could not express it. Unknown
+  /// destinations and values are dropped, which keeps a skin written for a
+  /// newer app from breaking an older one.
+  static Map<ThemeContentSurface, ThemeListStyle> _contentStyles(Object? raw) {
+    if (raw is! Map) {
+      return const <ThemeContentSurface, ThemeListStyle>{};
+    }
+    final styles = <ThemeContentSurface, ThemeListStyle>{};
+    raw.forEach((rawKey, rawValue) {
+      final surface = ThemeContentSurface.fromJsonName(
+        rawKey?.toString().trim(),
+      );
+      if (surface == null) {
+        return;
+      }
+      final name = _string(rawValue);
+      if (name == null) {
+        return;
+      }
+      // Only accept a value the enum actually knows: `fromName` silently
+      // falls back to `list`, which would turn a typo into a real override.
+      for (final style in ThemeListStyle.values) {
+        if (style.name == name) {
+          styles[surface] = style;
+          return;
+        }
+      }
+    });
+    return Map<ThemeContentSurface, ThemeListStyle>.unmodifiable(styles);
   }
 
   static bool? _bool(Object? value) {
@@ -344,9 +455,15 @@ class ThemeManifestParser {
     final bg = raw['background'];
     final surface = raw['surface'];
     final brand = raw['brand'];
+    final accent = raw['accent'];
     final text = raw['text'];
     final border = raw['border'];
     final status = raw['status'];
+
+    // A skin may declare `accent.base` without a companion `onAccent`. The
+    // readable foreground is derived rather than left as white, because half
+    // of the interesting accent colours are pale yellows and mint greens.
+    final accentBase = _color(_group(accent, 'base'));
 
     return baseline.copyWith(
       backgroundBase: _color(_group(bg, 'base')),
@@ -361,6 +478,11 @@ class ThemeManifestParser {
       brandHover: _color(_group(brand, 'hover')),
       brandMuted: _color(_group(brand, 'muted')),
       onBrand: _color(_group(brand, 'onBrand')),
+      accentBase: accentBase,
+      accentMuted: _color(_group(accent, 'muted')),
+      onAccent:
+          _color(_group(accent, 'onAccent')) ??
+          (accentBase == null ? null : TokenResolver.contrastOn(accentBase)),
       textPrimary: _color(_group(text, 'primary')),
       textSecondary: _color(_group(text, 'secondary')),
       textMuted: _color(_group(text, 'muted')),
@@ -414,6 +536,14 @@ class ThemeManifestParser {
       scale: scale,
       bodyWeight: _weight(raw['bodyWeight']),
       titleWeight: _weight(raw['titleWeight']),
+      // Bounded to a range that can still be laid out: 8dp is unreadable and
+      // 96dp would swallow any panel the app can draw.
+      pageTitleSize: _doubleRangedOrNull(raw['pageTitleSize'], 8, 96),
+      sectionTitleSize: _doubleRangedOrNull(raw['sectionTitleSize'], 8, 96),
+      listPrimarySize: _doubleRangedOrNull(raw['listPrimarySize'], 8, 96),
+      listSecondarySize: _doubleRangedOrNull(raw['listSecondarySize'], 8, 96),
+      labelSize: _doubleRangedOrNull(raw['labelSize'], 8, 96),
+      labelWeight: _weight(raw['labelWeight']),
     );
   }
 
@@ -466,17 +596,64 @@ class ThemeManifestParser {
     );
   }
 
-  static ThemeAssets _assets(Map? raw) {
+  static ThemeAssets _assets(Map? raw, {String? iconFontFamily}) {
     const baseline = ThemeAssets.empty();
     if (raw == null) {
-      return baseline;
+      return baseline.copyWith(iconFontFamily: iconFontFamily);
     }
+    final iconsRaw = _group(raw, 'icons');
+    final iconFont = iconsRaw is Map ? iconsRaw['font'] : null;
     return baseline.copyWith(
       background: ThemePathGuard.sanitizeAsset(
         _bounded(raw['background'], 256),
       ),
       font: ThemePathGuard.sanitizeAsset(_bounded(raw['font'], 256)),
+      logo: ThemePathGuard.sanitizeAsset(_bounded(raw['logo'], 256)),
+      avatar: ThemePathGuard.sanitizeAsset(_bounded(raw['avatar'], 256)),
+      hero: ThemePathGuard.sanitizeAsset(_bounded(raw['hero'], 256)),
+      iconFont: ThemePathGuard.sanitizeAsset(_bounded(iconFont, 256)),
+      // The namespaced name always wins over the declared one: a skin may
+      // call its set "MaterialIcons" for authoring convenience, but it must
+      // not be able to *be* MaterialIcons and shadow the app's own glyphs.
+      iconFontFamily: iconFontFamily,
     );
+  }
+
+  /// The deterministic icon-font family for a skin that ships one.
+  ///
+  /// Stores the *declared* name verbatim (screened by [_sanitizeFamily]), not
+  /// the final namespaced family: `ThemePackage.iconsFontFamily` composes the
+  /// namespace, and it is the one place both the loader and the renderer read.
+  /// Pre-namespacing here made the loader namespace it a second time.
+  static String? _iconFontFamily(Object? assetsRaw) {
+    if (assetsRaw is! Map) {
+      return null;
+    }
+    final iconsRaw = _group(assetsRaw, 'icons');
+    if (iconsRaw is! Map) {
+      return null;
+    }
+    final font = _bounded(iconsRaw['font'], 256);
+    if (font == null || font.isEmpty) {
+      return null;
+    }
+    return _sanitizeFamily(_bounded(iconsRaw['fontFamily'], 128));
+  }
+
+  /// Restricts an icon-font family name to a safe identifier.
+  ///
+  /// Falls back to null (the package id) when the declaration is unusable, so
+  /// two skins can never claim the same family and a malformed name cannot
+  /// reach the font loader.
+  static String? _sanitizeFamily(String? value) {
+    final text = value?.trim();
+    if (text == null || text.isEmpty) {
+      return null;
+    }
+    if (!RegExp(r'^[A-Za-z0-9_\- ]{1,64}$').hasMatch(text)) {
+      return null;
+    }
+    return text;
   }
 
   static List<ThemeSetting> _settings(Object? raw) {

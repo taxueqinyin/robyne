@@ -29,6 +29,23 @@ class ThemeTokens {
       background = const ThemeBackground.baseline(),
       components = const ThemeComponents.baseline();
 
+  /// Dark-neutral tokens, used wherever the app needs a legible dark surface
+  /// without a skin to describe one.
+  ///
+  /// Two callers share this: the resolver, when a light-authored skin is
+  /// forced into dark mode, and the pre-load stand-in the shell paints on its
+  /// very first frame. Keeping one palette for both means "dark default" is
+  /// defined once instead of being re-guessed per call site.
+  const ThemeTokens.darkBaseline()
+    : color = const ThemeColors.darkBaseline(),
+      radius = const ThemeRadii.baseline(),
+      spacing = const ThemeSpacings.baseline(),
+      typography = const ThemeTypography.baseline(),
+      elevation = const ThemeElevations.baseline(),
+      effects = const ThemeEffects.baseline(),
+      background = const ThemeBackground.baseline(),
+      components = const ThemeComponents.baseline();
+
   final ThemeColors color;
   final ThemeRadii radius;
   final ThemeSpacings spacing;
@@ -82,6 +99,9 @@ class ThemeColors {
     required this.brandHover,
     required this.brandMuted,
     required this.onBrand,
+    required this.accentBase,
+    required this.accentMuted,
+    required this.onAccent,
     required this.textPrimary,
     required this.textSecondary,
     required this.textMuted,
@@ -108,6 +128,9 @@ class ThemeColors {
       brandHover = const Color(0xFF2559C4),
       brandMuted = const Color(0x1F2F6FED),
       onBrand = const Color(0xFFFFFFFF),
+      accentBase = const Color(0xFF2E9E5B),
+      accentMuted = const Color(0x1F2E9E5B),
+      onAccent = const Color(0xFFFFFFFF),
       textPrimary = const Color(0xFF1B1D21),
       textSecondary = const Color(0xFF4A4F57),
       textMuted = const Color(0xFF7A8089),
@@ -119,6 +142,38 @@ class ThemeColors {
       danger = const Color(0xFFD64545),
       warning = const Color(0xFFD98A1F),
       success = const Color(0xFF2E9E5B);
+
+  /// The same semantic roles, resolved for a dark surface.
+  ///
+  /// Only neutrals move: brand, accent and status keep their identity, because
+  /// a dark rendering of a skin should still read as that skin.
+  const ThemeColors.darkBaseline()
+    : backgroundBase = const Color(0xFF14161A),
+      backgroundElevated = const Color(0xFF1C1F24),
+      backgroundSunken = const Color(0xFF0F1114),
+      backgroundOverlay = const Color(0x99000000),
+      surfaceBase = const Color(0xFF1C1F24),
+      surfaceHover = const Color(0x14FFFFFF),
+      surfaceActive = const Color(0x1FFFFFFF),
+      surfaceSelected = const Color(0xFF2B4A7A),
+      brandBase = const Color(0xFF2F6FED),
+      brandHover = const Color(0xFF4A83F0),
+      brandMuted = const Color(0x1F2F6FED),
+      onBrand = const Color(0xFFFFFFFF),
+      accentBase = const Color(0xFF3FB86C),
+      accentMuted = const Color(0x1F3FB86C),
+      onAccent = const Color(0xFF06110A),
+      textPrimary = const Color(0xFFE8EAED),
+      textSecondary = const Color(0xFFA8AEB8),
+      textMuted = const Color(0xFF7A8089),
+      textDisabled = const Color(0xFF565B63),
+      borderSubtle = const Color(0x0DFFFFFF),
+      borderDefault = const Color(0x1AFFFFFF),
+      borderStrong = const Color(0x29FFFFFF),
+      borderFocus = const Color(0xFF4A83F0),
+      danger = const Color(0xFFE06C6C),
+      warning = const Color(0xFFE0A03F),
+      success = const Color(0xFF3FB86C);
 
   final Color backgroundBase;
   final Color backgroundElevated;
@@ -134,6 +189,19 @@ class ThemeColors {
   final Color brandHover;
   final Color brandMuted;
   final Color onBrand;
+
+  /// The secondary emphasis colour.
+  ///
+  /// The flagship design uses it for lossless/high-quality markers and for
+  /// toggles that are "on" but are not the primary action, so a skin can
+  /// signal quality without reusing the brand colour.
+  final Color accentBase;
+
+  /// A washed-out accent for backgrounds that should not shout.
+  final Color accentMuted;
+
+  /// Text and icons painted on top of [accentBase].
+  final Color onAccent;
 
   final Color textPrimary;
   final Color textSecondary;
@@ -162,6 +230,9 @@ class ThemeColors {
     Color? brandHover,
     Color? brandMuted,
     Color? onBrand,
+    Color? accentBase,
+    Color? accentMuted,
+    Color? onAccent,
     Color? textPrimary,
     Color? textSecondary,
     Color? textMuted,
@@ -187,6 +258,9 @@ class ThemeColors {
       brandHover: brandHover ?? this.brandHover,
       brandMuted: brandMuted ?? this.brandMuted,
       onBrand: onBrand ?? this.onBrand,
+      accentBase: accentBase ?? this.accentBase,
+      accentMuted: accentMuted ?? this.accentMuted,
+      onAccent: onAccent ?? this.onAccent,
       textPrimary: textPrimary ?? this.textPrimary,
       textSecondary: textSecondary ?? this.textSecondary,
       textMuted: textMuted ?? this.textMuted,
@@ -264,19 +338,38 @@ class ThemeSpacings {
 }
 
 /// Typography tokens.
+///
+/// [scale] is the blunt instrument: one multiplier for every size. The role
+/// sizes below are the precise one, and they exist because `UI_DESIGN_SPEC.md`
+/// §3.3 defines exactly five roles — page title 24/600, section title 18/600,
+/// list primary 15/400, list secondary 13/400, label 11/500. Without them a
+/// skin could only make *everything* bigger, which is not the same as
+/// choosing a typographic voice.
 class ThemeTypography {
   const ThemeTypography({
     required this.fontFamily,
     required this.scale,
     required this.bodyWeight,
     required this.titleWeight,
+    this.pageTitleSize,
+    this.sectionTitleSize,
+    this.listPrimarySize,
+    this.listSecondarySize,
+    this.labelSize,
+    this.labelWeight,
   });
 
   const ThemeTypography.baseline()
     : fontFamily = null,
       scale = 1,
       bodyWeight = 400,
-      titleWeight = 600;
+      titleWeight = 600,
+      pageTitleSize = null,
+      sectionTitleSize = null,
+      listPrimarySize = null,
+      listSecondarySize = null,
+      labelSize = null,
+      labelWeight = null;
 
   /// Null means "use the platform default font".
   final String? fontFamily;
@@ -288,11 +381,38 @@ class ThemeTypography {
   final int bodyWeight;
   final int titleWeight;
 
+  /// Per-role sizes, in logical pixels.
+  ///
+  /// Null means "use the design-spec default for this role", so a skin that
+  /// only cares about one role does not have to restate the other four.
+  final double? pageTitleSize;
+  final double? sectionTitleSize;
+  final double? listPrimarySize;
+  final double? listSecondarySize;
+  final double? labelSize;
+
+  /// Label weight; design spec §3.3 asks for 500.
+  final int? labelWeight;
+
+  /// Role sizes resolved against the design-spec defaults.
+  double get resolvedPageTitleSize => pageTitleSize ?? 24;
+  double get resolvedSectionTitleSize => sectionTitleSize ?? 18;
+  double get resolvedListPrimarySize => listPrimarySize ?? 15;
+  double get resolvedListSecondarySize => listSecondarySize ?? 13;
+  double get resolvedLabelSize => labelSize ?? 11;
+  int get resolvedLabelWeight => labelWeight ?? 500;
+
   ThemeTypography copyWith({
     Object? fontFamily = _sentinel,
     double? scale,
     int? bodyWeight,
     int? titleWeight,
+    Object? pageTitleSize = _sentinel,
+    Object? sectionTitleSize = _sentinel,
+    Object? listPrimarySize = _sentinel,
+    Object? listSecondarySize = _sentinel,
+    Object? labelSize = _sentinel,
+    Object? labelWeight = _sentinel,
   }) {
     return ThemeTypography(
       fontFamily: identical(fontFamily, _sentinel)
@@ -301,6 +421,24 @@ class ThemeTypography {
       scale: scale ?? this.scale,
       bodyWeight: bodyWeight ?? this.bodyWeight,
       titleWeight: titleWeight ?? this.titleWeight,
+      pageTitleSize: identical(pageTitleSize, _sentinel)
+          ? this.pageTitleSize
+          : pageTitleSize as double?,
+      sectionTitleSize: identical(sectionTitleSize, _sentinel)
+          ? this.sectionTitleSize
+          : sectionTitleSize as double?,
+      listPrimarySize: identical(listPrimarySize, _sentinel)
+          ? this.listPrimarySize
+          : listPrimarySize as double?,
+      listSecondarySize: identical(listSecondarySize, _sentinel)
+          ? this.listSecondarySize
+          : listSecondarySize as double?,
+      labelSize: identical(labelSize, _sentinel)
+          ? this.labelSize
+          : labelSize as double?,
+      labelWeight: identical(labelWeight, _sentinel)
+          ? this.labelWeight
+          : labelWeight as int?,
     );
   }
 

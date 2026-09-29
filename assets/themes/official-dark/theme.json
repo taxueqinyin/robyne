@@ -6,7 +6,7 @@
   "authorUrl": "https://github.com/robyne",
   "version": "1.0.0",
   "description": "官方暗色皮肤。低对比、护眼，适合夜间使用。",
-  "preview": "#14161A",
+  "preview": "#0E0F12",
   "tags": [
     "dark",
     "minimalist"
@@ -15,44 +15,49 @@
   "tokens": {
     "color": {
       "background": {
-        "base": "#14161A",
-        "elevated": "#1C1F24",
-        "sunken": "#0F1114",
+      "base": "#0E0F12",
+        "elevated": "#15171B",
+        "sunken": "#0A0B0D",
         "overlay": "#99000000"
       },
       "surface": {
-        "base": "#1C1F24",
-        "hover": "#14FFFFFF",
-        "active": "#1FFFFFFF",
-        "selected": "#2B4A7A"
+        "base": "#1A1D21",
+        "hover": "#22262B",
+        "active": "#2A2F35",
+        "selected": "#2E211D"
       },
       "brand": {
-        "base": "#6EA8FE",
-        "hover": "#8FBCFF",
-        "muted": "#26EA8FE",
-        "onBrand": "#101318"
+        "base": "#FF6B4A",
+        "hover": "#FF8570",
+        "muted": "#33FF6B4A",
+        "onBrand": "#141517"
+      },
+      "accent": {
+        "base": "#5AD0BE",
+        "muted": "#245A50",
+        "onAccent": "#0E0F12"
       },
       "text": {
-        "primary": "#E8EAED",
-        "secondary": "#A8AEB8",
-        "muted": "#7A8089",
-        "disabled": "#565B63"
+        "primary": "#F2F3F5",
+        "secondary": "#A9AEB6",
+        "muted": "#6E737B",
+        "disabled": "#4A4E55"
       },
       "border": {
-        "subtle": "#0DFFFFFF",
-        "default": "#1AFFFFFF",
+        "subtle": "#14FFFFFF",
+        "default": "#1FFFFFFF",
         "strong": "#29FFFFFF",
-        "focus": "#6EA8FE"
+        "focus": "#FF6B4A"
       },
       "status": {
-        "danger": "#F26D6D",
+        "danger": "#E5484D",
         "warning": "#E5A03C",
-        "success": "#5CC98A"
+        "success": "#5AD0BE"
       }
     },
     "radius": {
       "sm": 6,
-      "md": 10,
+      "md": 8,
       "lg": 16,
       "full": 999
     },
@@ -82,6 +87,49 @@
       "fillMode": "cover",
       "overlay": null,
       "overlayOpacity": 0
+    },
+    "components": {
+      "navBar": {
+        "background": "#15171B",
+        "gradient": {
+          "stops": [
+            { "color": "#1A1D21", "offset": 0 },
+            { "color": "#15171B", "offset": 1 }
+          ]
+        },
+        "selectedItem": "#FF8570",
+        "selectedIndicator": "#26FF6B4A"
+      },
+      "playerBar": {
+        "background": "#15171B",
+        "gradient": {
+          "stops": [
+            { "color": "#15171B", "offset": 0 },
+            { "color": "#0E0F12", "offset": 1 }
+          ]
+        },
+        "progressTrack": "#1FFFFFFF",
+        "progressActive": "#FF6B4A"
+      },
+      "lyric": {
+        "activeLine": "#FF6B4A",
+        "inactiveLine": "#A9AEB6",
+        "activeBackground": "#1FFF6B4A"
+      },
+      "card": {
+        "surface": "#1A1D21",
+        "hover": "#22262B",
+        "selected": "#2E211D"
+      },
+      "list": {
+        "itemSelected": "#2E211D",
+        "itemHover": "#22262B"
+      },
+      "motion": {
+        "shortDurationMs": 150,
+        "mediumDurationMs": 300,
+        "curve": "standard"
+      }
     }
   },
   "settings": [
@@ -89,7 +137,7 @@
       "key": "brandColor",
       "type": "color",
       "label": "强调色",
-      "default": "#6EA8FE",
+      "default": "#FF6B4A",
       "target": "color.brand.base"
     },
     {
@@ -98,26 +146,27 @@
       "label": "圆角",
       "min": 0,
       "max": 28,
-      "default": 10,
+      "default": 8,
       "target": "radius.md"
     }
   ],
   "assets": {},
   "layout": {
-    "desktop": {
-      "sidebar": {
-        "position": "left",
-        "width": 80,
-        "collapsible": false,
-        "labelMode": "all"
+      "desktop": {
+        "arrangement": [
+          { "region": "topBar", "slot": "top", "size": 0.06 },
+          { "region": "navBar", "slot": "left", "size": 0.14 },
+          { "region": "content", "slot": "center" },
+          { "region": "playerBar", "slot": "bottom", "size": 0.09 },
+          { "region": "queue", "slot": "right", "size": 0.24 }
+        ]
       },
-      "playerBarPosition": "bottom",
-      "playerBarHeight": 72
-    },
     "mobile": {
-      "navigation": "bottomTabs",
-      "playerBarHeight": 64,
-      "playerBarCompact": true
+      "arrangement": [
+        { "region": "content", "slot": "center" },
+        { "region": "playerBar", "slot": "bottom", "size": 0.09 },
+        { "region": "navBar", "slot": "bottom", "size": 0.09 }
+      ]
     },
     "content": {
       "listStyle": "list",

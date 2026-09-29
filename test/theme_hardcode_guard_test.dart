@@ -30,7 +30,13 @@ void main() {
   /// The desktop lyric window is a separate engine with its own always-dark
   /// surface and is deliberately outside the skin system
   /// (`THEME_DECISIONS.md` Q2 chose to leave it alone for now).
-  final allowListed = <String>{'desktop_lyric_window.dart'};
+  // The desktop lyric and tray panel windows are separate desktop engine
+  // surfaces. They are intentionally outside the skin system for now, so
+  // their always-dark chrome does not pretend to be skin-token driven.
+  final allowListed = <String>{
+    'desktop_lyric_window.dart',
+    'tray_panel_window.dart',
+  };
 
   test('feature pages do not hard-code Material colours', () {
     final offenders = <String>[];

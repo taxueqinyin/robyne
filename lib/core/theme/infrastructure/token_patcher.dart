@@ -78,6 +78,9 @@ class TokenPatcher {
         'selectedIndicator' => c.copyWith(
           navBar: c.navBar.copyWith(selectedIndicator: color),
         ),
+        'selectedIndicatorFill' => c.copyWith(
+          navBar: c.navBar.copyWith(selectedIndicatorFill: color),
+        ),
         _ => c,
       },
       'playerBar' => switch (name) {

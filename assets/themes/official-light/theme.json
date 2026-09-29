@@ -82,6 +82,49 @@
       "fillMode": "cover",
       "overlay": null,
       "overlayOpacity": 0
+    },
+    "components": {
+      "navBar": {
+        "background": "#FFFFFF",
+        "gradient": {
+          "stops": [
+            { "color": "#FFFFFF", "offset": 0 },
+            { "color": "#F4F3F1", "offset": 1 }
+          ]
+        },
+        "selectedItem": "#E85A3B",
+        "selectedIndicator": "#1FE85A3B"
+      },
+      "playerBar": {
+        "background": "#FFFFFF",
+        "gradient": {
+          "stops": [
+            { "color": "#FFFFFF", "offset": 0 },
+            { "color": "#F4F3F1", "offset": 1 }
+          ]
+        },
+        "progressTrack": "#1A000000",
+        "progressActive": "#E85A3B"
+      },
+      "lyric": {
+        "activeLine": "#E85A3B",
+        "inactiveLine": "#4A4F57",
+        "activeBackground": "#1FE85A3B"
+      },
+      "card": {
+        "surface": "#FFFFFF",
+        "hover": "#14000000",
+        "selected": "#1FE85A3B"
+      },
+      "list": {
+        "itemSelected": "#1FE85A3B",
+        "itemHover": "#14000000"
+      },
+      "motion": {
+        "shortDurationMs": 150,
+        "mediumDurationMs": 300,
+        "curve": "standard"
+      }
     }
   },
   "settings": [
@@ -105,19 +148,20 @@
   "assets": {},
   "layout": {
     "desktop": {
-      "sidebar": {
-        "position": "left",
-        "width": 80,
-        "collapsible": false,
-        "labelMode": "all"
-      },
-      "playerBarPosition": "bottom",
-      "playerBarHeight": 72
+      "arrangement": [
+        { "region": "topBar", "slot": "top", "size": 0.06 },
+        { "region": "navBar", "slot": "left", "size": 0.14 },
+        { "region": "content", "slot": "center" },
+        { "region": "playerBar", "slot": "bottom", "size": 0.09 },
+        { "region": "queue", "slot": "right", "size": 0.24 }
+      ]
     },
     "mobile": {
-      "navigation": "bottomTabs",
-      "playerBarHeight": 64,
-      "playerBarCompact": true
+      "arrangement": [
+        { "region": "content", "slot": "center" },
+        { "region": "playerBar", "slot": "bottom", "size": 0.09 },
+        { "region": "navBar", "slot": "bottom", "size": 0.09 }
+      ]
     },
     "content": {
       "listStyle": "list",

@@ -1,6 +1,7 @@
 # Robyne 皮肤系统 · 正式规划
 
-> 状态：**执行中** · 替代 `THEME_DECISIONS.md`（那份的 Q1「本期只做 L0+L1」建议已被推翻）
+> 状态：**阶段 1–3 已完成，阶段 4 已决定不做** · 当前工作是收尾与持续调优
+> 替代 `THEME_DECISIONS.md`（那份的 Q1「本期只做 L0+L1」建议已被推翻）
 > 面向：**后续可能由其他 AI / 其他会话接手**，故每一项都写明依据、文件位置和验收标准
 > 前置文档：`ADR-001-responsive-window-size-class.md`、`THEME_LAYER_DESIGN.md`、`THEME_AUTHORING.md`
 >
@@ -32,7 +33,7 @@
 |---|---|---|---|
 | **L0 调色** | 所有人 | 颜色 / 圆角 / 间距 / 字体 / 背景图 / 模糊 | ✅ 已可用 |
 | **L1 旋钮** | 普通用户 | 皮肤声明 `settings`，用户在设置页拖滑块改，**不改 JSON** | ✅ 已可用 |
-| **L2 布局** | 极客 | 命名区域重排 + 尺寸比例 + 区域风格 | ❌ 待建 |
+| **L2 布局** | 极客 | 命名区域重排 + 尺寸比例 + 区域风格 | ✅ 已可用（改 JSON + 热重载） |
 | ~~L3 脚本~~ | — | `theme.js` 输出 JSON | ❌ **明确不做** |
 
 **L3 放弃的理由**（尽管项目已有 QuickJS 运行时 `lib/features/plugin/infrastructure/quickjs_plugin_runtime.dart`）：
@@ -173,9 +174,9 @@ RobyneSlot（槽位，按形态选择）
 
 ---
 
-## 2. 待定事项（阻塞中）
+## 2. 决议事项（已关闭）
 
-### ⏸ OPEN-1 · 区域集合与形态映射 【待视觉设计文档确定】
+### ✅ OPEN-1 · 区域集合与形态映射 【已由视觉设计文档关闭】
 
 > **已修订**：初版假设了一套「桌面手机通用」的扁平区域集合，该假设**已作废**——
 > 它既与 D3 的 `layout.desktop.regions` / `layout.mobile.regions` 双套写法自相矛盾，
@@ -192,12 +193,14 @@ RobyneSlot（槽位，按形态选择）
 | `playerBar` | bottom | bottom | 播放条 |
 | `queue` | 可与 content 并列（right） | 进 content | 队列面板 |
 
-**需要视觉设计文档回答的问题**：
-1. 区域集合是否就是这 5 个？有没有独立的「推荐 banner 区」或「歌词区」？
-2. `topBar` 在手机上是否完全不出现，还是变形为别的？
-3. 各形态下区域的默认比例各是多少？
+**视觉设计文档给出的答案**（`UI_DESIGN_SPEC.md`）：
+1. 区域集合**就是这 5 个**。没有独立的「推荐 banner 区」——banner 是 `content.style`
+   的一个取值（§2.5）；歌词是全屏播放页内部的事，不是常驻区域
+2. `topBar` 在移动端**完全不出现**，搜索入口收进内容区顶部（§2.2）
+3. 默认比例见 §2.1 / §2.2 的 arrangement，与本文 §4 官方默认一致
 
-**接手者注意**：视觉设计文档产出前，**不要**开始阶段 3（L2 开放）。**可以**开始阶段 1（与区域无关）。
+**接手者注意**：OPEN-1 已关闭，阶段 2 / 3 均已完成。当前剩余的只有 §6 工作清单里
+列明的收尾项，以及阶段 4 中保留的那一项低优先级 lint。
 
 ### ✅ RESOLVED-2 · L2 边界 — 用户已接受 D2 所述边界。
 
@@ -218,6 +221,11 @@ RobyneSlot（槽位，按形态选择）
 | 用户旋钮 | `theme_package.dart:136` `token_patcher.dart` | 5 种类型，按 `target` 点号路径写回 token |
 | `.rtheme` 导入 | `theme_importer.dart` | 目录 / zip / 多皮肤目录 三种形态 |
 | 响应式地基 | `core/layout/window_size_class.dart` | ADR-001 已落地，见 §5 |
+| 图标可重绘 | `theme_icons.dart` + `presentation/theme_icon.dart` | 封闭 18 槽位；`codePoint` / 自带图标字体 `glyph` / 位图 `image` 三种画法，含 `active*` 选中态变体；无效声明一律回退内置字形 |
+| 氛围层 | `components.ambient` + `presentation/theme_ambient.dart` | 封面取主色（16px 解码均值，按 URL 缓存）→ content 顶部柔光；默认关闭，纯装饰不参与布局与可读性 |
+| 字体角色 | `theme_tokens.dart` `ThemeTypography` | 除 `scale` 外五个按角色命名的字号（页面标题 / 区块标题 / 列表主 / 列表次 / 标签）+ 标签字重，与设计稿 §3.3 一一对应 |
+| 导航入口排序 | `theme_navigation.dart` `applyOrder` | `desktopOrder` / `mobileOrder`，**前缀**语义；隐藏优先于排序 |
+| 皮肤导航溢出 | `theme_navigation.dart` `ThemeOverflowSlot` | `none` / `moreTab` / `homeHeader`；手机默认 `moreTab`，保证目的地不会因为装不下而消失 |
 
 ### 3.2 已确认的缺陷（阶段 1 要修）
 
@@ -258,17 +266,27 @@ RobyneSlot（槽位，按形态选择）
 - `artwork_view.dart:169`
 - `desktop_lyric_window.dart:643`
 
-**缺陷 D · layout 字段是死字段** 🟡
+**缺陷 D · layout 字段是死字段** ✅ **已修复（并已删除字段）**
 
-`theme_layout.dart` 声明的字段中，**只有 3 个被真实读取**（`router.dart`）：
-- `desktop.sidebar.width` ✅
-- `desktop.sidebar.labelMode` ✅
-- `desktop.sidebar.position` ✅
+原状：`theme_layout.dart` 声明的字段中只有 `desktop.sidebar.{width,labelMode,position}`
+被真实读取；`desktop.playerBarHeight` / `desktop.playerBarPosition` /
+`mobile.navigation` / `mobile.playerBarHeight` / `mobile.playerBarCompact` /
+`content.listStyle` / `content.density` 全部无人读取，
+`THEME_AUTHORING.md` 承诺的 `"mobile": { "playerBarHeight": 56 }` 根本不生效。
 
-**未被读取**：`desktop.playerBarHeight`、`desktop.playerBarPosition`、`mobile.navigation`、`mobile.playerBarHeight`、`mobile.playerBarCompact`、`content.listStyle`、`content.density`。
-→ `THEME_AUTHORING.md:168` 承诺的 `"layout": { "mobile": { "playerBarHeight": 56 } }` **不生效**。文档兑现能力存在缺口。
+**修复方式**：按本文一贯决定（「不要把旧字段接活」），arrangement 落地后这些字段被
+**删除**而非接活：
 
-**重要**：这些字段是**为 MVP UI 设计的**。新 UI 有顶栏 / 侧边导航 / 宫格 / 全屏播放页，区域集合完全变了。**不要把旧字段接活**——那是在即将拆掉的地基上装修。旧字段应随 L2 一起被新的区域契约取代。
+- 删字段：`ThemeDesktopLayout` 只留 `arrangement`；`ThemeMobileLayout` 只留 `arrangement`
+- 删类型：`ThemeSidebarLayout` / `ThemeSidebarPosition` / `ThemeRailLabelMode` /
+  `ThemePlayerBarPosition` / `ThemeMobileNavigation`
+- 删声明：三个内置皮肤 `theme.json` 里的 `sidebar` / `playerBarHeight` /
+  `playerBarPosition` / `navigation` / `playerBarCompact` 段
+- `content.listStyle` / `content.density` 是**新模型**的一部分，已生效（见 §4 阶段 3），
+  不属于被删的旧字段
+
+保留这些字段的真实代价：皮肤可以同时声明「72dp 播放条」和「0.09 的 arrangement 比例」，
+其中一个会被静默忽略——两个真源比一个死字段更糟。
 
 **缺陷 E · `schemaVersion` 被声明但未使用** 🟡
 
@@ -342,9 +360,11 @@ RobyneSlot（槽位，按形态选择）
   列入 allowlist（依据 `THEME_DECISIONS.md` Q2 的"v1 不动歌词窗口"）。
   若日后把歌词窗口纳入皮肤系统，记得把它移出 allowlist。
 
-### 阶段 2 — 旗舰 UI（与阶段 1 交叉进行）
+### 阶段 2 — 旗舰 UI（与阶段 1 交叉进行）✅ **已完成**
 
-**阻塞**：需先有视觉设计文档（OPEN-1）。
+**原阻塞已解除**：视觉设计文档 `docs/design/UI_DESIGN_SPEC.md` 已产出，OPEN-1 的
+三个问题（区域集合是否就是这 5 个、`topBar` 在手机上如何处理、各形态默认比例）
+在 §2.4 / §3.2 中已有答案，区域集合据此定稿。
 
 - 按视觉设计文档实现 QQ音乐式 UI
 - **每一行都走 `RobyneTheme.of(context)`**，不得出现 `colorScheme` 直取或硬编码
@@ -361,15 +381,115 @@ RobyneSlot（槽位，按形态选择）
 - **横屏手机（800×360）必须有可用布局** —— 这是 ADR-001 记录过的主要病症
 - 这套 UI 本身是 `assets/themes/` 下的一个内置皮肤，且能通过 D5（一键复制成第三方皮肤）
 
-### 阶段 3 — L2 开放
+### 阶段 3 — L2 开放 ✅ **已完成**
 
-**阻塞**：依赖阶段 2 定稿的区域集合。
+**原阻塞已解除**：区域集合已随阶段 2 定稿。
 
 - 区域契约从内部 registry 变成皮肤可覆盖
 - `theme.json` 支持 `layout.desktop.arrangement` / `layout.mobile.arrangement`（D6 格式）
 - 实现 D7 的分工：应用负责形态判定 / 比例换算 / 空间不足时的退化优先级
-- 设置页加布局编辑入口（拖拽 / 下拉选 slot，实时预览 + 一键还原）
+- **保存即生效**：监听用户皮肤目录，`theme.json` 或资源改动后去抖热重载（`theme_hot_reload.dart`）
+  - 客户端**不做**调色/圆角/布局编辑器；创作者直接用编辑器改 JSON
+  - 失败保留上一份可用皮肤，不白屏
+- `layout.home.blocks`：旗舰首页区块顺序由皮肤声明（hero / recommendations / recent / queue）
+  - **已扩展为按形态分叉**：`layout.home.desktop` / `layout.home.mobile` 各写一份区块序列，
+    只写一个形态时另一个继承 `blocks`。旗舰《玄》据此把手机首页做成
+    `quickActions → hero → favorites`，桌面做成 `hero → recommendations → recent`
+  - 区块集合：`quickActions` / `hero` / `recommendations` / `recent` / `favorites` / `queue`
+- 皮肤资源位：`assets.logo` / `assets.avatar` / `assets.hero`，与背景图、字体同一条解析与导出链路
+- **界面图标可重绘**：图标是最后一块皮肤碰不到的壳层——侧栏某一行、播放条某个按钮原本
+  都是 `Icons.*` 字面量，皮肤只能改颜色改不了形状，差异上限被压在「换色不换形」。
+  `icons` 段（`theme_icons.dart` + `presentation/theme_icon.dart`）给出封闭的 18 个槽位，
+  三种声明方式：`codePoint`（某字体里的码点）、`glyph`（皮肤自带图标字体
+  `assets.icons.font`）、`image`（位图）。护栏：声明无效一律回退内置字形——图标不是装饰，
+  播放键必须一直找得到；图标字体族名自动加命名空间，皮肤不能劫持 `MaterialIcons` 之类的
+  已有族名，两个皮肤也不会撞族名
+  - **《玄》刻意不写 `icons` 段。** 设计稿用的字形与 Material 现有字形是同一个形状
+    （发现=指南针、内容库=音符、设置=齿轮），把 `codePoint` 写成同样的值是一份没有效果的
+    声明，只会让后来者以为「旗舰在用自定义图标」。能力已经就位：真正的图标字体皮肤
+    照 `THEME_AUTHORING.md`「界面图标（`icons`）」的示例写即可，`theme_icons_test.dart` /
+    `theme_icon_render_test.dart` 已覆盖「换字形」「选中态变体」「坏声明回退」三条路径
+- **氛围层真的存在了**：设计稿 §3.4 把「封面驱动氛围」称为 Robyne 的标志性识别，
+  但在此之前整份设计里没有对应 token，也就从没实现过。新增 `components.ambient`
+  （开关 / 强度 / 覆盖高度 / 柔化 / 固定色）与 `presentation/theme_ambient.dart`：
+  从当前封面取主色（解码到 16px 求平均，按 URL 缓存），在 content 顶部画一层向下衰减的
+  柔光。护栏：默认关闭所以老皮肤渲染树不变；纯装饰不参与布局与文字颜色，强度再高也不会
+  影响可读性；显式 `color` 优先于封面取色
+- **动作节奏不再是死 token**：`components.motion` 此前被解析、导出、往返测试覆盖，
+  却没有任何 widget 读它——皮肤声明了节奏而屏幕上什么都不会变。现在它驱动换肤时的
+  过渡（`MaterialApp.themeAnimationDuration` / `themeAnimationCurve`），并通过
+  `activeThemeMotionProvider` 对其它动画开放
+- **`content.style` 不再有死枚举**：`banner` 在枚举里、在 `UI_DESIGN_SPEC.md` §2.5
+  里（「推荐横幅」）、在解析器里都存在，但没有任何 widget 分支处理它——皮肤要求横幅却
+  静默拿到行列表。现在本地库有真实的横向封面流分支。回归测试按滚动轴断言每种 style
+  渲染出**不同的**布局，而不是只断言「不抛异常」——后者对「静默落回行列表」同样会通过
+- **`content.style` 按目的地生效**：设计稿 §2.5 的表格是**按页面**给的（本地库
+  `list`、发现页 `grid`、推荐横幅 `banner`），而模型只有一个全局值。后果是《玄》为了
+  拿到推荐横幅而声明了 `banner`，于是**本地库也变成一屏四个巨型封面**——一个全局值
+  无法表达表格里本来就分行的意图。新增 `layout.content.styles.<目的地>`
+  （`ThemeContentSurface` 封闭集合）逐页覆盖，全局 `listStyle` 退为默认值。
+  护栏：未知目的地与未知值都被忽略，而不是经 `fromName` 的 `list` 兜底变成真实覆盖
+- **字体有了角色，不只是整体缩放**：`typography` 此前只有 `scale` 一个粗系数，
+  做不到「标题大、标签紧」这种字体性格。新增五个按角色命名的字号
+  （`pageTitleSize` / `sectionTitleSize` / `listPrimarySize` / `listSecondarySize` /
+  `labelSize` + `labelWeight`），对应 `UI_DESIGN_SPEC.md` §3.3 的五行为。
+  未声明的角色用设计稿默认值；字号收敛到 8–96。`scale` 与角色字号**相乘**而非互斥，
+  角色是皮肤的表达，`scale` 仍是用户的整体大小调节
+- **内容区几何可声明**：设计稿 §3.2 / §4.5 的留白、行高、卡片宽与间距此前是散落在
+  各页面里的字面量，皮肤能改一行颜色却挪不动它一个像素——这让「把行距收紧一点」这类
+  微调必须改代码。新增 `components.content`（`ThemeContentMetrics`）暴露 gutter /
+  rowHeight / cardMinWidth / cardGap / sectionGap，各自带 compact 变体。行内封面尺寸
+  跟随行高（70%，收敛 24–56），所以调整行高会带动整套行内比例。量纲上刻意用像素而非
+  比例：留白与行高是可用性问题，有正确答案；比例是给**区域**随窗口伸缩用的
+- **壳层比例也可声明**：侧栏图标、品牌标识、头像三个尺寸此前是 `router.dart` 里的
+  字面量——皮肤能改它们的颜色却改不了大小。现在同样挂在 `components.content` 下
+  （`navIconSize` / `logoSize` / `avatarSize`）。`ThemeDensity` 也从「解析了没人读」
+  变成真实生效：它是 `rowHeight` 上的一**个系数**（compact 0.85 / regular 1 /
+  comfortable 1.2），而不是与 `rowHeight` 竞争的第二套行高
+- `content.style` 的 `grid` / `card` / `compact` 都有真实分支：`compact` 用于横屏手机的
+  压缩行（封面 32dp、行高 48dp），与设计稿 §4.5 一致
+- **首帧不再闪白**：`_placeholder` 改用 `ThemeTokens.darkBaseline()`。此前它用的是
+  `baseline()`（浅色）却声明 `mode: dark`，两者矛盾，导致每次冷启动都闪一下已下线的浅色外观
+- **壳层文案**：`strings` 段让皮肤声明导航栏 / 顶栏 / 队列面板的文字（`theme_strings.dart`）。
+  槽位是封闭集合（`ThemeStringKey`），未知键被忽略、缺失键回退中性默认值。
+  这是为了让《玄》能显示中文导航，而不是要把 App 变成多语言系统：没有复数与时区格式化，
+  功能页面文案仍归应用所有
+- **导航入口**：`navigation.<形态>`（扁平数组）+ `navigation.<形态>Overflow` 让皮肤
+   （`theme_navigation.dart`）决定「哪些入口值得出现」「按什么顺序排列」与
+   「放不下的入口去哪里」。
+   《玄》借此隐藏了侧栏的 `playlists` 行——它正下方的歌单分组是同一目的地，两个入口
+   指向同一页面只会显得像两套导航。排序（`navigation.<形态>Order`）是**前缀**而非完整
+   排列：皮肤只写它关心的几个，其余保持内置顺序跟在后面，这样老皮肤不会因为写死列表而
+   丢掉日后新增的目的地。护栏：只能隐藏入口不能隐藏区域，`settings` 永不可隐藏，
+   隐藏优先于排序
+- **手机端的溢出入口**：`mobileOverflow: moreTab` 在手机底部 tab 栏末尾加一个「更多」，
+   点开是抽屉，列出插件 / 设置 / 下载 / 正在播放等放不下的入口。此前这些目的地只渲染在
+   桌面侧栏里，手机上**没有任何入口**（「导入插件根本找不到」就是这个成因）。
+   默认值刻意不对称：桌面 `none`（侧栏放得下全部）、手机 `moreTab`，这样手机默认不会
+   因为皮肤少声明一个字段就丢目的地；皮肤要极简界面时须显式写 `none`
+- **顶栏收敛到设计稿**：搜索框宽度从 620dp 收到 430dp（设计稿的 `.searchbox` 是
+  `max-width:430px` 的胶囊），并删除顶栏的队列按钮——播放条已有该入口，两个控件
+  意味着两个状态真源
+- **下线皮肤的 id 不再被复活**：`BuiltInThemeRepository.loadTheme` 对未注册的 id 返回
+  `null` 而不是合成皮肤。此前持久化设置里残留的 `official.light` 会让合成皮肤赢得
+  回退，App 一直显示旧的亮色皮肤、《玄》的 tokens 和 strings 全部失效——这是
+  「文案还是英文」「当前皮肤叫亮色」两个症状的共同根因
 - 旧 `theme_layout.dart` 字段迁移或废弃，同步更新 `THEME_AUTHORING.md`
+- **旧 layout 字段已删除**（缺陷 D 收尾）：见 §3.2 缺陷 D。`sidebar.*` /
+  `playerBarHeight` / `playerBarPosition` / `mobile.navigation` / `playerBarCompact`
+  连同相关枚举全部移除；三个内置皮肤的声明同步清理。理由不是「它们没用」而是
+  **它们与 arrangement 构成两个真源**——皮肤可以同时声明 72dp 播放条与 0.09 比例，
+  其中一个必然被静默忽略，这比一个死字段更难诊断。
+  原测试改写为覆盖 arrangement（继承、非法槽位修复、缺 `content` 回退）
+- **阶段 4 已决定不做**：皮肤编辑器取消。编辑由文件热重载承担，分享靠截图。详见 §4
+
+**已隐藏（代码保留）**：客户端内的 L1 旋钮控件与 L2 布局编辑器已从设置页移除。
+`ThemeSettingControl`、`ThemeLayoutOverride` 与 `settings_repository` 的
+`theme.layout_overrides` 持久化仍然存在且被测试覆盖，只是不再有任何入口渲染它们。
+保留的理由是：如果日后 JSON 编辑在某些场景下不够方便，可以据此重新做一个独立的
+编辑模式，而不必从零开始；在此之前，皮肤创作者直接改 `theme.json`，客户端热重载。
+旗舰《玄》的 `settings` 为空数组，所以即使将来某个入口重新渲染旋钮，它也不会变回
+「用户可调」的样子。
 
 **验收（多端）**：
 - 把官方皮肤的 `navBar` 从 left 挪到 right、`content` 改成 grid，App 仍完整可用且无溢出
@@ -377,12 +497,33 @@ RobyneSlot（槽位，按形态选择）
 - **写一个「桌面专用」的极端 arrangement，在手机上仍不崩溃**（护栏生效）
 - 把 `content` 从 arrangement 里删掉 → 应回退 baseline 且不白屏
 
-### 阶段 4 — 生态
+### 阶段 4 — 生态 ❌ **已决定不做**
 
-- 编辑器：**三种 size class 同时预览**（这是让「一键分享」可信的关键——作者能在发布前看到自己皮肤在手机横竖屏上的样子）
-- 导入时 lint：WCAG 对比度检查、arrangement 合法性检查（含每个形态是否含 `content`），皮肤卡片显示形态兼容性评级
-- 市场 `index.json` 带 `formFactors` 声明（作者测过哪些形态）
-- 可选：`mftheme` → JSON 导入器（桥，非地基）
+**决定：不做皮肤编辑器。** 原计划的「三种 size class 同时预览」编辑器取消。
+
+理由：
+
+- **编辑工作已经由文件热重载承担**（阶段 3 已落地：`theme_hot_reload.dart` 监听
+  `theme.json` 与同级资源，去抖后重载，失败保留上一份可用皮肤）。创作者用自己顺手的
+  编辑器改 JSON，保存即生效——这是 §0「自由优先于护栏」最直接的兑现：不强加一个
+  我们自己的编辑体验
+- **分享靠截图，不靠市场。** 用户想分享皮肤，在社交平台发截图即可。这也意味着
+  原计划的「一键分享可信度」问题不存在了：没有市场，就不需要为市场的可信度做预览
+
+因此以下原定项**一并取消**：
+
+- ~~编辑器：三种 size class 同时预览~~
+- ~~市场 `index.json` 带 `formFactors` 声明~~
+- ~~皮肤卡片显示形态兼容性评级~~
+
+**保留的一项**（它不依赖编辑器，且属于导入安全而非生态）：
+
+- 导入时 lint：arrangement 合法性检查（含每个形态是否含 `content`）。
+  这一项其实**已经在解析期做了**（`theme_regions.dart` 的 repair / fallback），
+  缺的只是把它从「静默修复」升级为「导入时显式提示」。低优先级，有需要再做
+
+**明确不做**：`mftheme` → JSON 导入器。它是给 MusicFree 生态做桥，不是本项目的地基；
+且导入器会引入一整套外部格式的兼容负担，与「JSON 是唯一真源」相冲
 
 ---
 
@@ -441,24 +582,32 @@ MusicFree 的失败点（`THEME_LAYER_DESIGN.md:17` 已记录）正是：`.l-sid
 
 ## 6. 给接手者的工作清单
 
-**当前状态**：**阶段 1 已完成**（2026-03-05）。详见 §4 阶段 1 的落地记录。
+**当前状态**：**阶段 1 / 2 / 3 均已完成**；阶段 4 已决定不做（详见 §4 阶段 4）。
+剩余的只有下面几项收尾工作，以及《玄》与皮肤系统的持续调优。
 
-**可以立刻做的剩余项**：
-1. 复核 `theme_hardcode_guard_test.dart` 的 allowlist
-   （`desktop_lyric_window.dart`）——若歌词窗口要纳入皮肤系统，需移出
-2. 给内置皮肤补上组件 token（会随阶段 2 的旗舰 UI 一起做，不必单独做）
+**剩余收尾项**（均已核实，不是推测）：
+1. ~~**缺陷 D 收尾**~~ ✅ **已完成**：`theme_layout.dart` 的旧字段
+   （`playerBarHeight` / `playerBarPosition` / `sidebar.*` / `mobile.navigation` /
+   `playerBarCompact`）连同 `ThemeSidebarLayout` / `ThemePlayerBarPosition` /
+   `ThemeMobileNavigation` / `ThemeSidebarPosition` / `ThemeRailLabelMode` 一并删除；
+   三个内置皮肤 `theme.json` 里的对应声明也清掉了。原测试
+   （`theme_pr3_test.dart`、`theme_security_test.dart`）改写为覆盖 arrangement
+2. 复核 `theme_hardcode_guard_test.dart` 的 allowlist
+   （`desktop_lyric_window.dart`）——若歌词窗口要纳入皮肤系统，需移出。
+   当前**有意保留**（依据 `THEME_DECISIONS.md` Q2 的「v1 不动歌词窗口」）
+3. 内置皮肤补组件 token：三个内置皮肤已带 `components` 段，但旗舰是《玄》。
+   是否进一步对齐，取决于内置皮肤是否还要继续维护
+4. 导入时 lint 显式化（阶段 4 保留项，低优先级）：arrangement 合法性检查目前在
+   解析期静默修复，尚未在导入时提示
 
-**必须等待**：
-- 阶段 2、3 → 等视觉设计文档与 OPEN-1 区域集合定稿
+**已完成的原「必须等待」项**：视觉设计文档已产出、OPEN-1 区域集合已定稿，
+阶段 2 / 3 不再阻塞。
 
-**阶段 2 开工时先读**（避免踩已填过的坑）：
+**开工前先读**（避免踩已填过的坑）：
 - `lib/core/theme/domain/theme_components.dart` —— 组件 token 已就绪，
   旗舰 UI 应直接使用，不要再往 `colorScheme` 上硬写
 - `test/theme_hardcode_guard_test.dart` —— 写完 UI 会立刻告诉你哪里漏了 token
 - `lib/core/layout/window_size_class.dart` —— 响应式地基，D6 的两层模型要接着它写
-
-**必须等待**：
-- 阶段 2、3 → 等视觉设计文档与 OPEN-1 区域集合定稿
 
 **不要做**：
 - 不要把 `theme_layout.dart` 的旧字段接活（缺陷 D）
@@ -466,13 +615,163 @@ MusicFree 的失败点（`THEME_LAYER_DESIGN.md:17` 已记录）正是：`.l-sid
 - 不要在 L2 里开放「新增区域」或「自定义 widget」（D2）
 - **不要让皮肤声明绝对像素尺寸**（D4）—— 一律主轴比例
 - **不要设计一套「桌面手机通用」的区域集合**（D6）—— 必须按形态分别定义；这是本项目的前车之鉴（§5.4）
+- **不要做皮肤编辑器**（§4 阶段 4）：编辑由文件热重载承担，分享靠截图。
+  再引入一个编辑器是与「JSON 是唯一真源」相冲的第二套编辑体验
 
-**测试基线（阶段 1 完成后）**：`flutter test` → **201 passed, 8 skipped**
-新增：`test/theme_stage1_test.dart`（20）、`test/theme_hardcode_guard_test.dart`（3）
+**测试基线**：`flutter test` → **363 passed, 8 skipped**（2026-09-26 复核；阶段 1 完成时是
+201 passed / 8 skipped）
+本轮新增：`theme_icons_test.dart`（20）、`theme_icon_render_test.dart`（4）、
+`theme_ambient_test.dart`（23，含按滚动轴断言每种 `content.style` 渲染出**不同**布局）、
+`theme_navigation_test.dart`（17）、`shell_mobile_reachability_test.dart`（4）
+
+### 2026-09-26 收尾
+
+- 《玄》导航选中态拆成两个 token：`selectedIndicator` 是实色右缘，
+  `selectedIndicatorFill` 是品牌洗染背景；旧透明色不再被硬当实色渲染。
+- `ambient.blur` 不再是死 token：氛围色带现在真正应用模糊，柔光读作光而不是色块。
+- 发现页一级入口从裸图标改为设计稿的「插件榜单」文本 pill，文案进入皮肤字符串
+  (`discover.rankingEntry`)。
+- 插件榜单二级页（发现 → 插件榜单）整套 chrome 交给皮肤：标题、来源、排行榜 /
+  热门歌单切换、空状态、重试、播放 / 下载 tooltip、`{count} tracks` 都在
+  `theme.json` 的 `strings` 里声明（`discover.*`），不再有英文硬编码。
+  来源与标签用设计稿的描边 pill（`_SourceChip`）而不是 `ChoiceChip`，切换用
+  两段 pill（`_SurfaceSwitch`）而不是 `SegmentedButton`，歌曲行是设计稿的行结构
+  而不是 `ListTile`。
+- 二栏拆分按**可用宽度**（560dp）判定，而不是 shell 的 expanded 断点：1280 窗口
+  减去侧栏与队列后仍有约 800dp，之前会因为 < 840 而塌成单栏。
+- `ChipThemeData` 补进 `TokenResolver`：此前没有声明，`ChoiceChip` 落到 Material
+  默认色，搜索页 / 正在播放页的 chip 是雾蓝而不是皮肤色。
+- 热门歌单网格换回设计稿的封面卡片（`_CollectionCard`，封面在上、标题在下，
+  `mainAxisExtent` 固定 caption 高度），之前 `_CollectionTile` 的 190dp 行卡
+  压出两行标题叠在封面上。
+- 插件榜单数据加 1 小时 TTL 缓存（`discoverCacheTtl`），切换插件 / tab 命中
+  缓存不重新请求；「刷新」按钮仍然 `force: true` 直打插件。缓存按
+  `插件 + surface + 标签` 分键，每个插件独立过期。
+- 搜索页（`desktop-search` 画板）重写为《玄》风格：标题 / 副标题 / 空态 /
+  插件计数 pill / 播放 / 下载 tooltip 都走 `search.*` 皮肤字符串，来源用
+  `_SourcePill`，结果行带序号、封面、平台 chip、行内动作，不再是
+  `ListTile` + 英文硬编码。
+- 队列页 / 下载管理 / 我的音乐 / 插件页四张页面从 Material 默认样式迁移到
+  token + 皮肤字符串；`Mode` / `Clear` / `Retry` / 状态文案 / 弹窗按钮 /
+  导入摘要 / 进度条颜色全部可被 `theme.json` 覆盖。播放模式选择改成
+  描边 pill + 下拉（`_ModePill`），队列行 / 历史行 / 下载行 / 歌单行不再是
+  `ListTile`。
+- 移动端护栏：新增 `page_phone_overflow_test.dart`，把队列 / 下载 / 搜索 /
+  插件四页在 400×800（竖屏）与 800×360（横屏）用极长标题 + 极长平台名压一遍，
+  页面必须不溢出；手机头部 / 底部 tab / 底部播放条沿用皮肤 arrangement，
+  二级页面自身的 gutter 也来自 `components.content`。
 - **涉及布局时**：补 `test/responsive_layout_test.dart` 的尺寸用例
   （必须覆盖 400×800 / 800×360 / 1280×900，横屏手机 800×360 是历史上出错最多的形态）
 
+### 2026-09-28 收尾
+
+- 修复播放条在 800×360 横屏下溢出 2px 的根因：外壳的 `_playerBarMin`
+  72dp 小于播放条自身内容（42dp 按钮行 + 20dp 进度行 = 62dp，加上 12dp
+  底部 margin 需要 74dp）。下限现在由内容推导（74dp），不再用魔法数猜。
+  皮肤请求更小的播放条仍然会被钳到这个最小值，而不是拿到一个自我溢出的条。
+- 发现页来源 pill 行从「水平滚动里的 `Wrap`」改为 `Row`：`Wrap` 在滚动轴
+  上拿到的是无界宽度，所有 chip 排在一行然后溢出面板。补了
+  `discover browser fits 400×800 / 800×360` 两条溢出护栏。
+- 《玄》首页不再等用户自己点进「插件榜单」才拉插件数据：首页挂载时
+  `seedHomeShelf` 同步启用的插件后，按顺序试到第一个能返回热门歌单的
+  插件为止（bilibili 只有排行榜、没有 `getRecommendSheetTags`，是现成的
+  反例）。选中的插件留在成功那个上，浏览器打开时看到的是同一份货架而不是
+  一个错误页。为此新增 `discover_cache_test.dart` 两条用例。
+- **测试基线**：`flutter test` → **380 passed, 8 skipped**（2026-09-28 复核；
+  本轮新增 4 条，`page_phone_overflow_test.dart` +2、
+  `discover_cache_test.dart` +2）
+
+### 2026-09-28 补充
+
+- 侧栏身份块（头像 / 昵称 / 本地曲库计数）改由皮肤声明：新增
+  `navBar.showProfile` 组件 flag，默认 `true`；《玄》设 `false`，因为没有账号
+  功能，这块就是死控件。UI 的「1」不是 app 渲染的徽标，是设计稿画的等级角标，
+  皮肤关掉整块即可。
+- 「插件榜单」入口从裸 `IconButton` 换成设计稿的描边 pill
+  （`InkWell` + 可见边框 + padding 命中区）。原先的 IconButton 只有内部
+  稀疏的命中矩形，pill 视觉边界比命中区大，点上去容易落空，读起来就像
+  「点了没反应」。现在整个 pill 都是点击区，并有 tooltip 保留可发现性。
+- 修正 `shell_responsive_test.dart` 的 harness：它此前用裸 `MaterialApp`
+  渲染 `RobyneShell`，而 shell 是从 Material theme extension 读 token 的，
+  裸 MaterialApp 没有 extension 会静默退回 `ThemeTokens.baseline()`，导致
+  任何皮肤组件 flag 都读成默认值。harness 现在装 `darkThemeDataProvider`，
+  与生产一致；新增「皮肤隐藏身份块」用例。
+- **测试基线**：`flutter test` → **381 passed, 8 skipped**（2026-09-28 复核）
+
+### 2026-09-28 二次补充
+
+- 首页 hero 的「立即播放 / 收藏」与推荐卡（卡身、右下播放圆钮）此前只调
+  `openCollection` 加载详情，却从不拉起浏览器视图——详情在不可见的浏览器里
+  装好了，首页一动不动，所有按钮读起来都是「点了没反应」。`_openDiscover`
+  现在先 `discoverBrowserProvider.open()` 再 `openCollection(item)`，
+  首页跳到插件榜单并直接定位到那张歌单的曲目列表。
+- 推荐卡右下角的播放圆钮从纯装饰 `Icon` 改成自带 `onTap` + tooltip 的
+  `InkWell`：此前它完全依赖外层卡片 InkWell 的命中测试，任何 Stack 命中
+  行为的调整都会让这个可见按钮静默失效。
+- 「收藏」在插件协议没有歌单收藏方法之前仍与「立即播放」一样打开歌单详情；
+  真正的整单收藏需要插件协议补齐，不在皮肤层伪造。
+- **测试基线**：`flutter test` → **381 passed, 8 skipped**（2026-09-28 复核）
+
 ---
+
+### 2026-09-28 六项功能落地
+
+- **收藏歌单**：新增 `FavoriteCollections` 表（schema v2，带 `onUpgrade`）与
+  `FavoriteCollectionRepository`。存的是一条**指向插件条目的指针 + 展示快照**
+  （标题 / 封面 / raw payload），不是把曲目复制进本地歌单：在线歌单的曲目归插件
+  所有且会变，复制会冻结一份会过期的数据并放大存储。详情页头部新增
+  「播放整个歌单 / 收藏歌单」两个按钮。
+- **播放歌单的入队策略**：`CollectionPlayController` 负责「先问一次、之后复用」。
+  首次播放弹 `collection_play_dialog`，二选一（添加到播放列表 / 替换播放列表），
+  带「以后都按这个来」勾选；勾选后写入设置，之后不再打断。设置页「通用」新增
+  「播放歌单的方式」可随时改回「每次询问」或改选另一种。
+- **队列操作**：`PlayerController.enqueueItems` / `replaceQueueWithItems`。
+  两个方法都 `await future` 再写入——`build()` 是异步恢复持久化队列的，早于它
+  落地的写入会被随后的恢复覆盖（这是实测抓到的真实竞态，不只是测试问题）。
+- **队列面板记忆**：`queuePanelVisibleProvider` 从设置读取上次的开关状态，
+  切换时写回。此前桌面端每次都按「设计稿停靠」默认打开，用户的关闭决定过不了
+  重启。
+- **封面**：发现页推荐卡与 hero 之前画的是渐变色块，完全没用 `item.artworkUrl`；
+  实测插件 payload 的封面字段是 `coverImg`（歌单）/ `artwork`（榜单），适配器本来
+  就解析了，缺的是 UI。现在统一走 `ArtworkView`，共用既有的
+  `robyne_artwork_cache` 磁盘缓存（按 URL 哈希），不另存一份；`ArtworkView`
+  新增 `expand` / `fit` 以支持横版封面，缓存路径不变。渐变色降级为加载中与
+  无封面时的兜底。
+- **沉浸式播放页入口**：`_NowPlayingActions`（收藏 + 更多菜单：歌词搜索 /
+  本地歌词 / 歌词偏移 / 加入歌单 / 清除关联）此前只在非沉浸式渲染，
+  点击播放栏封面展开的全屏播放页没有任何入口。现在两种形态都渲染，
+  沉浸式居中、分栏形态左对齐。
+- **自绘窗口按钮**：`bootstrap` 设 `TitleBarStyle.hidden` 隐藏原生标题栏，
+  顶栏右端新增最小化 / 最大化 / 关闭三个按钮（走 `window_manager`，保留
+  Snap、任务栏预览、Alt+F4）。测试环境通过 `showWindowControls: false`
+  不触碰窗口插件。
+- **测试基线**：`flutter test` → **386 passed, 8 skipped**（2026-09-28 复核；
+  本轮新增 `collection_queue_test.dart` 3 条、`favorite_collection_test.dart`
+  2 条）
+
+### 2026-09-28 播放条单行弹性重构与顶栏拖动
+
+三项实测缺陷，都来自「皮肤重写后还没在新布局上复验」：
+
+- **窗口不能拖动**：`TitleBarStyle.hidden` 之后顶栏没有接住拖动，窗口一次都
+  挪不动。`_TopBar` 现在把 `DragToMoveArea` 铺在最底层（`Stack` 的第一个
+  child），搜索框、箭头、窗口按钮都在它上面，命中测试仍归控件；实测窗口从
+  `(0,0)` 拖到 `(-105,56)`。
+- **最大化后播放条错位**：旧布局是「两个定宽半边 + 一个 470dp 封顶的中间
+  列」。窗口一旦超过这个 cap，多出来的像素全被左侧信息块吃掉，进度条卡在
+  470dp，传输区落在视觉中心左边。改成设计稿本身画的**单行弹性布局**：信息块
+  是 `(宽度 * 0.18).clamp(120, 260)` 的定宽列，进度条是行内唯一的 `Expanded`。
+  这样窗口越宽、进度条越长，没有第二个断崖。
+- **队列面板没有封面**：停靠面板的 `_QueueRow` 无条件画 `_queueAccent` 渐变，
+  从没读过 `item.artworkUrl`，而中间详情列表早就走了 `ArtworkView`——同一首歌
+  两个地方表现不一致。现在渐变只做底，真封面走 `ArtworkView(expand: true)`，
+  共用同一个 `robyne_artwork_cache`，不新增缓存。
+- **回归测试**：`test/responsive_layout_test.dart` 新增 7 个宽度点
+  （600 / 660 / 720 / 840 / 960 / 1000 / 1180），每个都断言零溢出。旧布局在
+  1000dp 溢出 70dp、600dp 溢出 68dp，这些宽度此前没有任何测试覆盖。
+  修 720dp 那 3.6dp 溢出时把时间标签从 40dp 收到 36dp，而不是挪动规格里的
+  720 断点。
+- **测试基线**：`flutter test` → **393 passed, 8 skipped**（2026-09-28 复核）
 
 ## 7. 文档索引
 
@@ -485,5 +784,5 @@ MusicFree 的失败点（`THEME_LAYER_DESIGN.md:17` 已记录）正是：`.l-sid
 > `ADR-001` 的 D1–D6 是**响应式**的决策编号。两者独立，不要混用。
 > 引用时请写明出处，如「本文 D6」或「ADR-001 的 D6」。
 | `THEME_LAYER_DESIGN.md` | 部分有效 | 架构原则仍成立；§4.2 的 Level 分级已被 D1 取代；§8 的 PR 划分已被本文 §4 取代 |
-| `THEME_AUTHORING.md` | **需更新** | §4.5 描述的 layout 字段与实现不符（缺陷 D），阶段 3 需同步修订 |
+| `THEME_AUTHORING.md` | **有效（已同步）** | layout 已按 arrangement 重写（缺陷 D 修复），并新增 icons / ambient / 字体角色 / content 几何等章节 |
 | `THEME_DECISIONS.md` | **已废弃** | Q1「只做 L0+L1」已被 D1 推翻；其余 Q2–Q10 建议已并入本文 |

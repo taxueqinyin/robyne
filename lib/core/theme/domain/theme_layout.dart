@@ -1,3 +1,6 @@
+import 'theme_regions.dart';
+import 'theme_home.dart';
+
 /// Declarative layout knobs for a skin (Level 1).
 ///
 /// Unlike tokens, layout is **per form factor**: a skin can shape the desktop
@@ -9,6 +12,7 @@ class ThemeLayout {
     required this.desktop,
     required this.mobile,
     required this.content,
+    this.home = const ThemeHomeLayout.baseline(),
   });
 
   /// Official defaults: a persistent rail beside the content, player bar at
@@ -16,213 +20,140 @@ class ThemeLayout {
   const ThemeLayout.baseline()
     : desktop = const ThemeDesktopLayout.baseline(),
       mobile = const ThemeMobileLayout.baseline(),
-      content = const ThemeContentLayout.baseline();
+      content = const ThemeContentLayout.baseline(),
+      home = const ThemeHomeLayout.baseline();
 
   final ThemeDesktopLayout desktop;
   final ThemeMobileLayout mobile;
   final ThemeContentLayout content;
+  final ThemeHomeLayout home;
 
   ThemeLayout copyWith({
     ThemeDesktopLayout? desktop,
     ThemeMobileLayout? mobile,
     ThemeContentLayout? content,
+    ThemeHomeLayout? home,
   }) {
     return ThemeLayout(
       desktop: desktop ?? this.desktop,
       mobile: mobile ?? this.mobile,
       content: content ?? this.content,
+      home: home ?? this.home,
     );
   }
 }
 
 /// Desktop (and large-window) chrome.
 class ThemeDesktopLayout {
-  const ThemeDesktopLayout({
-    required this.sidebar,
-    required this.playerBarPosition,
-    required this.playerBarHeight,
-  });
+  const ThemeDesktopLayout({required this.arrangement});
 
-  const ThemeDesktopLayout.baseline()
-    : sidebar = const ThemeSidebarLayout.baseline(),
-      playerBarPosition = ThemePlayerBarPosition.bottom,
-      playerBarHeight = 72;
+  const ThemeDesktopLayout.baseline() : arrangement = RobyneArrangement.desktop;
 
-  final ThemeSidebarLayout sidebar;
+  /// The D6 arrangement the shell actually renders on a desktop-shaped
+  /// window. Skins that omit it inherit the official flagship layout.
+  ///
+  /// The pre-arrangement legacy knobs (`sidebar.*`, `playerBarHeight`,
+  /// `playerBarPosition`) were removed: the arrangement supersedes them, and
+  /// keeping both around meant a skin could declare a 72dp player bar and a
+  /// 0.09 arrangement ratio and be silently ignored on one of them.
+  final RobyneArrangement arrangement;
 
-  /// Where the player bar sits. `floating` is not supported on compact
-  /// layouts; they always use `bottom`.
-  final ThemePlayerBarPosition playerBarPosition;
-  final double playerBarHeight;
-
-  ThemeDesktopLayout copyWith({
-    ThemeSidebarLayout? sidebar,
-    ThemePlayerBarPosition? playerBarPosition,
-    double? playerBarHeight,
-  }) {
-    return ThemeDesktopLayout(
-      sidebar: sidebar ?? this.sidebar,
-      playerBarPosition: playerBarPosition ?? this.playerBarPosition,
-      playerBarHeight: playerBarHeight ?? this.playerBarHeight,
-    );
+  ThemeDesktopLayout copyWith({RobyneArrangement? arrangement}) {
+    return ThemeDesktopLayout(arrangement: arrangement ?? this.arrangement);
   }
 }
 
 /// Phone-sized chrome.
 class ThemeMobileLayout {
-  const ThemeMobileLayout({
-    required this.navigation,
-    required this.playerBarHeight,
-    required this.playerBarCompact,
-  });
+  const ThemeMobileLayout({required this.arrangement});
 
-  const ThemeMobileLayout.baseline()
-    : navigation = ThemeMobileNavigation.bottomTabs,
-      playerBarHeight = 64,
-      playerBarCompact = true;
+  const ThemeMobileLayout.baseline() : arrangement = RobyneArrangement.mobile;
 
-  final ThemeMobileNavigation navigation;
-  final double playerBarHeight;
+  /// The phone-shell arrangement. Only `top`/`center`/`bottom` slots are
+  /// legal here; the parser repairs anything else into the official layout.
+  final RobyneArrangement arrangement;
 
-  /// Drops the volume slider and tightens padding on phone-sized windows.
-  final bool playerBarCompact;
-
-  ThemeMobileLayout copyWith({
-    ThemeMobileNavigation? navigation,
-    double? playerBarHeight,
-    bool? playerBarCompact,
-  }) {
-    return ThemeMobileLayout(
-      navigation: navigation ?? this.navigation,
-      playerBarHeight: playerBarHeight ?? this.playerBarHeight,
-      playerBarCompact: playerBarCompact ?? this.playerBarCompact,
-    );
-  }
-}
-
-/// Shape of the primary navigation on desktop.
-class ThemeSidebarLayout {
-  const ThemeSidebarLayout({
-    required this.position,
-    required this.width,
-    required this.collapsible,
-    required this.labelMode,
-  });
-
-  const ThemeSidebarLayout.baseline()
-    : position = ThemeSidebarPosition.left,
-      width = 80,
-      collapsible = false,
-      labelMode = ThemeRailLabelMode.all;
-
-  final ThemeSidebarPosition position;
-
-  /// Rail width. Widened automatically when labels are shown.
-  final double width;
-  final bool collapsible;
-  final ThemeRailLabelMode labelMode;
-
-  double get effectiveWidth {
-    return switch (labelMode) {
-      ThemeRailLabelMode.all => width < 120 ? width + 52 : width,
-      ThemeRailLabelMode.selected => width < 100 ? width + 32 : width,
-      ThemeRailLabelMode.none => width,
-    };
-  }
-
-  ThemeSidebarLayout copyWith({
-    ThemeSidebarPosition? position,
-    double? width,
-    bool? collapsible,
-    ThemeRailLabelMode? labelMode,
-  }) {
-    return ThemeSidebarLayout(
-      position: position ?? this.position,
-      width: width ?? this.width,
-      collapsible: collapsible ?? this.collapsible,
-      labelMode: labelMode ?? this.labelMode,
-    );
+  ThemeMobileLayout copyWith({RobyneArrangement? arrangement}) {
+    return ThemeMobileLayout(arrangement: arrangement ?? this.arrangement);
   }
 }
 
 /// How lists and grids are presented.
 class ThemeContentLayout {
-  const ThemeContentLayout({required this.listStyle, required this.density});
+  const ThemeContentLayout({
+    required this.listStyle,
+    required this.density,
+    this.styles = const <ThemeContentSurface, ThemeListStyle>{},
+  });
 
   const ThemeContentLayout.baseline()
     : listStyle = ThemeListStyle.list,
-      density = ThemeDensity.regular;
+      density = ThemeDensity.regular,
+      styles = const <ThemeContentSurface, ThemeListStyle>{};
 
   final ThemeListStyle listStyle;
   final ThemeDensity density;
 
+  /// Per-destination overrides of [listStyle].
+  ///
+  /// The design's own table (`UI_DESIGN_SPEC.md` §2.5) maps styles per
+  /// *surface*, not globally — `list` for the local library, `grid` for the
+  /// discover shelf, `banner` for a recommendation strip. A single global
+  /// value cannot express that, so a skin that declared `banner` got a banner
+  /// everywhere, including the one place the design asks for rows.
+  final Map<ThemeContentSurface, ThemeListStyle> styles;
+
+  /// The style to use for [surface], falling back to [listStyle].
+  ThemeListStyle styleFor(ThemeContentSurface surface) =>
+      styles[surface] ?? listStyle;
+
   ThemeContentLayout copyWith({
     ThemeListStyle? listStyle,
     ThemeDensity? density,
+    Map<ThemeContentSurface, ThemeListStyle>? styles,
   }) {
     return ThemeContentLayout(
       listStyle: listStyle ?? this.listStyle,
       density: density ?? this.density,
+      styles: styles ?? this.styles,
     );
   }
 }
 
-/// Which side the desktop rail sits on.
-enum ThemeSidebarPosition {
-  left,
-  right;
+/// The destinations whose content presentation a skin may set separately.
+///
+/// Closed, like every other skin-facing slot set: a skin can restyle the
+/// surfaces the app actually renders, and an unknown name is ignored rather
+/// than inventing a page.
+enum ThemeContentSurface {
+  library('library'),
+  discover('discover'),
+  playlists('playlists'),
+  downloads('downloads'),
+  queue('queue'),
+  search('search');
 
-  static ThemeSidebarPosition fromName(String? name) {
-    return values.firstWhere(
-      (value) => value.name == name,
-      orElse: () => ThemeSidebarPosition.left,
-    );
-  }
-}
+  const ThemeContentSurface(this.jsonName);
 
-/// NavigationRail label behaviour.
-enum ThemeRailLabelMode {
-  all,
-  selected,
-  none;
+  final String jsonName;
 
-  static ThemeRailLabelMode fromName(String? name) {
-    return values.firstWhere(
-      (value) => value.name == name,
-      orElse: () => ThemeRailLabelMode.all,
-    );
-  }
-}
-
-/// Player bar placement.
-enum ThemePlayerBarPosition {
-  bottom,
-  top;
-
-  static ThemePlayerBarPosition fromName(String? name) {
-    return values.firstWhere(
-      (value) => value.name == name,
-      orElse: () => ThemePlayerBarPosition.bottom,
-    );
-  }
-}
-
-/// Mobile navigation style.
-enum ThemeMobileNavigation {
-  bottomTabs,
-  navigationDrawer;
-
-  static ThemeMobileNavigation fromName(String? name) {
-    return values.firstWhere(
-      (value) => value.name == name,
-      orElse: () => ThemeMobileNavigation.bottomTabs,
-    );
+  static ThemeContentSurface? fromJsonName(String? name) {
+    if (name == null) {
+      return null;
+    }
+    for (final value in values) {
+      if (value.jsonName == name) {
+        return value;
+      }
+    }
+    return null;
   }
 }
 
 /// List presentation.
 enum ThemeListStyle {
   list,
+  banner,
   card,
   grid,
   compact;
@@ -236,10 +167,22 @@ enum ThemeListStyle {
 }
 
 /// Vertical rhythm of rows.
+///
+/// A multiplier rather than an absolute height: `components.content.rowHeight`
+/// says how tall a row *is*, and density says whether the skin wants the whole
+/// rhythm tighter or airier than that base. Keeping it a factor means a skin
+/// can declare both without one silently winning.
 enum ThemeDensity {
   compact,
   regular,
   comfortable;
+
+  /// Factor applied to the content region's row height.
+  double get rowScale => switch (this) {
+    ThemeDensity.compact => 0.85,
+    ThemeDensity.regular => 1,
+    ThemeDensity.comfortable => 1.2,
+  };
 
   static ThemeDensity fromName(String? name) {
     return values.firstWhere(

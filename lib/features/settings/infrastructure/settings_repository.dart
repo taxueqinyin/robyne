@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../../../core/database/app_database.dart' as db;
 import '../../../core/database/legacy_storage_migration.dart';
 import '../../../core/storage/local_file_store.dart';
+import '../../../core/theme/domain/theme_layout_override.dart';
 import '../../downloads/domain/download_audio_format.dart';
 import '../domain/lyric_settings.dart';
 import '../domain/shortcut_action.dart';
@@ -31,6 +32,10 @@ class SettingsRepository {
   static const _downloadAudioFormatKey = 'downloads.audio_format';
   static const _shortcutPrefix = 'shortcuts.';
   static const _desktopLyricsEnabledKey = 'lyrics.desktop.enabled';
+  static const _playlistOpenActionKey = 'playlist.openAction';
+  static const _queuePanelVisibleKey = 'queue.panelVisible';
+  static const _trayCloseActionKey = 'tray.close_action';
+  static const _sidebarWidthKey = 'layout.sidebar_width';
   static const _desktopLyricsAlwaysOnTopKey = 'lyrics.desktop.always_on_top';
   static const _desktopLyricsLockedKey = 'lyrics.desktop.locked';
   static const _desktopLyricsDoubleLineKey = 'lyrics.desktop.double_line';
@@ -43,6 +48,7 @@ class SettingsRepository {
   static const _activeThemeIdKey = 'theme.active_id';
   static const _themeModeOverrideKey = 'theme.mode_override';
   static const _themeSettingValuesKey = 'theme.setting_values';
+  static const _themeLayoutOverridesKey = 'theme.layout_overrides';
   static const _disabledShortcutValue = '__disabled__';
 
   final db.AppDatabase _database;
@@ -91,6 +97,13 @@ class SettingsRepository {
           ? UserSettings.defaultThemeModeOverrideName
           : values[_themeModeOverrideKey]!.trim(),
       themeSettingValues: _themeSettingValues(values[_themeSettingValuesKey]),
+      themeLayoutOverrides: _themeLayoutOverrides(
+        values[_themeLayoutOverridesKey],
+      ),
+      playlistOpenAction: _playlistOpenAction(values[_playlistOpenActionKey]),
+      queuePanelVisible: values[_queuePanelVisibleKey] == 'true',
+      trayCloseAction: _trayCloseAction(values[_trayCloseActionKey]),
+      sidebarWidth: double.tryParse(values[_sidebarWidthKey] ?? ''),
     );
   }
 
@@ -117,6 +130,31 @@ class SettingsRepository {
       current[composite] = value;
     }
     await _write(_themeSettingValuesKey, jsonEncode(current));
+    return load();
+  }
+
+  Future<UserSettings> setThemeLayoutOverride(
+    String themeId,
+    ThemeLayoutOverride? override,
+  ) async {
+    final current = _themeLayoutOverrides(
+      await _readRaw(_themeLayoutOverridesKey),
+    );
+    final id = themeId.trim();
+    if (id.isEmpty) {
+      return load();
+    }
+    if (override == null || override.isEmpty) {
+      current.remove(id);
+    } else {
+      current[id] = override;
+    }
+    await _write(
+      _themeLayoutOverridesKey,
+      jsonEncode(<String, Object?>{
+        for (final entry in current.entries) entry.key: entry.value.toJson(),
+      }),
+    );
     return load();
   }
 
@@ -213,6 +251,37 @@ class SettingsRepository {
     return load();
   }
 
+  /// Pins how opening an online collection treats the queue.
+  Future<UserSettings> setPlaylistOpenAction(PlaylistOpenAction action) async {
+    await _write(_playlistOpenActionKey, action.name);
+    return load();
+  }
+
+  /// Remembers whether the queue panel is docked, so the next launch restores
+  /// it instead of always starting from the same default.
+  Future<UserSettings> setQueuePanelVisible(bool visible) async {
+    await _write(_queuePanelVisibleKey, visible.toString());
+    return load();
+  }
+
+  /// Remembers what the close button does after the one-time prompt.
+  Future<UserSettings> setTrayCloseAction(TrayCloseAction action) async {
+    await _write(_trayCloseActionKey, action.name);
+    return load();
+  }
+
+  /// Persists the user's rail width, or clears it back to the skin default.
+  Future<UserSettings> setSidebarWidth(double? width) async {
+    if (width == null) {
+      await (_database.delete(
+        _database.appSettings,
+      )..where((row) => row.key.equals(_sidebarWidthKey))).go();
+      return load();
+    }
+    await _write(_sidebarWidthKey, width.toString());
+    return load();
+  }
+
   Future<void> _write(String key, String value) async {
     await _legacyMigration?.ensureMigrated();
     await _database
@@ -256,6 +325,32 @@ class SettingsRepository {
       };
     } on Object {
       return <String, Object>{};
+    }
+  }
+
+  static Map<String, ThemeLayoutOverride> _themeLayoutOverrides(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return <String, ThemeLayoutOverride>{};
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return <String, ThemeLayoutOverride>{};
+      }
+      final overrides = <String, ThemeLayoutOverride>{};
+      for (final entry in decoded.entries) {
+        final id = entry.key.toString().trim();
+        if (id.isEmpty) {
+          continue;
+        }
+        final override = ThemeLayoutOverride.fromJson(entry.value);
+        if (!override.isEmpty) {
+          overrides[id] = override;
+        }
+      }
+      return overrides;
+    } on Object {
+      return <String, ThemeLayoutOverride>{};
     }
   }
 
@@ -311,5 +406,24 @@ class SettingsRepository {
         values[_desktopLyricWindowTopKey] ?? '',
       ),
     ).copyWith();
+  }
+
+  static PlaylistOpenAction _playlistOpenAction(String? raw) {
+    return switch (raw?.trim()) {
+      'append' => PlaylistOpenAction.append,
+      'replace' => PlaylistOpenAction.replace,
+      // An unknown or absent value falls back to asking rather than silently
+      // picking a destructive default: replacing a queue the user was
+      // listening to is not recoverable.
+      _ => PlaylistOpenAction.alwaysAsk,
+    };
+  }
+
+  static TrayCloseAction _trayCloseAction(String? raw) {
+    return switch (raw?.trim()) {
+      'minimizeToTray' => TrayCloseAction.minimizeToTray,
+      'exit' => TrayCloseAction.exit,
+      _ => TrayCloseAction.ask,
+    };
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart' hide Image;
 import 'package:flutter/services.dart' show rootBundle;
@@ -69,6 +70,39 @@ class ThemeAssetResolver {
         return null;
       }
       return ImageBytes(provider: FileImage(file), bytes: length);
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Resolves [asset] to raw bytes.
+  ///
+  /// Separate from [resolveBytes] because callers that only want to copy a
+  /// file (the D5 exporter) should not have to unwrap an [ImageProvider] to
+  /// get at the data. Enforces the same single-asset budget.
+  Future<Uint8List?> loadBytes(ThemePackage theme, String? asset) async {
+    final path = await resolveFilePath(theme, asset);
+    if (path == null) {
+      return null;
+    }
+    try {
+      if (theme.source == ThemeSource.builtIn) {
+        final data = await rootBundle.load(path);
+        final bytes = data.buffer.asUint8List(
+          data.offsetInBytes,
+          data.lengthInBytes,
+        );
+        return bytes.length <= maxAssetBytes ? bytes : null;
+      }
+      final file = File(path);
+      if (!await file.exists()) {
+        return null;
+      }
+      final length = await file.length();
+      if (length > maxAssetBytes) {
+        return null;
+      }
+      return await file.readAsBytes();
     } on Object {
       return null;
     }
