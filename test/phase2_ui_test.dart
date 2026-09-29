@@ -5,26 +5,51 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:robyne/app/app.dart';
 import 'package:robyne/core/result/result.dart';
+import 'package:robyne/core/theme/application/theme_providers.dart';
 import 'package:robyne/features/player/application/player_providers.dart';
 import 'package:robyne/features/player/domain/audio_player_service.dart';
 import 'package:robyne/features/player/domain/media_source.dart';
 
+import 'support/xuan_fixture.dart';
+
 void main() {
-  testWidgets('app shell exposes Library and Queue navigation entries', (
+  testWidgets('app shell exposes the flagship navigation entries', (
     tester,
   ) async {
+    // The flagship sidebar is a desktop-shaped surface; the default 800x600
+    // test viewport resolves to the phone shell, so declare the desktop size
+    // this assertion is about.
+    tester.view.physicalSize =
+        const Size(1280, 900) * tester.view.devicePixelRatio;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [audioPlayerServiceProvider.overrideWithValue(_FakeAudio())],
+        overrides: <Object>[
+          audioPlayerServiceProvider.overrideWithValue(_FakeAudio()),
+          // Skin-declared chrome: assert against the real flagship manifest
+          // rather than waiting on the bundled asset's async load.
+          baseThemePackageProvider.overrideWithValue(xuanFixture()),
+        ].cast(),
         child: const RobyneApp(),
       ),
     );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('Library'), findsOneWidget);
-    expect(find.text('Queue'), findsOneWidget);
+    // Flagship《玄》groups navigation by intent: a branded rail with the
+    // primary destinations, and the queue as its own panel rather than an
+    // equal-weight nav entry.
+    // The label comes from the skin now, and《玄》declares it in Chinese.
+    expect(find.text('内容库'), findsOneWidget);
+    expect(find.byKey(const Key('shell-nav-left')), findsOneWidget);
+    expect(find.byKey(const Key('shell-nav-bottom')), findsNothing);
   });
 
   testWidgets('player bar exposes seek and volume sliders', (tester) async {
+    // The design spec (§5.1) reserves the volume slider for windows of at
+    // least 960dp; the default 800x600 test viewport sits below that, so a
+    // desktop viewport has to be declared to see the full transport row.
+    _setViewport(tester, const Size(1280, 900));
     final audio = _FakeAudio(
       const PlayerSnapshot(
         currentSource: MediaSource(url: 'https://example.com/a.mp3'),
@@ -115,4 +140,10 @@ class _FakeAudio implements AudioPlayerService {
   Future<void> dispose() async {
     await _controller.close();
   }
+}
+
+/// The design spec hides the volume slider below 960dp, so tests that assert
+/// on the full transport row have to declare a desktop-sized viewport.
+void _setViewport(WidgetTester tester, Size size) {
+  tester.view.physicalSize = size * tester.view.devicePixelRatio;
 }

@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/debug/ime_trace.dart';
+import '../../../core/theme/application/theme_providers.dart';
+import '../../../core/theme/domain/theme_strings.dart';
 import '../../downloads/domain/download_audio_format.dart';
 import '../../../core/layout/window_size_class.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
@@ -21,20 +23,40 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(activeThemeStringsProvider);
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final metrics = ref.watch(activeThemeContentMetricsProvider);
+    final compactWidth =
+        WindowSizeClass.of(context).width != WindowWidthClass.expanded;
     final settings = ref.watch(settingsControllerProvider);
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.fromLTRB(
+        metrics.gutterFor(compact: compactWidth),
+        20,
+        metrics.gutterFor(compact: compactWidth),
+        20,
+      ),
       child: settings.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(child: Text(error.toString())),
+        error: (error, stackTrace) => Center(
+          child: Text(error.toString(), style: TextStyle(color: colors.danger)),
+        ),
         data: (settings) {
           return DefaultTabController(
             length: 4,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('设置', style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(height: 24),
+                Text(
+                  strings.resolve(ThemeStringKey.settingsTitle),
+                  style: TextStyle(
+                    fontSize: tokens.typography.resolvedPageTitleSize,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 18),
                 // The tab bar was pinned to 420dp; on a 400dp phone it
                 // overflowed and pushed the whole settings surface off-screen.
                 SizedBox(
@@ -43,15 +65,29 @@ class SettingsPage extends ConsumerWidget {
                   ).clampDimension(420, maxRatio: 0.92),
                   child: TabBar(
                     dividerColor: Colors.transparent,
-                    tabs: const <Tab>[
-                      Tab(text: '常规'),
-                      Tab(text: '外观'),
-                      Tab(text: '快捷键'),
-                      Tab(text: '歌词'),
+                    tabs: <Tab>[
+                      Tab(
+                        text: strings.resolve(
+                          ThemeStringKey.settingsTabGeneral,
+                        ),
+                      ),
+                      Tab(
+                        text: strings.resolve(
+                          ThemeStringKey.settingsTabAppearance,
+                        ),
+                      ),
+                      Tab(
+                        text: strings.resolve(
+                          ThemeStringKey.settingsTabShortcuts,
+                        ),
+                      ),
+                      Tab(
+                        text: strings.resolve(ThemeStringKey.settingsTabLyrics),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
                 Expanded(
                   child: TabBarView(
                     children: <Widget>[
@@ -91,6 +127,90 @@ const _lyricColorPalette = <int>[
   0xB3000000,
 ];
 
+/// One settings row: icon, title/subtitle, then a trailing affordance.
+///
+/// The mockup's settings rows sit on the card surface with a 34dp icon tile
+/// and a dim affordance glyph. `ListTile` was the wrong tool because its
+/// leading/trailing slots carry Material's own geometry and its selected tile
+/// colour is not a skin token.
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.trailing,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final IconData trailing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final comp = tokens.components;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: comp.card.surface,
+        borderRadius: BorderRadius.all(Radius.circular(tokens.radius.md)),
+        child: InkWell(
+          borderRadius: BorderRadius.all(Radius.circular(tokens.radius.md)),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: colors.textPrimary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.all(
+                      Radius.circular(tokens.radius.sm),
+                    ),
+                  ),
+                  child: Icon(icon, size: 18, color: colors.textSecondary),
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: tokens.typography.resolvedListPrimarySize,
+                          fontWeight: FontWeight.w500,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11, color: colors.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(trailing, size: 18, color: colors.textMuted),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _GeneralSettingsTab extends ConsumerWidget {
   const _GeneralSettingsTab({required this.settings});
 
@@ -98,38 +218,164 @@ class _GeneralSettingsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(activeThemeStringsProvider);
     return ListView(
       children: <Widget>[
-        ListTile(
-          leading: const Icon(Icons.storage),
-          title: const Text('缓存大小'),
-          subtitle: Text(_formatBytes(settings.cacheSizeBytes)),
-          trailing: const Icon(Icons.chevron_right),
+        // The design's settings row is icon | title/subtitle | affordance, on
+        // the skin's card surface — a `ListTile` carries Material's own
+        // spacing and selected-tile colours that a skin cannot reach.
+        _SettingsRow(
+          icon: Icons.storage,
+          title: strings.resolve(ThemeStringKey.settingsCacheSize),
+          subtitle: _formatBytes(settings.cacheSizeBytes),
+          trailing: Icons.chevron_right,
           onTap: () => _showCacheSizeDialog(context, ref, settings),
         ),
-        ListTile(
-          leading: const Icon(Icons.folder_outlined),
-          title: const Text('缓存位置'),
-          subtitle: Text(settings.cacheDirectoryPath),
-          trailing: const Icon(Icons.folder_open),
+        _SettingsRow(
+          icon: Icons.folder_outlined,
+          title: strings.resolve(ThemeStringKey.settingsCacheLocation),
+          subtitle: settings.cacheDirectoryPath,
+          trailing: Icons.folder_open,
           onTap: () => _pickCacheDirectory(context, ref, settings),
         ),
-        ListTile(
-          leading: const Icon(Icons.download_outlined),
-          title: const Text('下载位置'),
-          subtitle: Text(settings.downloadsDirectoryPath),
-          trailing: const Icon(Icons.folder_open),
+        _SettingsRow(
+          icon: Icons.download_outlined,
+          title: strings.resolve(ThemeStringKey.settingsDownloadLocation),
+          subtitle: settings.downloadsDirectoryPath,
+          trailing: Icons.folder_open,
           onTap: () => _pickDownloadsDirectory(context, ref, settings),
         ),
-        ListTile(
-          leading: const Icon(Icons.audio_file_outlined),
-          title: const Text('下载格式'),
-          subtitle: Text(settings.downloadAudioFormat.label),
-          trailing: const Icon(Icons.chevron_right),
+        _SettingsRow(
+          icon: Icons.audio_file_outlined,
+          title: strings.resolve(ThemeStringKey.settingsDownloadFormat),
+          subtitle: settings.downloadAudioFormat.label,
+          trailing: Icons.chevron_right,
           onTap: () => _showDownloadFormatDialog(context, ref, settings),
+        ),
+        _SettingsRow(
+          icon: Icons.queue_music_outlined,
+          title: strings.resolve(ThemeStringKey.settingsPlaylistAction),
+          subtitle: _playlistActionLabel(settings.playlistOpenAction, strings),
+          trailing: Icons.chevron_right,
+          onTap: () => _showPlaylistActionDialog(context, ref, settings),
+        ),
+        _SettingsRow(
+          icon: Icons.close,
+          title: strings.resolve(ThemeStringKey.settingsTrayCloseAction),
+          subtitle: _trayCloseActionLabel(settings.trayCloseAction, strings),
+          trailing: Icons.chevron_right,
+          onTap: () => _showTrayCloseActionDialog(context, ref, settings),
         ),
       ],
     );
+  }
+
+  String _playlistActionLabel(PlaylistOpenAction action, ThemeStrings strings) {
+    return switch (action) {
+      PlaylistOpenAction.alwaysAsk => strings.resolve(
+        ThemeStringKey.settingsPlaylistActionAsk,
+      ),
+      PlaylistOpenAction.append => strings.resolve(
+        ThemeStringKey.settingsPlaylistActionAppend,
+      ),
+      PlaylistOpenAction.replace => strings.resolve(
+        ThemeStringKey.settingsPlaylistActionReplace,
+      ),
+    };
+  }
+
+  Future<void> _showPlaylistActionDialog(
+    BuildContext context,
+    WidgetRef ref,
+    UserSettings settings,
+  ) async {
+    final strings = ref.read(activeThemeStringsProvider);
+    final action = await showDialog<PlaylistOpenAction>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(strings.resolve(ThemeStringKey.settingsPlaylistAction)),
+        children: <Widget>[
+          for (final action in PlaylistOpenAction.values)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(action),
+              child: Row(
+                children: <Widget>[
+                  if (action == settings.playlistOpenAction)
+                    Icon(
+                      Icons.check,
+                      size: 18,
+                      color: RobyneTheme.of(context).tokens.color.brandBase,
+                    )
+                  else
+                    const SizedBox(width: 18),
+                  const SizedBox(width: 8),
+                  Text(_playlistActionLabel(action, strings)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+    if (action == null || action == settings.playlistOpenAction) {
+      return;
+    }
+    await ref
+        .read(settingsControllerProvider.notifier)
+        .setPlaylistOpenAction(action);
+  }
+
+  String _trayCloseActionLabel(TrayCloseAction action, ThemeStrings strings) {
+    return switch (action) {
+      TrayCloseAction.ask => strings.resolve(
+        ThemeStringKey.settingsTrayCloseAsk,
+      ),
+      TrayCloseAction.minimizeToTray => strings.resolve(
+        ThemeStringKey.settingsTrayCloseMinimize,
+      ),
+      TrayCloseAction.exit => strings.resolve(
+        ThemeStringKey.settingsTrayCloseExit,
+      ),
+    };
+  }
+
+  Future<void> _showTrayCloseActionDialog(
+    BuildContext context,
+    WidgetRef ref,
+    UserSettings settings,
+  ) async {
+    final strings = ref.read(activeThemeStringsProvider);
+    final action = await showDialog<TrayCloseAction>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(strings.resolve(ThemeStringKey.settingsTrayCloseAction)),
+        children: <Widget>[
+          for (final action in TrayCloseAction.values)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(action),
+              child: Row(
+                children: <Widget>[
+                  if (action == settings.trayCloseAction)
+                    Icon(
+                      Icons.check,
+                      size: 18,
+                      color: RobyneTheme.of(context).tokens.color.brandBase,
+                    )
+                  else
+                    const SizedBox(width: 18),
+                  const SizedBox(width: 8),
+                  Text(_trayCloseActionLabel(action, strings)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+    if (action == null || action == settings.trayCloseAction) {
+      return;
+    }
+    await ref
+        .read(settingsControllerProvider.notifier)
+        .setTrayCloseAction(action);
   }
 
   Future<void> _showCacheSizeDialog(
@@ -137,6 +383,7 @@ class _GeneralSettingsTab extends ConsumerWidget {
     WidgetRef ref,
     UserSettings settings,
   ) async {
+    final strings = ref.read(activeThemeStringsProvider);
     final controller = TextEditingController(
       text: (settings.cacheSizeBytes / (1024 * 1024)).round().toString(),
     );
@@ -144,7 +391,7 @@ class _GeneralSettingsTab extends ConsumerWidget {
     final value = await showDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('缓存大小'),
+        title: Text(strings.resolve(ThemeStringKey.settingsCacheSizeDialog)),
         content: SizedBox(
           width: RobyneDialogWidth.forContext(context, 320),
           child: TextField(
@@ -152,9 +399,9 @@ class _GeneralSettingsTab extends ConsumerWidget {
             autofocus: true,
             keyboardType: TextInputType.number,
             textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              labelText: '大小',
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              labelText: strings.resolve(ThemeStringKey.settingsSizeField),
               suffixText: 'MB',
             ),
             onSubmitted: (_) {
@@ -165,12 +412,12 @@ class _GeneralSettingsTab extends ConsumerWidget {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
+            child: Text(strings.resolve(ThemeStringKey.actionCancel)),
           ),
           FilledButton(
             onPressed: () =>
                 Navigator.of(context).pop(int.tryParse(controller.text)),
-            child: const Text('保存'),
+            child: Text(strings.resolve(ThemeStringKey.pluginsSave)),
           ),
         ],
       ),
@@ -191,8 +438,11 @@ class _GeneralSettingsTab extends ConsumerWidget {
   ) async {
     final path = await _pickDirectory(
       context,
-      dialogTitle: '选择缓存位置',
+      dialogTitle: ref
+          .read(activeThemeStringsProvider)
+          .resolve(ThemeStringKey.settingsChooseCacheLocation),
       initialDirectory: settings.cacheDirectoryPath,
+      strings: ref.read(activeThemeStringsProvider),
     );
     if (path != null) {
       await ref
@@ -208,8 +458,11 @@ class _GeneralSettingsTab extends ConsumerWidget {
   ) async {
     final path = await _pickDirectory(
       context,
-      dialogTitle: '选择下载位置',
+      dialogTitle: ref
+          .read(activeThemeStringsProvider)
+          .resolve(ThemeStringKey.settingsChooseDownloadLocation),
       initialDirectory: settings.downloadsDirectoryPath,
+      strings: ref.read(activeThemeStringsProvider),
     );
     if (path != null) {
       await ref
@@ -223,16 +476,22 @@ class _GeneralSettingsTab extends ConsumerWidget {
     WidgetRef ref,
     UserSettings settings,
   ) async {
+    final strings = ref.read(activeThemeStringsProvider);
     final value = await showDialog<DownloadAudioFormat>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('下载格式'),
+        title: Text(strings.resolve(ThemeStringKey.settingsDownloadFormat)),
         children: <Widget>[
           for (final format in DownloadAudioFormat.values)
             ListTile(
               title: Text(format.label),
               trailing: settings.downloadAudioFormat == format
-                  ? const Icon(Icons.check)
+                  ? Icon(
+                      Icons.check,
+                      color: RobyneTheme.of(
+                        context,
+                      ).tokens.components.navBar.selectedItem,
+                    )
                   : null,
               onTap: () => Navigator.of(context).pop(format),
             ),
@@ -255,37 +514,42 @@ class _LyricsSettingsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(activeThemeStringsProvider);
     final lyricSettings = settings.lyricSettings;
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       children: <Widget>[
         _LyricsSwitchRow(
-          title: '显示桌面歌词',
-          subtitle: '支持桌面与播放器同步',
+          title: strings.resolve(ThemeStringKey.settingsLyricsShowDesktop),
+          subtitle: strings.resolve(
+            ThemeStringKey.settingsLyricsShowDesktopSub,
+          ),
           value: lyricSettings.desktopLyricsEnabled,
           onChanged: (value) => ref
               .read(settingsControllerProvider.notifier)
               .setDesktopLyricsEnabled(value),
         ),
         _LyricsSwitchRow(
-          title: '桌面歌词置顶',
-          subtitle: '歌词窗口始终位于最前方',
+          title: strings.resolve(ThemeStringKey.settingsLyricsAlwaysOnTop),
+          subtitle: strings.resolve(
+            ThemeStringKey.settingsLyricsAlwaysOnTopSub,
+          ),
           value: lyricSettings.desktopLyricsAlwaysOnTop,
           onChanged: (value) => ref
               .read(settingsControllerProvider.notifier)
               .setDesktopLyricsAlwaysOnTop(value),
         ),
         _LyricsSwitchRow(
-          title: '锁定桌面歌词',
-          subtitle: '锁定后歌词窗口不可拖动',
+          title: strings.resolve(ThemeStringKey.settingsLyricsLocked),
+          subtitle: strings.resolve(ThemeStringKey.settingsLyricsLockedSub),
           value: lyricSettings.desktopLyricsLocked,
           onChanged: (value) => ref
               .read(settingsControllerProvider.notifier)
               .setDesktopLyricsLocked(value),
         ),
         _LyricsSwitchRow(
-          title: '双排模式',
-          subtitle: '显示当前句与下一句的左右对齐双排歌词',
+          title: strings.resolve(ThemeStringKey.settingsLyricsDoubleLine),
+          subtitle: strings.resolve(ThemeStringKey.settingsLyricsDoubleLineSub),
           value: lyricSettings.desktopLyricsDoubleLine,
           onChanged: (value) => ref
               .read(settingsControllerProvider.notifier)
@@ -294,8 +558,8 @@ class _LyricsSettingsTab extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         _LyricsSettingRow(
-          title: '歌词字体',
-          subtitle: '桌面歌词使用的字体',
+          title: strings.resolve(ThemeStringKey.settingsLyricsFont),
+          subtitle: strings.resolve(ThemeStringKey.settingsLyricsFontSub),
           control: ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 200, maxWidth: 260),
             child: DropdownButtonFormField<String?>(
@@ -324,9 +588,11 @@ class _LyricsSettingsTab extends ConsumerWidget {
         ),
         const SizedBox(height: 20),
         _LyricsSettingRow(
-          title: '歌词字体大小',
-          subtitle:
-              '桌面歌词字号 (${LyricSettings.minFontSize}-${LyricSettings.maxFontSize})',
+          title: strings.resolve(ThemeStringKey.settingsLyricsFontSize),
+          subtitle: strings
+              .resolve(ThemeStringKey.settingsLyricsFontSizeSub)
+              .replaceAll('{min}', '${LyricSettings.minFontSize}')
+              .replaceAll('{max}', '${LyricSettings.maxFontSize}'),
           control: _FontSizeStepper(
             value: lyricSettings.desktopLyricFontSize,
             onDecrease: () => ref
@@ -339,8 +605,8 @@ class _LyricsSettingsTab extends ConsumerWidget {
         ),
         const SizedBox(height: 20),
         _LyricsSettingRow(
-          title: '歌词颜色',
-          subtitle: '当前歌词填充颜色',
+          title: strings.resolve(ThemeStringKey.settingsLyricsColor),
+          subtitle: strings.resolve(ThemeStringKey.settingsLyricsColorSub),
           control: _ColorPalettePicker(
             selectedColorValue: lyricSettings.desktopLyricTextColorValue,
             onSelected: (colorValue) => ref
@@ -350,11 +616,11 @@ class _LyricsSettingsTab extends ConsumerWidget {
         ),
         const SizedBox(height: 20),
         _LyricsSettingRow(
-          title: '歌词描边颜色',
-          subtitle: '歌词文字描边颜色',
+          title: strings.resolve(ThemeStringKey.settingsLyricsStroke),
+          subtitle: strings.resolve(ThemeStringKey.settingsLyricsStrokeSub),
           control: _ColorPalettePicker(
             selectedColorValue: lyricSettings.desktopLyricStrokeColorValue,
-            noneLabel: '不描边',
+            noneLabel: strings.resolve(ThemeStringKey.settingsLyricsNoStroke),
             noneValue: LyricSettings.noStrokeColorValue,
             onSelected: (colorValue) => ref
                 .read(settingsControllerProvider.notifier)
@@ -411,9 +677,16 @@ class _ShortcutSettingsTab extends ConsumerWidget {
     }
     final conflict = settings.shortcuts.conflictingAction(action, result);
     if (conflict != null && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('与“${conflict.label}”冲突，未保存。')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ref
+                .read(activeThemeStringsProvider)
+                .resolve(ThemeStringKey.settingsShortcutConflictSaved)
+                .replaceAll('{action}', conflict.label),
+          ),
+        ),
+      );
       return;
     }
     await ref
@@ -441,7 +714,8 @@ class _LyricsSettingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -449,13 +723,18 @@ class _LyricsSettingRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(title, style: theme.textTheme.titleMedium),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: tokens.typography.resolvedListPrimarySize,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textPrimary,
+                ),
+              ),
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 11, color: colors.textMuted),
               ),
             ],
           ),
@@ -486,7 +765,8 @@ class _LyricsSwitchRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
     return Column(
       children: <Widget>[
         Padding(
@@ -497,30 +777,42 @@ class _LyricsSwitchRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(title, style: theme.textTheme.titleMedium),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: tokens.typography.resolvedListPrimarySize,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                      style: TextStyle(fontSize: 11, color: colors.textMuted),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 24),
-              Switch(value: value, onChanged: onChanged),
+              // The switch's track and thumb are the design's brand-tinted
+              // toggle, not Material's primary-filled one.
+              Switch(
+                value: value,
+                onChanged: onChanged,
+                activeThumbColor: colors.brandBase,
+                inactiveThumbColor: colors.textDisabled,
+                inactiveTrackColor: colors.surfaceActive,
+              ),
             ],
           ),
         ),
-        if (showDivider)
-          Divider(height: 1, color: theme.colorScheme.outlineVariant),
+        if (showDivider) Divider(height: 1, color: colors.borderSubtle),
       ],
     );
   }
 }
 
-class _ShortcutRow extends StatelessWidget {
+class _ShortcutRow extends ConsumerWidget {
   const _ShortcutRow({
     required this.action,
     required this.binding,
@@ -534,8 +826,10 @@ class _ShortcutRow extends StatelessWidget {
   final VoidCallback? onClear;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final strings = ref.watch(activeThemeStringsProvider);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -548,13 +842,18 @@ class _ShortcutRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(action.label, style: theme.textTheme.titleMedium),
+                    Text(
+                      action.label,
+                      style: TextStyle(
+                        fontSize: tokens.typography.resolvedListPrimarySize,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       action.description,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                      style: TextStyle(fontSize: 11, color: colors.textMuted),
                     ),
                   ],
                 ),
@@ -566,21 +865,29 @@ class _ShortcutRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: <Widget>[
                     Text(
-                      '软件内',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                      strings.resolve(ThemeStringKey.settingsShortcutScope),
+                      style: TextStyle(fontSize: 10, color: colors.textMuted),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      binding?.displayLabel ?? '未设置',
-                      style: theme.textTheme.titleSmall,
+                      binding?.displayLabel ??
+                          strings.resolve(ThemeStringKey.settingsShortcutUnset),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 12),
-              TextButton(onPressed: onClear, child: const Text('清除')),
+              TextButton(
+                onPressed: onClear,
+                child: Text(
+                  strings.resolve(ThemeStringKey.settingsShortcutClear),
+                ),
+              ),
             ],
           ),
         ),
@@ -589,7 +896,7 @@ class _ShortcutRow extends StatelessWidget {
   }
 }
 
-class _FontSizeStepper extends StatelessWidget {
+class _FontSizeStepper extends ConsumerWidget {
   const _FontSizeStepper({
     required this.value,
     required this.onDecrease,
@@ -601,8 +908,10 @@ class _FontSizeStepper extends StatelessWidget {
   final VoidCallback onIncrease;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final strings = ref.watch(activeThemeStringsProvider);
     final canDecrease = value > LyricSettings.minFontSize;
     final canIncrease = value < LyricSettings.maxFontSize;
     return DecoratedBox(
@@ -610,8 +919,8 @@ class _FontSizeStepper extends StatelessWidget {
         borderRadius: BorderRadius.circular(
           RobyneTheme.of(context).tokens.radius.md,
         ),
-        color: theme.colorScheme.surfaceContainerHighest,
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        color: colors.surfaceBase,
+        border: Border.all(color: colors.borderDefault),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -619,18 +928,25 @@ class _FontSizeStepper extends StatelessWidget {
           IconButton(
             onPressed: canDecrease ? onDecrease : null,
             icon: const Icon(Icons.remove),
-            tooltip: '减小字号',
+            tooltip: strings.resolve(ThemeStringKey.settingsLyricsDecreaseFont),
           ),
           SizedBox(
             width: 56,
             child: Center(
-              child: Text('$value', style: theme.textTheme.titleMedium),
+              child: Text(
+                '$value',
+                style: TextStyle(
+                  fontSize: tokens.typography.resolvedListPrimarySize,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textPrimary,
+                ),
+              ),
             ),
           ),
           IconButton(
             onPressed: canIncrease ? onIncrease : null,
             icon: const Icon(Icons.add),
-            tooltip: '增大字号',
+            tooltip: strings.resolve(ThemeStringKey.settingsLyricsIncreaseFont),
           ),
         ],
       ),
@@ -638,7 +954,7 @@ class _FontSizeStepper extends StatelessWidget {
   }
 }
 
-class _ColorPalettePicker extends StatelessWidget {
+class _ColorPalettePicker extends ConsumerWidget {
   const _ColorPalettePicker({
     required this.selectedColorValue,
     required this.onSelected,
@@ -652,10 +968,15 @@ class _ColorPalettePicker extends StatelessWidget {
   final int? noneValue;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // Swatches are circular whatever the skin says, so they use the `full`
     // radius token rather than a literal 18 (half of the 32dp box).
-    final fullRadius = RobyneTheme.of(context).tokens.radius.full;
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final fullRadius = tokens.radius.full;
+    // The selected ring is the nav bar's indicator colour, so a skin's accent
+    // shows up on the swatch picker instead of Material's primary.
+    final accent = tokens.components.navBar.selectedIndicator;
     final children = <Widget>[
       if (noneLabel != null && noneValue != null)
         _NoColorOption(
@@ -681,9 +1002,7 @@ class _ColorPalettePicker extends StatelessWidget {
                 color: color,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: selected
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outlineVariant,
+                  color: selected ? accent : colors.borderDefault,
                   width: selected ? 3 : 1,
                 ),
               ),
@@ -701,7 +1020,7 @@ class _ColorPalettePicker extends StatelessWidget {
   }
 }
 
-class _NoColorOption extends StatelessWidget {
+class _NoColorOption extends ConsumerWidget {
   const _NoColorOption({
     required this.label,
     required this.selected,
@@ -713,10 +1032,12 @@ class _NoColorOption extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
     // A pill: fully rounded on the 32dp-tall chip.
-    final pillRadius = RobyneTheme.of(context).tokens.radius.full;
+    final pillRadius = tokens.radius.full;
+    final accent = tokens.components.navBar.selectedIndicator;
     return Tooltip(
       message: label,
       child: InkWell(
@@ -727,11 +1048,9 @@ class _NoColorOption extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(pillRadius),
-            color: theme.colorScheme.surfaceContainerHighest,
+            color: colors.surfaceBase,
             border: Border.all(
-              color: selected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.outlineVariant,
+              color: selected ? accent : colors.borderDefault,
               width: selected ? 2 : 1,
             ),
           ),
@@ -741,12 +1060,13 @@ class _NoColorOption extends StatelessWidget {
               Icon(
                 Icons.block_rounded,
                 size: 16,
-                color: selected
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurfaceVariant,
+                color: selected ? accent : colors.textSecondary,
               ),
               const SizedBox(width: 6),
-              Text(label, style: theme.textTheme.bodySmall),
+              Text(
+                label,
+                style: TextStyle(fontSize: 11, color: colors.textSecondary),
+              ),
             ],
           ),
         ),
@@ -798,12 +1118,18 @@ class _ShortcutCaptureDialogState
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final strings = ref.watch(activeThemeStringsProvider);
     final conflict = _binding == null
         ? null
         : widget.settings.conflictingAction(widget.action, _binding);
     return AlertDialog(
-      title: Text('设置 ${widget.action.label}'),
+      title: Text(
+        strings
+            .resolve(ThemeStringKey.settingsShortcutEditTitle)
+            .replaceAll('{action}', widget.action.label),
+      ),
       content: SizedBox(
         width: RobyneDialogWidth.forContext(context, 460),
         child: Focus(
@@ -829,12 +1155,22 @@ class _ShortcutCaptureDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Text('点击下方区域后，按下要绑定的按键或组合键。'),
+              Text(strings.resolve(ThemeStringKey.settingsShortcutHint)),
               const SizedBox(height: 16),
               SegmentedButton<int>(
-                segments: const <ButtonSegment<int>>[
-                  ButtonSegment<int>(value: 1, label: Text('单击')),
-                  ButtonSegment<int>(value: 2, label: Text('双击')),
+                segments: <ButtonSegment<int>>[
+                  ButtonSegment<int>(
+                    value: 1,
+                    label: Text(
+                      strings.resolve(ThemeStringKey.settingsShortcutSingle),
+                    ),
+                  ),
+                  ButtonSegment<int>(
+                    value: 2,
+                    label: Text(
+                      strings.resolve(ThemeStringKey.settingsShortcutDouble),
+                    ),
+                  ),
                 ],
                 selected: <int>{_tapCount},
                 onSelectionChanged: (selection) {
@@ -857,22 +1193,33 @@ class _ShortcutCaptureDialogState
                     borderRadius: BorderRadius.circular(
                       RobyneTheme.of(context).tokens.radius.md,
                     ),
-                    border: Border.all(color: theme.colorScheme.outlineVariant),
-                    color: theme.colorScheme.surfaceContainerHighest,
+                    border: Border.all(color: colors.borderDefault),
+                    color: colors.surfaceBase,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        _binding?.displayLabel ?? '按下快捷键',
-                        style: theme.textTheme.titleMedium,
+                        _binding?.displayLabel ??
+                            strings.resolve(
+                              ThemeStringKey.settingsShortcutPress,
+                            ),
+                        style: TextStyle(
+                          fontSize: tokens.typography.resolvedListPrimarySize,
+                          fontWeight: FontWeight.w600,
+                          color: colors.textPrimary,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        _focusNode.hasFocus ? '正在监听键盘输入' : '点击此区域开始录制',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                        _focusNode.hasFocus
+                            ? strings.resolve(
+                                ThemeStringKey.settingsShortcutListening,
+                              )
+                            : strings.resolve(
+                                ThemeStringKey.settingsShortcutStartRecording,
+                              ),
+                        style: TextStyle(fontSize: 11, color: colors.textMuted),
                       ),
                     ],
                   ),
@@ -881,10 +1228,10 @@ class _ShortcutCaptureDialogState
               if (conflict != null) ...<Widget>[
                 const SizedBox(height: 12),
                 Text(
-                  '与“${conflict.label}”冲突，请更换按键。',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
+                  strings
+                      .resolve(ThemeStringKey.settingsShortcutConflict)
+                      .replaceAll('{action}', conflict.label),
+                  style: TextStyle(fontSize: 11, color: colors.danger),
                 ),
               ],
             ],
@@ -894,13 +1241,13 @@ class _ShortcutCaptureDialogState
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(strings.resolve(ThemeStringKey.actionCancel)),
         ),
         FilledButton(
           onPressed: _binding == null || conflict != null
               ? null
               : () => Navigator.of(context).pop(_binding),
-          child: const Text('保存'),
+          child: Text(strings.resolve(ThemeStringKey.pluginsSave)),
         ),
       ],
     );
@@ -911,18 +1258,26 @@ Future<String?> _pickDirectory(
   BuildContext context, {
   required String dialogTitle,
   required String initialDirectory,
+  required ThemeStrings strings,
 }) async {
   try {
     return await FilePicker.getDirectoryPath(dialogTitle: dialogTitle);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('无法打开目录选择器：$error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            strings
+                .resolve(ThemeStringKey.settingsDirectoryPickerFailed)
+                .replaceAll('{error}', '$error'),
+          ),
+        ),
+      );
       return _showManualDirectoryDialog(
         context,
         dialogTitle: dialogTitle,
         initialDirectory: initialDirectory,
+        strings: strings,
       );
     }
     return null;
@@ -933,6 +1288,7 @@ Future<String?> _showManualDirectoryDialog(
   BuildContext context, {
   required String dialogTitle,
   required String initialDirectory,
+  required ThemeStrings strings,
 }) async {
   final controller = TextEditingController(text: initialDirectory);
   attachImeTextControllerTrace(controller, 'settings.manualDirectory');
@@ -946,9 +1302,9 @@ Future<String?> _showManualDirectoryDialog(
           controller: controller,
           autofocus: true,
           textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            labelText: '文件夹路径',
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            labelText: strings.resolve(ThemeStringKey.settingsDirectoryField),
           ),
           onSubmitted: (_) => Navigator.of(context).pop(controller.text.trim()),
         ),
@@ -956,11 +1312,11 @@ Future<String?> _showManualDirectoryDialog(
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(strings.resolve(ThemeStringKey.actionCancel)),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-          child: const Text('保存'),
+          child: Text(strings.resolve(ThemeStringKey.pluginsSave)),
         ),
       ],
     ),

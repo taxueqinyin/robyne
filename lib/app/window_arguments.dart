@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-enum RobyneWindowType { main, desktopLyrics }
+enum RobyneWindowType { main, desktopLyrics, trayPanel }
 
 class RobyneWindowArguments {
   const RobyneWindowArguments({required this.type});
@@ -9,6 +9,8 @@ class RobyneWindowArguments {
 
   const RobyneWindowArguments.desktopLyrics()
     : type = RobyneWindowType.desktopLyrics;
+
+  const RobyneWindowArguments.trayPanel() : type = RobyneWindowType.trayPanel;
 
   final RobyneWindowType type;
 
@@ -28,6 +30,7 @@ class RobyneWindowArguments {
       final type = decoded['type']?.toString();
       return switch (type) {
         'desktopLyrics' => const RobyneWindowArguments.desktopLyrics(),
+        'trayPanel' => const RobyneWindowArguments.trayPanel(),
         _ => const RobyneWindowArguments.main(),
       };
     } catch (_) {

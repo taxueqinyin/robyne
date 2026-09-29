@@ -7,7 +7,13 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
 
 class ArtworkView extends StatefulWidget {
-  const ArtworkView({super.key, this.artworkUrl, this.size = 48});
+  const ArtworkView({
+    super.key,
+    this.artworkUrl,
+    this.size = 48,
+    this.fit = BoxFit.cover,
+    this.expand = false,
+  });
 
   static final Map<String, ImageProvider<Object>> _resolvedProviders =
       <String, ImageProvider<Object>>{};
@@ -16,6 +22,16 @@ class ArtworkView extends StatefulWidget {
 
   final String? artworkUrl;
   final double size;
+
+  /// How the image is fitted inside its box.
+  final BoxFit fit;
+
+  /// Fill the incoming constraints instead of a square of [size].
+  ///
+  /// Collection covers are wide, not square, so a card cannot use the default
+  /// square. The cache is shared either way: only the box changes, never where
+  /// the bytes are stored.
+  final bool expand;
 
   static Future<void> precacheUrls(
     BuildContext context,
@@ -172,42 +188,61 @@ class _ArtworkViewState extends State<ArtworkView> {
       borderRadius: BorderRadius.circular(
         RobyneTheme.of(context).tokens.radius.sm,
       ),
-      child: SizedBox.square(
-        dimension: widget.size,
-        child: url == null || url.isEmpty
-            ? _FallbackArtwork(size: widget.size)
-            : cachedProvider != null
-            ? _ArtworkImage(provider: cachedProvider, size: widget.size)
-            : FutureBuilder<ImageProvider<Object>?>(
-                future: _providerFuture,
-                builder: (context, snapshot) {
-                  if (_loadedUrl != url ||
-                      snapshot.connectionState != ConnectionState.done ||
-                      snapshot.data == null) {
-                    return _FallbackArtwork(size: widget.size);
-                  }
-                  return _ArtworkImage(
-                    provider: snapshot.data!,
-                    size: widget.size,
-                  );
-                },
-              ),
-      ),
+      child: widget.expand
+          ? SizedBox.expand(child: _body(url, cachedProvider))
+          : SizedBox.square(
+              dimension: widget.size,
+              child: _body(url, cachedProvider),
+            ),
+    );
+  }
+
+  /// The resolved image, or the placeholder while it loads / on failure.
+  Widget _body(String? url, ImageProvider<Object>? cachedProvider) {
+    if (url == null || url.isEmpty) {
+      return _FallbackArtwork(size: widget.size);
+    }
+    if (cachedProvider != null) {
+      return _ArtworkImage(
+        provider: cachedProvider,
+        size: widget.size,
+        fit: widget.fit,
+      );
+    }
+    return FutureBuilder<ImageProvider<Object>?>(
+      future: _providerFuture,
+      builder: (context, snapshot) {
+        if (_loadedUrl != url ||
+            snapshot.connectionState != ConnectionState.done ||
+            snapshot.data == null) {
+          return _FallbackArtwork(size: widget.size);
+        }
+        return _ArtworkImage(
+          provider: snapshot.data!,
+          size: widget.size,
+          fit: widget.fit,
+        );
+      },
     );
   }
 }
 
 class _ArtworkImage extends StatelessWidget {
-  const _ArtworkImage({required this.provider, required this.size});
+  const _ArtworkImage({
+    required this.provider,
+    required this.size,
+    this.fit = BoxFit.cover,
+  });
 
   final ImageProvider<Object> provider;
   final double size;
+  final BoxFit fit;
 
   @override
   Widget build(BuildContext context) {
     return Image(
       image: provider,
-      fit: BoxFit.cover,
+      fit: fit,
       gaplessPlayback: true,
       errorBuilder: (context, error, stackTrace) =>
           _FallbackArtwork(size: size),
@@ -228,15 +263,13 @@ class _FallbackArtwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final tokens = RobyneTheme.of(context).tokens;
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-      ),
+      decoration: BoxDecoration(color: tokens.components.card.surface),
       child: Icon(
         Icons.album,
         size: size * 0.44,
-        color: theme.colorScheme.onSurfaceVariant,
+        color: tokens.color.textMuted,
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:robyne/features/downloads/domain/download_audio_format.dart';
+import 'package:robyne/core/theme/domain/theme_layout_override.dart';
 import 'package:robyne/features/settings/application/settings_providers.dart';
 import 'package:robyne/features/settings/domain/lyric_settings.dart';
 import 'package:robyne/features/settings/domain/shortcut_action.dart';
@@ -10,6 +11,9 @@ import 'package:robyne/features/settings/domain/shortcut_binding.dart';
 import 'package:robyne/features/settings/domain/shortcut_settings.dart';
 import 'package:robyne/features/settings/domain/user_settings.dart';
 import 'package:robyne/features/settings/presentation/settings_page.dart';
+import 'package:robyne/core/theme/application/theme_providers.dart';
+
+import 'support/xuan_fixture.dart';
 
 void main() {
   testWidgets('settings page exposes shortcut tab and records a shortcut', (
@@ -19,6 +23,10 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          // The page's chrome comes from the skin, so the assertions run
+          // against the shipped manifest rather than against literals the
+          // page no longer owns.
+          baseThemePackageProvider.overrideWithValue(xuanFixture()),
           settingsControllerProvider.overrideWith(() {
             controller = _FakeSettingsController();
             return controller;
@@ -64,6 +72,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          baseThemePackageProvider.overrideWithValue(xuanFixture()),
           settingsControllerProvider.overrideWith(() {
             controller = _FakeSettingsController();
             return controller;
@@ -121,6 +130,7 @@ class _FakeSettingsController extends SettingsController {
         activeThemeId: UserSettings.defaultActiveThemeId,
         themeModeOverrideName: UserSettings.defaultThemeModeOverrideName,
         themeSettingValues: const <String, Object>{},
+        themeLayoutOverrides: const <String, ThemeLayoutOverride>{},
       );
 
   UserSettings _settings;

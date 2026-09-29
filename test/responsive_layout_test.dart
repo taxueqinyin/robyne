@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import 'package:robyne/features/player/domain/media_source.dart';
 import 'package:robyne/features/player/domain/playback_item.dart';
 import 'package:robyne/features/player/presentation/now_playing_page.dart';
 import 'package:robyne/features/player/presentation/player_bar.dart';
+import 'package:robyne/features/player/presentation/progress_slider.dart';
 import 'package:robyne/features/player/presentation/queue_page.dart';
 import 'package:robyne/features/playlists/application/playlist_providers.dart';
 import 'package:robyne/features/playlists/domain/music_playlist.dart';
@@ -136,13 +138,243 @@ void main() {
       overrides: [audioPlayerServiceProvider.overrideWithValue(audio)],
     );
 
-    // The mini bar must keep play/pause and next; the progress row is gone
-    // because a 360dp window cannot afford it. Full controls live on the
-    // Now Playing page.
+    // The mini bar must keep play/pause and a way through to the full
+    // transport; the progress row is gone because a 360dp window cannot
+    // afford it. `mobile-portrait.png` gives the phone bar no previous/next
+    // buttons, so the identity block opens the Now Playing page — the
+    // controls are relocated, not dropped.
     expect(find.byIcon(Icons.play_arrow), findsOneWidget);
-    expect(find.byIcon(Icons.skip_next), findsOneWidget);
+    expect(find.byKey(const Key('player-identity')), findsOneWidget);
     expect(find.byKey(const Key('player-progress-slider')), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('immersive player has one close affordance', (tester) async {
+    final item = PlaybackItem.plugin(
+      platform: 'Test',
+      musicId: 'A',
+      title: 'Track',
+      raw: const <String, Object?>{'id': 'A'},
+    );
+    await _pumpAt(
+      tester,
+      _desktop,
+      Consumer(
+        builder: (context, ref, _) => NowPlayingPage(
+          immersive: true,
+          showWindowControls: true,
+          onClose: () {},
+        ),
+      ),
+      overrides: [
+        playerControllerProvider.overrideWith(
+          () => _SeededPlayerController(
+            PlayerControllerState(
+              queue: <PlaybackItem>[item],
+              currentItem: item,
+            ),
+          ),
+        ),
+        playlistControllerProvider.overrideWith(
+          () => _SeededPlaylistController(),
+        ),
+      ],
+    );
+
+    expect(find.byKey(const Key('now-playing-close')), findsOneWidget);
+    expect(find.byKey(const Key('now-playing-window-controls')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile immersive player has no window buttons', (tester) async {
+    final item = PlaybackItem.plugin(
+      platform: 'Test',
+      musicId: 'A',
+      title: 'Track',
+      raw: const <String, Object?>{'id': 'A'},
+    );
+    await _pumpAt(
+      tester,
+      _phonePortrait,
+      Consumer(
+        builder: (context, ref, _) => NowPlayingPage(
+          immersive: true,
+          showWindowControls: true,
+          onClose: () {},
+        ),
+      ),
+      overrides: [
+        playerControllerProvider.overrideWith(
+          () => _SeededPlayerController(
+            PlayerControllerState(
+              queue: <PlaybackItem>[item],
+              currentItem: item,
+            ),
+          ),
+        ),
+        playlistControllerProvider.overrideWith(
+          () => _SeededPlaylistController(),
+        ),
+      ],
+    );
+
+    expect(find.byKey(const Key('now-playing-window-controls')), findsNothing);
+    expect(find.byKey(const Key('now-playing-drag-region')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('immersive progress slider seeks playback', (tester) async {
+    final audio = _FakeAudio(
+      const PlayerSnapshot(
+        currentSource: MediaSource(url: 'https://example.com/a.mp3'),
+        duration: Duration(minutes: 3),
+        position: Duration(minutes: 1),
+      ),
+    );
+    final item = PlaybackItem.plugin(
+      platform: 'Test',
+      musicId: 'A',
+      title: 'Track',
+      raw: const <String, Object?>{'id': 'A'},
+    );
+    await _pumpAt(
+      tester,
+      _desktop,
+      Consumer(
+        builder: (context, ref, _) => NowPlayingPage(
+          immersive: true,
+          showWindowControls: true,
+          onClose: () {},
+        ),
+      ),
+      overrides: [
+        audioPlayerServiceProvider.overrideWithValue(audio),
+        playerControllerProvider.overrideWith(
+          () => _SeededPlayerController(
+            PlayerControllerState(
+              queue: <PlaybackItem>[item],
+              currentItem: item,
+            ),
+          ),
+        ),
+        playlistControllerProvider.overrideWith(
+          () => _SeededPlaylistController(),
+        ),
+      ],
+    );
+
+    final slider = find.byKey(const Key('now-playing-progress'));
+    expect(slider, findsOneWidget);
+    expect(tester.widget<ProgressSlider>(slider).onChanged, isNotNull);
+    await tester.drag(slider, const Offset(120, 0));
+    await tester.pump();
+    expect(audio.seekCalls, isNotEmpty);
+  });
+
+  testWidgets('the lyric pane does not build a scrollbar', (tester) async {
+    final item = PlaybackItem.plugin(
+      platform: 'Test',
+      musicId: 'A',
+      title: 'Track',
+      raw: const <String, Object?>{'id': 'A'},
+    );
+    await _pumpAt(
+      tester,
+      _desktop,
+      Consumer(
+        builder: (context, ref, _) => NowPlayingPage(
+          immersive: true,
+          showWindowControls: true,
+          onClose: () {},
+        ),
+      ),
+      overrides: [
+        playerControllerProvider.overrideWith(
+          () => _SeededPlayerController(
+            PlayerControllerState(
+              queue: <PlaybackItem>[item],
+              currentItem: item,
+            ),
+          ),
+        ),
+        playlistControllerProvider.overrideWith(
+          () => _SeededPlaylistController(),
+        ),
+      ],
+    );
+
+    // The lyrics pane uses the no-scrollbar behavior even before a document
+    // is linked, so the auto-follow jump cannot flash a scrollbar later.
+    final scrollable = find.byType(Scrollable);
+    expect(scrollable, findsWidgets);
+    expect(find.byType(Scrollbar), findsNothing);
+  });
+
+  testWidgets('immersive window controls hide and reappear with the pointer', (
+    tester,
+  ) async {
+    final item = PlaybackItem.plugin(
+      platform: 'Test',
+      musicId: 'A',
+      title: 'Track',
+      raw: const <String, Object?>{'id': 'A'},
+    );
+    await _pumpAt(
+      tester,
+      _desktop,
+      Consumer(
+        builder: (context, ref, _) => NowPlayingPage(
+          immersive: true,
+          showWindowControls: true,
+          onClose: () {},
+        ),
+      ),
+      overrides: [
+        playerControllerProvider.overrideWith(
+          () => _SeededPlayerController(
+            PlayerControllerState(
+              queue: <PlaybackItem>[item],
+              currentItem: item,
+            ),
+          ),
+        ),
+        playlistControllerProvider.overrideWith(
+          () => _SeededPlaylistController(),
+        ),
+      ],
+    );
+
+    final opacity = tester.widget<AnimatedOpacity>(
+      find.byKey(const Key('now-playing-window-controls')),
+    );
+    expect(opacity.opacity, 1);
+
+    await tester.pump(const Duration(milliseconds: 1100));
+    expect(
+      tester
+          .widget<AnimatedOpacity>(
+            find.byKey(const Key('now-playing-window-controls')),
+          )
+          .opacity,
+      0,
+    );
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(find.byType(NowPlayingPage)));
+    await mouse.moveTo(
+      tester.getCenter(find.byType(NowPlayingPage)) + const Offset(1, 1),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<AnimatedOpacity>(
+            find.byKey(const Key('now-playing-window-controls')),
+          )
+          .opacity,
+      1,
+    );
+    await mouse.removePointer();
+    await tester.pump(const Duration(milliseconds: 1100));
   });
 
   testWidgets('desktop keeps the full player bar', (tester) async {
@@ -170,6 +402,36 @@ void main() {
     expect(find.byKey(const Key('player-mode-button')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  // The elastic bar went through several regressions at width classes that no
+  // other test covered: 600dp (below the mode/skip breakpoint) and 1000dp
+  // (above the desktop breakpoint but too narrow for the old fixed columns).
+  for (final width in <double>[600, 660, 720, 840, 960, 1000, 1180]) {
+    testWidgets('player bar survives ${width}dp without overflow', (
+      tester,
+    ) async {
+      final audio = _FakeAudio(
+        const PlayerSnapshot(
+          currentSource: MediaSource(url: 'https://example.com/a.mp3'),
+          duration: Duration(minutes: 3),
+          position: Duration(minutes: 1),
+          volume: 50,
+        ),
+      );
+
+      await _pumpAt(
+        tester,
+        Size(width, 900),
+        Consumer(
+          builder: (context, ref, _) =>
+              const Scaffold(body: SizedBox(height: 200, child: PlayerBar())),
+        ),
+        overrides: [audioPlayerServiceProvider.overrideWithValue(audio)],
+      );
+
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('queue collapses to tabs below the expanded breakpoint', (
     tester,
@@ -240,6 +502,7 @@ class _FakeAudio implements AudioPlayerService {
   _FakeAudio([this._snapshot = const PlayerSnapshot()]);
 
   final _controller = StreamController<PlayerSnapshot>.broadcast();
+  final seekCalls = <Duration>[];
   // Kept mutable so a test can re-emit a new snapshot mid-widget.
   // ignore: prefer_final_fields
   PlayerSnapshot _snapshot;
@@ -267,7 +530,10 @@ class _FakeAudio implements AudioPlayerService {
   Future<Result<void>> resume() async => const Ok(null);
 
   @override
-  Future<Result<void>> seek(Duration position) async => const Ok(null);
+  Future<Result<void>> seek(Duration position) async {
+    seekCalls.add(position);
+    return const Ok(null);
+  }
 
   @override
   Future<Result<void>> setVolume(double volume) async => const Ok(null);

@@ -1,40 +1,54 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SearchActionButton extends StatefulWidget {
+import '../../core/theme/application/theme_providers.dart';
+import '../../core/theme/domain/theme_strings.dart';
+import '../../core/theme/infrastructure/token_resolver.dart';
+
+class SearchActionButton extends ConsumerStatefulWidget {
   const SearchActionButton({
     super.key,
     required this.isSearching,
     required this.onSearch,
     required this.onCancel,
+    this.searchLabelKey = ThemeStringKey.searchAction,
+    this.stopLabelKey = ThemeStringKey.searchStop,
   });
 
   final bool isSearching;
   final VoidCallback onSearch;
   final VoidCallback onCancel;
+  final ThemeStringKey searchLabelKey;
+  final ThemeStringKey stopLabelKey;
 
   @override
-  State<SearchActionButton> createState() => _SearchActionButtonState();
+  ConsumerState<SearchActionButton> createState() => _SearchActionButtonState();
 }
 
-class _SearchActionButtonState extends State<SearchActionButton> {
+class _SearchActionButtonState extends ConsumerState<SearchActionButton> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final showStop = widget.isSearching && _hovered;
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = RobyneTheme.of(context).tokens.color;
+    // The button is shell chrome, so its wording belongs to the skin like the
+    // search field's hint does.
+    final strings = ref.watch(activeThemeStringsProvider);
+    final searchLabel = strings.resolve(widget.searchLabelKey);
+    final stopLabel = strings.resolve(widget.stopLabelKey);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: Tooltip(
-        message: widget.isSearching ? 'Stop search' : 'Search',
+        message: widget.isSearching ? stopLabel : searchLabel,
         child: FilledButton.icon(
           onPressed: widget.isSearching ? widget.onCancel : widget.onSearch,
           style: showStop
               ? FilledButton.styleFrom(
-                  backgroundColor: colorScheme.error,
-                  foregroundColor: colorScheme.onError,
+                  backgroundColor: colors.danger,
+                  foregroundColor: colors.onBrand,
                 )
               : null,
           icon: showStop
@@ -42,7 +56,7 @@ class _SearchActionButtonState extends State<SearchActionButton> {
               : widget.isSearching
               ? const _SearchBusyIcon()
               : const Icon(Icons.search),
-          label: Text(showStop ? 'Stop' : 'Search'),
+          label: Text(showStop ? stopLabel : searchLabel),
         ),
       ),
     );

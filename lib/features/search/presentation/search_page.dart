@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/debug/ime_trace.dart';
+import '../../../core/layout/window_size_class.dart';
+import '../../../core/theme/application/theme_providers.dart';
+import '../../../core/theme/domain/theme_strings.dart';
+import '../../../core/theme/infrastructure/token_resolver.dart';
 import '../../../shared/widgets/search_action_button.dart';
 import '../../downloads/application/download_providers.dart';
 import '../../player/application/player_providers.dart';
@@ -46,28 +50,79 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final searchValue = ref.watch(search_state.searchControllerProvider);
     final plugins = pluginsValue.value ?? const <PluginDefinition>[];
     final state = searchValue.value ?? const search_state.SearchState();
+    final strings = ref.watch(activeThemeStringsProvider);
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final metrics = ref.watch(activeThemeContentMetricsProvider);
+    final compactWidth =
+        WindowSizeClass.of(context).width != WindowWidthClass.expanded;
 
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.fromLTRB(
+        compactWidth ? metrics.gutterCompact : metrics.gutter,
+        20,
+        compactWidth ? metrics.gutterCompact : metrics.gutter,
+        20,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('Robyne', style: Theme.of(context).textTheme.headlineMedium),
+          Text(
+            strings.resolve(ThemeStringKey.searchPageTitle),
+            style: TextStyle(
+              fontSize: tokens.typography.resolvedPageTitleSize,
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
+          ),
           const SizedBox(height: 4),
           Text(
-            'MusicFree plugin runtime spike',
-            style: Theme.of(context).textTheme.bodyMedium,
+            strings.resolve(ThemeStringKey.searchPageSubtitle),
+            style: TextStyle(fontSize: 12, color: colors.textMuted),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 18),
           Row(
             children: <Widget>[
               Expanded(
                 child: TextField(
                   controller: _keywordController,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.search),
-                    labelText: 'Keyword',
+                  style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: colors.surfaceBase,
+                    hintText: strings.resolve(ThemeStringKey.searchHint),
+                    hintStyle: TextStyle(fontSize: 13, color: colors.textMuted),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 18,
+                      color: colors.textMuted,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(
+                        Radius.circular(tokens.radius.md),
+                      ),
+                      borderSide: BorderSide(color: colors.borderSubtle),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(
+                        Radius.circular(tokens.radius.md),
+                      ),
+                      borderSide: BorderSide(color: colors.borderSubtle),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(
+                        Radius.circular(tokens.radius.md),
+                      ),
+                      borderSide: BorderSide(
+                        color: colors.borderFocus,
+                        width: 2,
+                      ),
+                    ),
                   ),
                   keyboardType: TextInputType.text,
                   textInputAction: TextInputAction.search,
@@ -88,7 +143,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             const SizedBox(height: 12),
             Text(
               '${state.error!.code}: ${state.error!.message}',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+              style: TextStyle(color: colors.danger),
             ),
           ],
           if (state.pluginResults.isNotEmpty) ...<Widget>[
@@ -100,7 +155,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   .selectPlugin,
             ),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Expanded(
             child: _SearchResults(
               state: state,
@@ -133,14 +188,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 }
 
-class _PluginTabs extends StatelessWidget {
+class _PluginTabs extends ConsumerWidget {
   const _PluginTabs({required this.state, required this.onSelected});
 
   final search_state.SearchState state;
   final void Function(String pluginId) onSelected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(activeThemeStringsProvider);
     return SizedBox(
       height: 40,
       child: ListView.separated(
@@ -154,22 +210,30 @@ class _PluginTabs extends StatelessWidget {
               (state.selectedPluginId ?? state.pluginResults.first.pluginId);
           final loading = result.isSearching || result.isLoadingMore;
           final label = loading
-              ? '${result.platform} ...'
+              ? strings
+                    .resolve(ThemeStringKey.searchResultLoadingSuffix)
+                    .replaceAll('{platform}', result.platform)
               : result.error != null
-              ? '${result.platform} !'
+              ? strings
+                    .resolve(ThemeStringKey.searchResultErrorSuffix)
+                    .replaceAll('{platform}', result.platform)
               : '${result.platform} ${result.resultCount}';
-          return ChoiceChip(
+          return _SourcePill(
+            label: label,
             selected: selected,
-            avatar: loading
+            trailing: loading
                 ? const SizedBox.square(
-                    dimension: 14,
+                    dimension: 13,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : result.error != null
-                ? const Icon(Icons.error_outline, size: 18)
+                ? Icon(
+                    Icons.error_outline,
+                    size: 15,
+                    color: RobyneTheme.of(context).tokens.color.danger,
+                  )
                 : null,
-            label: Text(label),
-            onSelected: (_) => onSelected(result.pluginId),
+            onTap: () => onSelected(result.pluginId),
           );
         },
       ),
@@ -177,7 +241,63 @@ class _PluginTabs extends StatelessWidget {
   }
 }
 
-class _SearchResults extends StatelessWidget {
+/// A bordered source pill: brand-tinted when selected, plain when not.
+///
+/// The design's source row is a strip of bordered pills, not Material chips;
+/// the count belongs inside the label rather than in a chip avatar slot.
+class _SourcePill extends StatelessWidget {
+  const _SourcePill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.trailing,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final comp = tokens.components.navBar;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.all(Radius.circular(tokens.radius.full)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? comp.selectedIndicatorFill : colors.surfaceBase,
+          borderRadius: BorderRadius.all(Radius.circular(tokens.radius.full)),
+          border: Border.all(
+            color: selected ? comp.selectedIndicator : colors.borderDefault,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected ? comp.selectedItem : colors.textSecondary,
+              ),
+            ),
+            if (trailing != null) ...<Widget>[
+              const SizedBox(width: 6),
+              trailing!,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchResults extends ConsumerWidget {
   const _SearchResults({
     required this.state,
     required this.onLoadMore,
@@ -191,10 +311,18 @@ class _SearchResults extends StatelessWidget {
   final void Function(MusicItem item) onDownload;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(activeThemeStringsProvider);
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
     final pluginResult = state.selectedPluginResult;
     if (pluginResult == null) {
-      return const Center(child: Text('Import a plugin, then search music.'));
+      return Center(
+        child: Text(
+          strings.resolve(ThemeStringKey.searchEmpty),
+          style: TextStyle(color: colors.textMuted),
+        ),
+      );
     }
 
     if (pluginResult.isSearching) {
@@ -205,18 +333,28 @@ class _SearchResults extends StatelessWidget {
       return Center(
         child: Text(
           '${pluginResult.error!.code}: ${pluginResult.error!.message}',
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
+          style: TextStyle(color: colors.danger),
         ),
       );
     }
 
     final result = pluginResult.result;
     if (result == null) {
-      return const Center(child: Text('Import a plugin, then search music.'));
+      return Center(
+        child: Text(
+          strings.resolve(ThemeStringKey.searchEmpty),
+          style: TextStyle(color: colors.textMuted),
+        ),
+      );
     }
 
     if (result.items.isEmpty) {
-      return const Center(child: Text('No results.'));
+      return Center(
+        child: Text(
+          strings.resolve(ThemeStringKey.searchEmptyResults),
+          style: TextStyle(color: colors.textMuted),
+        ),
+      );
     }
 
     final showFooter = pluginResult.isLoadingMore || pluginResult.error != null;
@@ -242,43 +380,15 @@ class _SearchResults extends StatelessWidget {
           return GestureDetector(
             onSecondaryTapDown: (details) =>
                 _showResultMenu(context, details.globalPosition, item),
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: ArtworkView(artworkUrl: item.artworkUrl),
-              title: Text(item.title),
-              subtitle: Text(
-                <String?>[item.artist, item.album, item.platform]
-                    .whereType<String>()
-                    .where((value) => value.isNotEmpty)
-                    .join(' - '),
-              ),
-              trailing: Wrap(
-                spacing: 4,
-                children: <Widget>[
-                  IconButton(
-                    tooltip: 'Play',
-                    icon: const Icon(Icons.play_arrow),
-                    onPressed: () => onPlay(item),
-                  ),
-                  PopupMenuButton<String>(
-                    tooltip: 'More',
-                    onSelected: (value) {
-                      if (value == 'download') {
-                        onDownload(item);
-                      }
-                    },
-                    itemBuilder: (context) => const <PopupMenuEntry<String>>[
-                      PopupMenuItem<String>(
-                        value: 'download',
-                        child: ListTile(
-                          leading: Icon(Icons.download),
-                          title: Text('Download'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            // The design's track row carries the source as a chip beside the
+            // title and reveals play/download on the row, rather than parking
+            // them in a `ListTile` trailing slot.
+            child: _SearchResultRow(
+              item: item,
+              index: index,
+              strings: strings,
+              onPlay: () => onPlay(item),
+              onDownload: () => onDownload(item),
             ),
           );
         },
@@ -315,13 +425,146 @@ class _SearchResults extends StatelessWidget {
   }
 }
 
-class _SearchResultFooter extends StatelessWidget {
+/// One search hit, in the design's row shape.
+///
+/// The mockup's row is: artwork, title with a plugin chip beside it, then
+/// artist · album underneath, and the row actions on the trailing edge. A
+/// `ListTile` could not hold the chip inside the title line.
+class _SearchResultRow extends StatelessWidget {
+  const _SearchResultRow({
+    required this.item,
+    required this.index,
+    required this.strings,
+    required this.onPlay,
+    required this.onDownload,
+  });
+
+  final MusicItem item;
+  final int index;
+  final ThemeStrings strings;
+  final VoidCallback onPlay;
+  final VoidCallback onDownload;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final subtitle = <String?>[
+      item.artist,
+      item.album,
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: <Widget>[
+          SizedBox(
+            width: 22,
+            child: Text(
+              '${index + 1}',
+              style: TextStyle(
+                fontSize: 11,
+                color: colors.textMuted,
+                fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(tokens.radius.sm),
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: ArtworkView(artworkUrl: item.artworkUrl),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Flexible(
+                      child: Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: tokens.typography.resolvedListPrimarySize,
+                          fontWeight: FontWeight.w500,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.textPrimary.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.all(
+                          Radius.circular(tokens.radius.sm),
+                        ),
+                        border: Border.all(color: colors.borderSubtle),
+                      ),
+                      child: Text(
+                        item.platform,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (subtitle.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: colors.textMuted),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 30,
+            height: 30,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              iconSize: 17,
+              tooltip: strings.resolve(ThemeStringKey.searchPlay),
+              onPressed: onPlay,
+              icon: Icon(Icons.play_arrow, color: colors.textSecondary),
+            ),
+          ),
+          SizedBox(
+            width: 30,
+            height: 30,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              iconSize: 16,
+              tooltip: strings.resolve(ThemeStringKey.searchDownload),
+              onPressed: onDownload,
+              icon: Icon(Icons.download_outlined, color: colors.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchResultFooter extends ConsumerWidget {
   const _SearchResultFooter({required this.pluginResult});
 
   final search_state.PluginSearchState pluginResult;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (pluginResult.isLoadingMore) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 20),
@@ -344,7 +587,7 @@ class _SearchResultFooter extends StatelessWidget {
       child: Text(
         '${error.code}: ${error.message}',
         textAlign: TextAlign.center,
-        style: TextStyle(color: Theme.of(context).colorScheme.error),
+        style: TextStyle(color: RobyneTheme.of(context).tokens.color.danger),
       ),
     );
   }

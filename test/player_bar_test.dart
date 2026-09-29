@@ -9,6 +9,7 @@ import 'package:robyne/features/player/domain/audio_player_service.dart';
 import 'package:robyne/features/player/domain/media_source.dart';
 import 'package:robyne/features/player/domain/playback_item.dart';
 import 'package:robyne/features/player/presentation/player_bar.dart';
+import 'package:robyne/features/player/presentation/progress_slider.dart';
 
 void main() {
   testWidgets('play pause button resumes after playback is paused', (
@@ -43,6 +44,9 @@ void main() {
   testWidgets(
     'restored current item enables play button without a loaded source',
     (tester) async {
+      // The design spec (§5.1) hides the volume slider below a 960dp window,
+      // so this test has to declare a desktop viewport to see it.
+      _setViewport(tester, const Size(1280, 900));
       final audio = _FakeAudioPlayerService();
       final item = PlaybackItem.plugin(
         platform: 'Test',
@@ -77,15 +81,47 @@ void main() {
         find.byKey(const Key('player-volume-slider')),
       );
       expect(volumeSlider.value, 32);
-      expect(find.text('00:09 / 03:00'), findsOneWidget);
+      expect(find.text('00:09'), findsOneWidget);
+      expect(find.text('03:00'), findsOneWidget);
 
       final progressSlider = find.byKey(const Key('player-progress-slider'));
-      expect(tester.widget<Slider>(progressSlider).onChanged, isNotNull);
+      // The bar's scrub line is enabled for seeking; the flat-at-rest look is
+      // covered by `progress_slider_test.dart`.
+      expect(
+        tester.widget<ProgressSlider>(progressSlider).onChangeEnd,
+        isNotNull,
+      );
       await tester.drag(progressSlider, const Offset(80, 0));
       await tester.pump();
       expect(find.text('00:00 / 03:00'), findsNothing);
     },
   );
+
+  testWidgets('narrow windows drop the volume slider, not the transport', (
+    tester,
+  ) async {
+    _setViewport(tester, const Size(800, 600));
+    final audio = _FakeAudioPlayerService(
+      const PlayerSnapshot(
+        currentSource: MediaSource(url: 'https://example.com/a.mp3'),
+        duration: Duration(minutes: 3),
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [audioPlayerServiceProvider.overrideWithValue(audio)],
+        child: const MaterialApp(home: Scaffold(body: PlayerBar())),
+      ),
+    );
+    await tester.pump();
+
+    // Design spec §5.1: below 960dp the desktop-only controls go, but
+    // play/pause, mode and the queue entry must survive.
+    expect(find.byKey(const Key('player-volume-slider')), findsNothing);
+    expect(find.byIcon(Icons.play_arrow), findsOneWidget);
+    expect(find.byKey(const Key('player-mode-button')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'restoring playback keeps the saved position during zero snapshots',
@@ -125,7 +161,8 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('00:50 / 03:00'), findsOneWidget);
+      expect(find.text('00:50'), findsOneWidget);
+      expect(find.text('03:00'), findsOneWidget);
       expect(find.text('00:00 / 03:00'), findsNothing);
     },
   );
@@ -168,7 +205,8 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('00:50 / 03:00'), findsOneWidget);
+      expect(find.text('00:50'), findsOneWidget);
+      expect(find.text('03:00'), findsOneWidget);
       expect(find.text('00:50 / 03:01'), findsNothing);
     },
   );
@@ -205,7 +243,8 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('00:50 / 02:59'), findsOneWidget);
+      expect(find.text('00:50'), findsOneWidget);
+      expect(find.text('02:59'), findsOneWidget);
       expect(find.text('00:50 / 02:58'), findsNothing);
       expect(find.text('00:50 / 03:00'), findsNothing);
     },
@@ -247,7 +286,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('00:51 / 03:00'), findsOneWidget);
+    expect(find.text('00:51'), findsOneWidget);
+    expect(find.text('03:00'), findsOneWidget);
     expect(find.text('00:51 / 00:00'), findsNothing);
   });
 
@@ -288,7 +328,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('00:55 / 03:00'), findsOneWidget);
+    expect(find.text('00:55'), findsOneWidget);
+    expect(find.text('03:00'), findsOneWidget);
     expect(find.text('00:55 / 03:01'), findsNothing);
   });
 
@@ -330,7 +371,8 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('00:55 / 02:59'), findsOneWidget);
+      expect(find.text('00:55'), findsOneWidget);
+      expect(find.text('02:59'), findsOneWidget);
       expect(find.text('00:55 / 02:58'), findsNothing);
       expect(find.text('00:55 / 03:00'), findsNothing);
     },
@@ -374,7 +416,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('00:55 / 03:00'), findsOneWidget);
+    expect(find.text('00:55'), findsOneWidget);
+    expect(find.text('03:00'), findsOneWidget);
     expect(find.text('00:55 / 03:01'), findsNothing);
   });
 }
@@ -386,6 +429,16 @@ class _SeededPlayerController extends PlayerController {
 
   @override
   Future<PlayerControllerState> build() async => _state;
+}
+
+/// Pins the widget test viewport to [size].
+///
+/// Flutter defaults to 800x600, which silently sits below the design spec's
+/// 960dp "desktop controls" threshold (§5.1) and hides the very sliders these
+/// tests assert on.
+void _setViewport(WidgetTester tester, Size size) {
+  tester.view.physicalSize = size * tester.view.devicePixelRatio;
+  addTearDown(tester.view.resetPhysicalSize);
 }
 
 class _FakeAudioPlayerService implements AudioPlayerService {

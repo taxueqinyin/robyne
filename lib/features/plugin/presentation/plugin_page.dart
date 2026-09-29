@@ -8,6 +8,9 @@ import 'package:path/path.dart' as p;
 
 import 'package:robyne/core/debug/ime_trace.dart';
 import 'package:robyne/core/layout/window_size_class.dart';
+import 'package:robyne/core/theme/application/theme_providers.dart';
+import 'package:robyne/core/theme/domain/theme_strings.dart';
+import 'package:robyne/core/theme/infrastructure/token_resolver.dart';
 import 'package:robyne/features/plugin/application/plugin_controller.dart';
 import 'package:robyne/features/plugin/domain/plugin_definition.dart';
 import 'package:robyne/features/plugin/domain/plugin_repository.dart';
@@ -17,16 +20,38 @@ class PluginPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(activeThemeStringsProvider);
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final metrics = ref.watch(activeThemeContentMetricsProvider);
+    final compactWidth =
+        WindowSizeClass.of(context).width != WindowWidthClass.expanded;
     final pluginsValue = ref.watch(pluginControllerProvider);
     final importProgress = ref.watch(pluginImportProgressProvider);
     final isImporting = importProgress != null;
+    final buttonStyle = OutlinedButton.styleFrom(
+      foregroundColor: colors.textSecondary,
+      side: BorderSide(color: colors.borderDefault),
+    );
 
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.fromLTRB(
+        metrics.gutterFor(compact: compactWidth),
+        20,
+        metrics.gutterFor(compact: compactWidth),
+        20,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('Plugins', style: Theme.of(context).textTheme.headlineMedium),
+          Text(
+            strings.resolve(ThemeStringKey.pluginsTitle),
+            style: TextStyle(
+              fontSize: tokens.typography.resolvedPageTitleSize,
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
+          ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -50,16 +75,20 @@ class PluginPage extends ConsumerWidget {
                         if (paths.isEmpty || !context.mounted) {
                           return;
                         }
-                        _startPluginPathImport(context, ref, paths);
+                        _startPluginPathImport(context, ref, paths, strings);
                       },
                 icon: const Icon(Icons.file_open),
-                label: const Text('Import files'),
+                label: Text(strings.resolve(ThemeStringKey.pluginsImportFiles)),
+                style: buttonStyle,
               ),
               OutlinedButton.icon(
                 onPressed: isImporting
                     ? null
                     : () async {
-                        final path = await _pickPluginDirectory(context);
+                        final path = await _pickPluginDirectory(
+                          context,
+                          strings,
+                        );
                         if (path == null || !context.mounted) {
                           return;
                         }
@@ -70,14 +99,17 @@ class PluginPage extends ConsumerWidget {
                         if (paths.isEmpty) {
                           _showPluginError(
                             context,
-                            'No JavaScript plugin files found.',
+                            strings.resolve(ThemeStringKey.pluginsNoJsFiles),
                           );
                           return;
                         }
-                        _startPluginPathImport(context, ref, paths);
+                        _startPluginPathImport(context, ref, paths, strings);
                       },
                 icon: const Icon(Icons.folder_open),
-                label: const Text('Import folder'),
+                label: Text(
+                  strings.resolve(ThemeStringKey.pluginsImportFolder),
+                ),
+                style: buttonStyle,
               ),
               FilledButton.icon(
                 onPressed: isImporting
@@ -95,14 +127,14 @@ class PluginPage extends ConsumerWidget {
                         }
                       },
                 icon: const Icon(Icons.link),
-                label: const Text('Import from URL'),
+                label: Text(strings.resolve(ThemeStringKey.pluginsImportUrl)),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            'Import MusicFree-style JavaScript plugins from local files, folders, or URLs.',
-            style: Theme.of(context).textTheme.bodyMedium,
+            strings.resolve(ThemeStringKey.pluginsSubtitle),
+            style: TextStyle(fontSize: 12, color: colors.textMuted),
           ),
           if (importProgress != null) ...<Widget>[
             const SizedBox(height: 12),
@@ -123,6 +155,8 @@ class _PluginList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(activeThemeStringsProvider);
+    final colors = RobyneTheme.of(context).tokens.color;
     final plugins = pluginsValue.value;
     if (plugins == null) {
       return pluginsValue.when(
@@ -134,7 +168,12 @@ class _PluginList extends ConsumerWidget {
     }
 
     if (plugins.isEmpty) {
-      return const Center(child: Text('No installed plugins yet.'));
+      return Center(
+        child: Text(
+          strings.resolve(ThemeStringKey.pluginsEmpty),
+          style: TextStyle(color: colors.textMuted),
+        ),
+      );
     }
 
     return ListView.separated(
@@ -161,7 +200,9 @@ class _PluginList extends ConsumerWidget {
             children: <Widget>[
               if (plugin.userVariables.isNotEmpty)
                 IconButton(
-                  tooltip: 'Configure',
+                  tooltip: strings.resolve(
+                    ThemeStringKey.pluginsConfigureTooltip,
+                  ),
                   icon: const Icon(Icons.tune),
                   onPressed: () async {
                     final values = await _showUserVariablesDialog(
@@ -185,7 +226,7 @@ class _PluginList extends ConsumerWidget {
                 },
               ),
               IconButton(
-                tooltip: 'Delete',
+                tooltip: strings.resolve(ThemeStringKey.pluginsDelete),
                 icon: const Icon(Icons.delete_outline),
                 onPressed: () {
                   ref.read(pluginControllerProvider.notifier).delete(plugin.id);
@@ -216,6 +257,7 @@ void _startPluginPathImport(
   BuildContext context,
   WidgetRef ref,
   List<String> paths,
+  ThemeStrings strings,
 ) {
   unawaited(
     Future<void>(() async {
@@ -223,7 +265,7 @@ void _startPluginPathImport(
           .read(pluginControllerProvider.notifier)
           .importFromPaths(paths);
       if (context.mounted) {
-        _showPluginImportResult(context, result);
+        _showPluginImportResult(context, result, strings);
       }
     }),
   );
@@ -232,21 +274,28 @@ void _startPluginPathImport(
 void _showPluginImportResult(
   BuildContext context,
   PluginImportBatchResult result,
+  ThemeStrings strings,
 ) {
-  final summary =
-      'Imported ${result.importedCount}, '
-      'updated ${result.updatedCount}, '
-      'skipped ${result.skippedCount}';
+  // Counts and codes are data, but the sentence around them is chrome, so the
+  // skin writes the template and the app fills the numbers.
+  final summary = strings
+      .resolve(ThemeStringKey.pluginsImportSummary)
+      .replaceAll('{imported}', '${result.importedCount}')
+      .replaceAll('{updated}', '${result.updatedCount}')
+      .replaceAll('{skipped}', '${result.skippedCount}');
   final message = result.hasErrors
-      ? '$summary; ${result.errors.length} failed. ${result.errors.first.code}: ${result.errors.first.message}'
-      : '$summary.';
+      ? '$summary ${strings.resolve(ThemeStringKey.pluginsImportFailed).replaceAll('{count}', '${result.errors.length}').replaceAll('{code}', result.errors.first.code).replaceAll('{message}', result.errors.first.message)}'
+      : summary;
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }
 
-Future<String?> _pickPluginDirectory(BuildContext context) async {
+Future<String?> _pickPluginDirectory(
+  BuildContext context,
+  ThemeStrings strings,
+) async {
   try {
     return await FilePicker.getDirectoryPath(
-      dialogTitle: 'Choose plugin folder',
+      dialogTitle: strings.resolve(ThemeStringKey.pluginsChooseFolder),
     );
   } catch (error) {
     if (context.mounted) {
@@ -271,26 +320,40 @@ Future<List<String>> _pluginFilesInDirectory(String path) async {
   return paths;
 }
 
-class _PluginImportProgressView extends StatelessWidget {
+class _PluginImportProgressView extends ConsumerWidget {
   const _PluginImportProgressView({required this.progress});
 
   final PluginImportProgress progress;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(activeThemeStringsProvider);
+    final colors = RobyneTheme.of(context).tokens.color;
     final current = progress.currentLabel;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        LinearProgressIndicator(value: progress.fraction),
+        LinearProgressIndicator(
+          value: progress.fraction,
+          backgroundColor: RobyneTheme.of(
+            context,
+          ).tokens.components.playerBar.progressTrack,
+          valueColor: AlwaysStoppedAnimation<Color>(
+            RobyneTheme.of(context).tokens.components.playerBar.progressActive,
+          ),
+        ),
         const SizedBox(height: 6),
         Text(
           current == null
-              ? 'Preparing plugin import...'
-              : 'Importing ${p.basename(current)} (${progress.completed}/${progress.total})',
+              ? strings.resolve(ThemeStringKey.pluginsImportPreparing)
+              : strings
+                    .resolve(ThemeStringKey.pluginsImportProgress)
+                    .replaceAll('{file}', p.basename(current))
+                    .replaceAll('{done}', '${progress.completed}')
+                    .replaceAll('{total}', '${progress.total}'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodySmall,
+          style: TextStyle(fontSize: 11, color: colors.textMuted),
         ),
       ],
     );
@@ -307,14 +370,14 @@ Future<Map<String, String>?> _showUserVariablesDialog(
   );
 }
 
-class _ImportUrlDialog extends StatefulWidget {
+class _ImportUrlDialog extends ConsumerStatefulWidget {
   const _ImportUrlDialog();
 
   @override
-  State<_ImportUrlDialog> createState() => _ImportUrlDialogState();
+  ConsumerState<_ImportUrlDialog> createState() => _ImportUrlDialogState();
 }
 
-class _ImportUrlDialogState extends State<_ImportUrlDialog> {
+class _ImportUrlDialogState extends ConsumerState<_ImportUrlDialog> {
   final _controller = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
@@ -332,16 +395,17 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = ref.watch(activeThemeStringsProvider);
     return AlertDialog(
-      title: const Text('Import plugin from URL'),
+      title: Text(strings.resolve(ThemeStringKey.pluginsImportUrlTitle)),
       content: Form(
         key: _formKey,
         child: TextFormField(
           controller: _controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Plugin URL',
-            hintText: 'https://example.com/plugin.js',
+          decoration: InputDecoration(
+            labelText: strings.resolve(ThemeStringKey.pluginsUrlField),
+            hintText: strings.resolve(ThemeStringKey.pluginsUrlHint),
           ),
           keyboardType: TextInputType.url,
           textInputAction: TextInputAction.done,
@@ -351,7 +415,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
             if (uri == null ||
                 !uri.hasAbsolutePath ||
                 (uri.scheme != 'http' && uri.scheme != 'https')) {
-              return 'Enter an http:// or https:// URL.';
+              return strings.resolve(ThemeStringKey.pluginsUrlInvalid);
             }
             return null;
           },
@@ -361,9 +425,12 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(strings.resolve(ThemeStringKey.actionCancel)),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Import')),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(strings.resolve(ThemeStringKey.pluginsImport)),
+        ),
       ],
     );
   }
@@ -375,16 +442,17 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
   }
 }
 
-class _UserVariablesDialog extends StatefulWidget {
+class _UserVariablesDialog extends ConsumerStatefulWidget {
   const _UserVariablesDialog({required this.plugin});
 
   final PluginDefinition plugin;
 
   @override
-  State<_UserVariablesDialog> createState() => _UserVariablesDialogState();
+  ConsumerState<_UserVariablesDialog> createState() =>
+      _UserVariablesDialogState();
 }
 
-class _UserVariablesDialogState extends State<_UserVariablesDialog> {
+class _UserVariablesDialogState extends ConsumerState<_UserVariablesDialog> {
   final _controllers = <String, TextEditingController>{};
   final _boolValues = <String, bool>{};
 
@@ -418,8 +486,13 @@ class _UserVariablesDialogState extends State<_UserVariablesDialog> {
   @override
   Widget build(BuildContext context) {
     final plugin = widget.plugin;
+    final strings = ref.watch(activeThemeStringsProvider);
     return AlertDialog(
-      title: Text('Configure ${plugin.platform}'),
+      title: Text(
+        strings
+            .resolve(ThemeStringKey.pluginsConfigure)
+            .replaceAll('{platform}', plugin.platform),
+      ),
       content: SizedBox(
         width: RobyneDialogWidth.forContext(context, 520),
         child: SingleChildScrollView(
@@ -469,7 +542,7 @@ class _UserVariablesDialogState extends State<_UserVariablesDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(strings.resolve(ThemeStringKey.actionCancel)),
         ),
         FilledButton(
           onPressed: () {
@@ -481,7 +554,7 @@ class _UserVariablesDialogState extends State<_UserVariablesDialog> {
             };
             Navigator.of(context).pop(values);
           },
-          child: const Text('Save'),
+          child: Text(strings.resolve(ThemeStringKey.pluginsSave)),
         ),
       ],
     );
@@ -520,7 +593,12 @@ class _PluginErrorPanel extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: TextStyle(
+                fontSize: RobyneTheme.of(
+                  context,
+                ).tokens.typography.resolvedListPrimarySize,
+                color: RobyneTheme.of(context).tokens.color.textSecondary,
+              ),
             ),
           ],
         ),

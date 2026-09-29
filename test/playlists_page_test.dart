@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,21 +9,46 @@ import 'package:robyne/features/playlists/domain/music_playlist.dart';
 import 'package:robyne/features/playlists/presentation/playlists_page.dart';
 
 void main() {
+  test('overview and liked are distinct selections', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final notifier = container.read(selectedPlaylistIdProvider.notifier);
+
+    expect(container.read(selectedPlaylistIdProvider), isNull);
+    notifier.showOverview();
+    expect(container.read(selectedPlaylistIdProvider), overviewPlaylistId);
+    notifier.select('playlist:one');
+    expect(container.read(selectedPlaylistIdProvider), 'playlist:one');
+    notifier.showLiked();
+    expect(container.read(selectedPlaylistIdProvider), isNull);
+  });
+
   testWidgets('creates Chinese playlists and confirms destructive actions', (
     tester,
   ) async {
     late _FakePlaylistController controller;
+    late ProviderContainer container;
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          playlistControllerProvider.overrideWith(() {
-            controller = _FakePlaylistController();
-            return controller;
-          }),
-        ],
+      UncontrolledProviderScope(
+        container: container = ProviderContainer(
+          overrides: [
+            playlistControllerProvider.overrideWith(() {
+              controller = _FakePlaylistController();
+              return controller;
+            }),
+          ],
+        ),
         child: const MaterialApp(home: Scaffold(body: PlaylistsPage())),
       ),
     );
+    addTearDown(container.dispose);
+    await _pumpUi(tester);
+
+    // The default destination is liked songs. Creating and deleting playlists
+    // belongs to the user's own playlist view, which the rail opens by id.
+    container
+        .read(selectedPlaylistIdProvider.notifier)
+        .select('playlist:delete');
     await _pumpUi(tester);
 
     await tester.tap(find.text('New playlist'));
@@ -30,8 +57,14 @@ void main() {
     await tester.tap(find.text('Create'));
     await _pumpUi(tester);
     expect(controller.createdNames, contains('中文歌单'));
+    container.read(selectedPlaylistIdProvider.notifier).select('playlist:1');
+    await _pumpUi(tester);
     expect(find.text('中文歌单'), findsOneWidget);
 
+    container
+        .read(selectedPlaylistIdProvider.notifier)
+        .select('playlist:delete');
+    await _pumpUi(tester);
     await tester.tap(find.text('待删歌单'));
     await _pumpUi(tester);
     await tester.tap(find.widgetWithIcon(IconButton, Icons.close).first);
@@ -64,6 +97,42 @@ void main() {
     await tester.tap(find.text('Delete'));
     await _pumpUi(tester);
     expect(controller.deletedPlaylistIds, contains('playlist:delete'));
+  });
+
+  testWidgets('a selected playlist keeps its selected fill while hovered', (
+    tester,
+  ) async {
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container = ProviderContainer(
+          overrides: [
+            playlistControllerProvider.overrideWith(_SelectedPlaylistController.new),
+          ],
+        ),
+        child: const MaterialApp(home: Scaffold(body: PlaylistsPage())),
+      ),
+    );
+    addTearDown(container.dispose);
+    container
+        .read(selectedPlaylistIdProvider.notifier)
+        .select('playlist:selected');
+    await _pumpUi(tester);
+
+    final card = find.byKey(
+      const ValueKey<String>('selected-playlist-playlist:selected'),
+    );
+    expect(card, findsOneWidget);
+    final before = (tester.widget<Container>(card).decoration as BoxDecoration)
+        .color;
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(card));
+    await tester.pump();
+    final hovered = (tester.widget<Container>(card).decoration as BoxDecoration)
+        .color;
+    expect(hovered, before);
+    await mouse.removePointer();
   });
 }
 
@@ -157,4 +226,16 @@ class _FakePlaylistController extends PlaylistController {
       ),
     ),
   );
+}
+
+class _SelectedPlaylistController extends PlaylistController {
+  @override
+  Future<List<MusicPlaylist>> build() async => const <MusicPlaylist>[
+    MusicPlaylist(
+      id: 'playlist:selected',
+      name: 'Selected playlist',
+      isFavorites: false,
+      items: <PlaybackItem>[],
+    ),
+  ];
 }
