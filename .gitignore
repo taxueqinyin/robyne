@@ -40,6 +40,9 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Local tray regression captures
+/tray_right_click_*.png
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
