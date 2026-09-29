@@ -59,20 +59,110 @@ class PlaylistRepository {
   }
 
   Future<String> createPlaylist(String name) async {
+    return createImportedPlaylist(name: name, items: const <PlaybackItem>[]);
+  }
+
+  /// Creates a normal local playlist and inserts the supplied tracks.
+  ///
+  /// Imported collections use the same tables and same rows as a playlist the
+  /// user created by hand; there is no second "online collection" type to
+  /// special-case later.
+  Future<String> createImportedPlaylist({
+    required String name,
+    required List<PlaybackItem> items,
+    String? id,
+    DateTime? createdAt,
+  }) async {
     await _legacyMigration?.ensureMigrated();
-    final id = 'playlist:${DateTime.now().microsecondsSinceEpoch}';
-    await _database
-        .into(_database.playlists)
-        .insert(
-          db.PlaylistsCompanion.insert(
-            id: id,
-            name: name.trim().isEmpty ? 'New playlist' : name.trim(),
-            isFavorites: const Value(false),
-            createdAt: Value(DateTime.now()),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
-    return id;
+    final playlistId =
+        id ?? 'playlist:${DateTime.now().microsecondsSinceEpoch}';
+    final now = createdAt ?? DateTime.now();
+    await _database.transaction(() async {
+      await _database
+          .into(_database.playlists)
+          .insert(
+            db.PlaylistsCompanion.insert(
+              id: playlistId,
+              name: name.trim().isEmpty ? 'New playlist' : name.trim(),
+              isFavorites: const Value(false),
+              createdAt: Value(now),
+              updatedAt: Value(DateTime.now()),
+            ),
+            mode: InsertMode.insertOrReplace,
+          );
+      for (var index = 0; index < items.length; index += 1) {
+        final item = items[index];
+        await _upsertPlaybackItem(item);
+        await _database
+            .into(_database.playlistItems)
+            .insert(
+              db.PlaylistItemsCompanion(
+                playlistId: Value(playlistId),
+                itemId: Value(item.id),
+                position: Value(index),
+                addedAt: Value(DateTime.now()),
+              ),
+              mode: InsertMode.insertOrReplace,
+            );
+      }
+    });
+    return playlistId;
+  }
+
+  /// Copies any legacy favourite-collection pointers into ordinary local
+  /// playlists.
+  ///
+  /// The old store kept a plugin id and a raw payload, not the tracks. A
+  /// migration at this layer cannot call the plugin, so it leaves those rows
+  /// untouched; the live favourite action now writes `PlaylistItems`, which is
+  /// the one local source of truth this page reads.
+  Future<void> ensureFavoritesPlaylistContains(
+    String playlistId,
+    List<PlaybackItem> items,
+  ) async {
+    for (final item in items) {
+      await addItem(playlistId, item);
+    }
+  }
+
+  Future<bool> containsPlaylistWithName(String name) async {
+    await _legacyMigration?.ensureMigrated();
+    final normalized = name.trim();
+    if (normalized.isEmpty) {
+      return false;
+    }
+    final row =
+        await (_database.select(_database.playlists)
+              ..where((row) => row.name.equals(normalized))
+              ..limit(1))
+            .getSingleOrNull();
+    return row != null;
+  }
+
+  Future<String?> localPlaylistIdForImportedCollection(
+    String collectionKey,
+  ) async {
+    await _legacyMigration?.ensureMigrated();
+    final row =
+        await (_database.select(_database.playlists)
+              ..where(
+                (row) => row.id.equals(_importedPlaylistId(collectionKey)),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    return row?.id;
+  }
+
+  static String importedPlaylistId(String collectionKey) =>
+      _importedPlaylistId(collectionKey);
+
+  static String _importedPlaylistId(String collectionKey) {
+    var hash = 2166136261;
+    for (final unit in collectionKey.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 16777619) & 0xFFFFFFFF;
+    }
+    return 'collection:${hash.toRadixString(16)}';
   }
 
   Future<void> deletePlaylist(String id) async {

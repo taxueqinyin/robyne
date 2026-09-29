@@ -17,6 +17,33 @@ final playlistControllerProvider =
       PlaylistController.new,
     );
 
+/// The playlist currently pinned into the playlists destination.
+///
+/// `null` is the liked-songs view. Selecting a row in the rail's playlist
+/// group sets an id, so manual playlists have a real destination without
+/// competing with the liked-songs entry above the divider.
+final selectedPlaylistIdProvider =
+    NotifierProvider<SelectedPlaylistIdNotifier, String?>(
+      SelectedPlaylistIdNotifier.new,
+    );
+
+class SelectedPlaylistIdNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String id) => state = id;
+
+  void showLiked() => state = null;
+
+  /// The `playlists` tab with no specific playlist selected.
+  ///
+  /// `null` is reserved for the liked-songs view, so this sentinel gives the
+  /// rail a way to open the overview without overloading that state.
+  void showOverview() => state = overviewPlaylistId;
+}
+
+const overviewPlaylistId = '__overview__';
+
 class PlaylistController extends AsyncNotifier<List<MusicPlaylist>> {
   @override
   Future<List<MusicPlaylist>> build() async {
@@ -26,6 +53,34 @@ class PlaylistController extends AsyncNotifier<List<MusicPlaylist>> {
   Future<void> createPlaylist(String name) async {
     await ref.read(playlistRepositoryProvider).createPlaylist(name);
     ref.invalidateSelf();
+  }
+
+  Future<String> createImportedPlaylist({
+    required String name,
+    required List<PlaybackItem> items,
+    String? id,
+    DateTime? createdAt,
+  }) async {
+    final playlistId = await ref
+        .read(playlistRepositoryProvider)
+        .createImportedPlaylist(
+          name: name,
+          items: items,
+          id: id,
+          createdAt: createdAt,
+        );
+    ref.invalidateSelf();
+    return playlistId;
+  }
+
+  Future<bool> containsPlaylistWithName(String name) {
+    return ref.read(playlistRepositoryProvider).containsPlaylistWithName(name);
+  }
+
+  Future<String?> localPlaylistIdForImportedCollection(String collectionKey) {
+    return ref
+        .read(playlistRepositoryProvider)
+        .localPlaylistIdForImportedCollection(collectionKey);
   }
 
   Future<void> deletePlaylist(String id) async {
@@ -45,6 +100,25 @@ class PlaylistController extends AsyncNotifier<List<MusicPlaylist>> {
 
   Future<void> toggleFavorite(PlaybackItem item) async {
     await ref.read(playlistRepositoryProvider).toggleFavorite(item);
+    final notifier = ref.read(selectedPlaylistIdProvider.notifier);
+    if (ref.read(selectedPlaylistIdProvider) == PlaylistRepository.favoritesId) {
+      notifier.showLiked();
+    }
+    ref.invalidateSelf();
+  }
+
+  Future<void> saveCollectionAsPlaylist({
+    required String name,
+    required List<PlaybackItem> items,
+    required String collectionKey,
+  }) async {
+    await ref
+        .read(playlistRepositoryProvider)
+        .createImportedPlaylist(
+          id: PlaylistRepository.importedPlaylistId(collectionKey),
+          name: name,
+          items: items,
+        );
     ref.invalidateSelf();
   }
 }

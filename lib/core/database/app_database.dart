@@ -154,6 +154,32 @@ class AppSettings extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{key};
 }
 
+/// Online collections (rankings, recommend sheets) the user has favourited.
+///
+/// A favourited collection is a *pointer to a plugin's catalogue entry*, not a
+/// local playlist: the tracks are owned by the plugin and may change, so the
+/// row stores the identity plus the display snapshot (title, artwork) and lets
+/// the plugin re-resolve the track list on open. Copying every track into
+/// `PlaylistItems` would freeze a live list and double the storage.
+class FavoriteCollections extends Table {
+  /// `OnlineCollectionItem.uniqueKey`: `<pluginId>:<kind>:<id>`.
+  TextColumn get collectionKey => text()();
+  TextColumn get pluginId => text()();
+  TextColumn get platform => text()();
+  /// `OnlineCollectionKind.name`, so a ranking and a sheet never collide.
+  TextColumn get kind => text()();
+  TextColumn get collectionId => text()();
+  TextColumn get title => text()();
+  TextColumn get description => text().nullable()();
+  TextColumn get artworkUrl => text().nullable()();
+  /// The plugin payload, kept verbatim so the detail can be re-fetched.
+  TextColumn get rawJson => text()();
+  DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{collectionKey};
+}
+
 @DriftDatabase(
   tables: <Type>[
     PlaybackItems,
@@ -168,6 +194,7 @@ class AppSettings extends Table {
     PlaylistItems,
     DownloadTasks,
     AppSettings,
+    FavoriteCollections,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -184,7 +211,19 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      // v2 added favourite online collections. Existing databases already have
+      // every other table, so only the new one needs creating.
+      if (from < 2) {
+        await m.createTable(favoriteCollections);
+      }
+    },
+  );
 }
 
 LazyDatabase _openConnection(LocalFileStore fileStore) {

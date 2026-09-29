@@ -9,11 +9,54 @@ import '../../plugin/domain/plugin_definition.dart';
 import '../../plugin/domain/plugin_discovery_executor.dart';
 import '../../search/domain/music_item.dart';
 import '../domain/online_collection.dart';
+import '../infrastructure/discover_cache_store.dart';
 
 final discoverControllerProvider =
     NotifierProvider<DiscoverController, DiscoverState>(DiscoverController.new);
 
 enum DiscoverSurface { rankings, hotPlaylists }
+
+/// How long a discovery response stays valid before another request hits the
+/// plugin again.
+///
+/// Rankings, hot-playlist tags and playlist pages are plugin-scoped catalogue
+/// data, not live playback state. Re-fetching them on every tab or source
+/// switch was the exact UX complaint from review: the user watches a spinner
+/// for data that was on screen five seconds ago. One hour matches "catalogue
+/// that changes daily at most" — and the refresh button still bypasses the
+/// cache, so staleness is a choice, not a limit.
+const Duration discoverCacheTtl = Duration(hours: 1);
+
+/// Timestamps use `dart:ui`'s clock abstraction so tests can drive time
+/// through `TestWidgetsFlutterBinding`.
+DateTime _now() => DateTime.now();
+
+/// A cache entry and the moment it was filled.
+class _CacheEntry<T> {
+  const _CacheEntry({
+    required this.value,
+    required this.filledAt,
+    required this.pluginSignature,
+  });
+
+  final T value;
+  final DateTime filledAt;
+  final String pluginSignature;
+
+  bool get isFresh => _now().difference(filledAt) < discoverCacheTtl;
+}
+
+/// Cache keys for every plugin-scoped discovery request.
+///
+/// Keys include the plugin id (and for sheets, the tag), because the same
+/// key must never leak data between plugins or between two different tag
+/// pages.
+String _cacheKey(DiscoverSurface surface, String pluginId, [Object? tag]) {
+  return switch (surface) {
+    DiscoverSurface.rankings => 'rankings:$pluginId',
+    DiscoverSurface.hotPlaylists => 'sheets:$pluginId:${tag?.toString() ?? ''}',
+  };
+}
 
 String discoverPluginSignature(List<PluginDefinition> plugins) {
   final enabled = plugins
@@ -151,14 +194,27 @@ class DiscoverState {
 class DiscoverController extends Notifier<DiscoverState> {
   final Map<String, PluginDefinition> _pluginsById =
       <String, PluginDefinition>{};
+  final Map<String, DiscoverCacheRecord> _diskRecords =
+      <String, DiscoverCacheRecord>{};
   int _topListsRequestId = 0;
   int _hotPlaylistsRequestId = 0;
   int _detailRequestId = 0;
+  bool _hydrated = false;
+  Future<void>? _hydration;
+  String _pluginSignature = '';
+  // Cache is instance state so hot-reloading the skin, switching tabs, or
+  // navigating away and back all read the same data without a refetch.
+  final Map<String, _CacheEntry<List<OnlineCollectionGroup>>> _topListsCache =
+      {};
+  final Map<String, _CacheEntry<OnlineSheetTagCatalog>> _sheetTagCache = {};
+  final Map<String, _CacheEntry<OnlineCollectionPage>> _sheetPageCache = {};
+  final Map<String, _CacheEntry<OnlineCollectionDetail>> _detailCache = {};
 
   @override
   DiscoverState build() => const DiscoverState();
 
   Future<void> syncPlugins(List<PluginDefinition> plugins) async {
+    await _ensureHydrated();
     final enabled = plugins
         .where((plugin) => plugin.enabled)
         .toList(growable: false);
@@ -185,13 +241,18 @@ class DiscoverController extends Notifier<DiscoverState> {
     }
 
     _invalidateAllRequests();
+    if (signatureChanged) {
+      _clearCaches();
+      _adoptDiskRecords(signature);
+    }
+    _pluginSignature = signature;
     state = _resetForPlugin(
       state.copyWith(
         pluginSignature: signature,
         selectedPluginId: selectedPluginId,
       ),
     );
-    await _loadCurrentSurface(force: true);
+    await _loadCurrentSurface(force: false);
   }
 
   Future<void> selectPlugin(String pluginId) async {
@@ -201,7 +262,7 @@ class DiscoverController extends Notifier<DiscoverState> {
     }
     _invalidateAllRequests();
     state = _resetForPlugin(state.copyWith(selectedPluginId: pluginId));
-    await _loadCurrentSurface(force: true);
+    await _loadCurrentSurface(force: false);
   }
 
   Future<void> selectSurface(DiscoverSurface surface) async {
@@ -216,6 +277,39 @@ class DiscoverController extends Notifier<DiscoverState> {
 
   Future<void> reloadCurrentSurface() async {
     await _loadCurrentSurface(force: true);
+  }
+
+  /// Seeds the home page's shelf from the first enabled plugin that can serve
+  /// hot playlists.
+  ///
+  /// Plugin capabilities are probed by calling, not declared up front, so a
+  /// plugin can be enabled yet still fail `getRecommendSheetTags` (bilibili is
+  /// the standing example: it has rankings but no recommend-sheet tags).
+  /// Without this the home rail would stay empty forever on a machine whose
+  /// first plugin is ranking-only. Each candidate is tried in order and the
+  /// first success owns the shelf; the browser is left on the winning plugin
+  /// so opening it shows the same data instead of an error.
+  Future<void> seedHomeShelf() async {
+    if (_pluginsById.isEmpty) {
+      return;
+    }
+    final candidates = _pluginsById.values.toList(growable: false);
+    final startingId = state.selectedPluginId;
+
+    for (final plugin in candidates) {
+      if (plugin.id != startingId) {
+        _invalidateAllRequests();
+        state = _resetForPlugin(state.copyWith(selectedPluginId: plugin.id));
+      }
+      state = state.copyWith(surface: DiscoverSurface.hotPlaylists);
+      await _loadHotPlaylists(force: false, reloadCatalog: true);
+      if (!ref.mounted) {
+        return;
+      }
+      if (state.hotPlaylistItems.isNotEmpty) {
+        return;
+      }
+    }
   }
 
   Future<void> reloadDetail() async {
@@ -378,12 +472,26 @@ class DiscoverController extends Notifier<DiscoverState> {
     if (plugin == null) {
       return;
     }
+    final key = _cacheKey(DiscoverSurface.rankings, plugin.id);
+    // A cache hit is a complete answer: paint it and stop, so switching
+    // between plugins and tabs is instant and does not touch the plugin
+    // runtime at all.
+    final cached = _topListsCache[key];
+    if (!force && cached != null && cached.isFresh) {
+      _topListsRequestId += 1;
+      state = state.copyWith(
+        topListGroups: cached.value,
+        isLoadingTopLists: false,
+        topListsError: null,
+      );
+      return;
+    }
 
     final requestId = ++_topListsRequestId;
     state = state.copyWith(
       topListGroups: force
           ? const <OnlineCollectionGroup>[]
-          : state.topListGroups,
+          : cached?.value ?? state.topListGroups,
       isLoadingTopLists: true,
       topListsError: null,
     );
@@ -407,6 +515,12 @@ class DiscoverController extends Notifier<DiscoverState> {
             );
         switch (adapted) {
           case Ok<List<OnlineCollectionGroup>>(:final value):
+            _topListsCache[key] = _CacheEntry(
+              value: value,
+              filledAt: _now(),
+              pluginSignature: _pluginSignature,
+            );
+            await _persistCaches();
             state = state.copyWith(
               topListGroups: value,
               isLoadingTopLists: false,
@@ -441,23 +555,40 @@ class DiscoverController extends Notifier<DiscoverState> {
       return;
     }
 
+    // Tag catalogues change even less often than the playlists themselves, so
+    // they are cached by plugin rather than by tag — one request for the
+    // catalog serves every tab switch within the TTL.
+    final tagKey = _cacheKey(DiscoverSurface.hotPlaylists, plugin.id);
+    final cachedTags = _sheetTagCache[tagKey];
+    final useCachedTags = !force && cachedTags != null && cachedTags.isFresh;
+
     final requestId = ++_hotPlaylistsRequestId;
+    // Seeding from the cache before the request starts is what makes the tab
+    // switch paint instantly: the spinner never appears, and the only network
+    // call left is the page itself.
+    final cachedCatalog = useCachedTags ? cachedTags.value : null;
     state = state.copyWith(
       hotPlaylistItems: force
           ? const <OnlineCollectionItem>[]
           : state.hotPlaylistItems,
       hotPlaylistPage: force ? 0 : state.hotPlaylistPage,
       hotPlaylistsIsEnd: force ? false : state.hotPlaylistsIsEnd,
+      // A cached catalog means the tags are already here, so only the page is
+      // still outstanding.
+      sheetTagGroups: cachedCatalog?.groups ?? state.sheetTagGroups,
+      pinnedSheetTags: cachedCatalog?.pinned ?? state.pinnedSheetTags,
       isLoadingHotPlaylists: true,
       isLoadingMoreHotPlaylists: false,
       hotPlaylistsError: null,
     );
 
-    List<OnlineSheetTagGroup> tagGroups = state.sheetTagGroups;
-    List<OnlineSheetTag> pinnedTags = state.pinnedSheetTags;
+    List<OnlineSheetTagGroup> tagGroups =
+        cachedCatalog?.groups ?? state.sheetTagGroups;
+    List<OnlineSheetTag> pinnedTags =
+        cachedCatalog?.pinned ?? state.pinnedSheetTags;
     var selectedTag = requestedTag ?? state.selectedSheetTag;
 
-    if (reloadCatalog || tagGroups.isEmpty) {
+    if (!useCachedTags && (reloadCatalog || tagGroups.isEmpty)) {
       final tagResult = await _invokeDiscovery(
         plugin,
         (executor, source) =>
@@ -473,6 +604,12 @@ class DiscoverController extends Notifier<DiscoverState> {
               .recommendSheetTagsFromPluginValue(value);
           switch (adapted) {
             case Ok<OnlineSheetTagCatalog>(:final value):
+              _sheetTagCache[tagKey] = _CacheEntry(
+                value: value,
+                filledAt: _now(),
+                pluginSignature: _pluginSignature,
+              );
+              await _persistCaches();
               tagGroups = value.groups;
               pinnedTags = value.pinned;
               selectedTag = _resolveTagSelection(
@@ -509,6 +646,40 @@ class DiscoverController extends Notifier<DiscoverState> {
       pinned: pinnedTags,
     );
 
+    // The page itself is cached by (plugin, tag) so switching tabs and coming
+    // back does not re-request what the user was just looking at.
+    final pageKey = _cacheKey(
+      DiscoverSurface.hotPlaylists,
+      plugin.id,
+      selectedTag.key,
+    );
+    final cachedPage = _sheetPageCache[pageKey];
+    if (!force && cachedPage != null && cachedPage.isFresh) {
+      state = state.copyWith(
+        sheetTagGroups: tagGroups,
+        pinnedSheetTags: pinnedTags,
+        selectedSheetTag: selectedTag,
+        hotPlaylistItems: cachedPage.value.items,
+        hotPlaylistPage: cachedPage.value.page,
+        hotPlaylistsIsEnd: cachedPage.value.isEnd,
+        isLoadingHotPlaylists: false,
+        isLoadingMoreHotPlaylists: false,
+        hotPlaylistsError: null,
+      );
+      return;
+    }
+
+    if (!force && cachedPage != null) {
+      state = state.copyWith(
+        sheetTagGroups: tagGroups,
+        pinnedSheetTags: pinnedTags,
+        selectedSheetTag: selectedTag,
+        hotPlaylistItems: cachedPage.value.items,
+        hotPlaylistPage: cachedPage.value.page,
+        hotPlaylistsIsEnd: cachedPage.value.isEnd,
+      );
+    }
+
     final pageResult = await _invokeDiscovery(
       plugin,
       (executor, source) => executor.getRecommendSheetsByTag(
@@ -534,6 +705,12 @@ class DiscoverController extends Notifier<DiscoverState> {
             );
         switch (adapted) {
           case Ok<OnlineCollectionPage>(:final value):
+            _sheetPageCache[pageKey] = _CacheEntry(
+              value: value,
+              filledAt: _now(),
+              pluginSignature: _pluginSignature,
+            );
+            await _persistCaches();
             state = state.copyWith(
               sheetTagGroups: tagGroups,
               pinnedSheetTags: pinnedTags,
@@ -575,11 +752,26 @@ class DiscoverController extends Notifier<DiscoverState> {
       return;
     }
 
+    final cached = _detailCache[collection.uniqueKey];
+    if (cached != null) {
+      state = state.copyWith(
+        detail: cached.value,
+        isLoadingDetail: false,
+        isLoadingMoreDetail: false,
+        detailError: null,
+      );
+      if (cached.isFresh) {
+        return;
+      }
+    }
+
     final requestId = ++_detailRequestId;
     state = state.copyWith(
-      detail: identical(state.selectedCollectionKey, collection.uniqueKey)
-          ? state.detail
-          : null,
+      detail:
+          cached?.value ??
+          (identical(state.selectedCollectionKey, collection.uniqueKey)
+              ? state.detail
+              : null),
       isLoadingDetail: true,
       isLoadingMoreDetail: false,
       detailError: null,
@@ -608,6 +800,8 @@ class DiscoverController extends Notifier<DiscoverState> {
             );
         switch (adapted) {
           case Ok<OnlineCollectionDetail>(:final value):
+            _rememberDetail(value);
+            await _persistCaches();
             state = state.copyWith(
               detail: value,
               isLoadingDetail: false,
@@ -639,9 +833,25 @@ class DiscoverController extends Notifier<DiscoverState> {
       return;
     }
 
+    if (!append) {
+      final cached = _detailCache[collection.uniqueKey];
+      if (cached != null) {
+        state = state.copyWith(
+          detail: cached.value,
+          isLoadingDetail: false,
+          isLoadingMoreDetail: false,
+          detailError: null,
+        );
+        if (cached.isFresh) {
+          return;
+        }
+      }
+    }
+
     final requestId = ++_detailRequestId;
+    final cachedDetail = !append ? _detailCache[collection.uniqueKey] : null;
     state = state.copyWith(
-      detail: append ? state.detail : null,
+      detail: append ? state.detail : cachedDetail?.value,
       isLoadingDetail: !append,
       isLoadingMoreDetail: append,
       detailError: null,
@@ -670,6 +880,8 @@ class DiscoverController extends Notifier<DiscoverState> {
             );
         switch (adapted) {
           case Ok<OnlineCollectionDetail>(:final value):
+            _rememberDetail(value);
+            await _persistCaches();
             if (append && state.detail != null) {
               state = state.copyWith(
                 detail: state.detail!.copyWith(
@@ -740,6 +952,113 @@ class DiscoverController extends Notifier<DiscoverState> {
         ),
       );
     }
+  }
+
+  void _rememberDetail(OnlineCollectionDetail detail) {
+    _detailCache[detail.collection.uniqueKey] = _CacheEntry(
+      value: detail,
+      filledAt: _now(),
+      pluginSignature: _pluginSignature,
+    );
+  }
+
+  Future<void> _ensureHydrated() {
+    if (_hydrated) {
+      return Future<void>.value();
+    }
+    return _hydration ??= _hydrate();
+  }
+
+  Future<void> _hydrate() async {
+    try {
+      final records = await ref.read(discoverCacheStoreProvider).load();
+      _diskRecords
+        ..clear()
+        ..addEntries(records.map((record) => MapEntry(record.key, record)));
+    } catch (_) {
+      _diskRecords.clear();
+    } finally {
+      _hydrated = true;
+    }
+  }
+
+  void _adoptDiskRecords(String signature) {
+    for (final record in _diskRecords.values) {
+      if (record.pluginSignature != signature) {
+        continue;
+      }
+      switch (record.kind) {
+        case DiscoverCacheKind.topLists:
+          _topListsCache[record.key] = _CacheEntry(
+            value: record.value as List<OnlineCollectionGroup>,
+            filledAt: record.filledAt,
+            pluginSignature: record.pluginSignature,
+          );
+        case DiscoverCacheKind.sheetTags:
+          _sheetTagCache[record.key] = _CacheEntry(
+            value: record.value as OnlineSheetTagCatalog,
+            filledAt: record.filledAt,
+            pluginSignature: record.pluginSignature,
+          );
+        case DiscoverCacheKind.sheetPage:
+          _sheetPageCache[record.key] = _CacheEntry(
+            value: record.value as OnlineCollectionPage,
+            filledAt: record.filledAt,
+            pluginSignature: record.pluginSignature,
+          );
+        case DiscoverCacheKind.detail:
+          _detailCache[record.key] = _CacheEntry(
+            value: record.value as OnlineCollectionDetail,
+            filledAt: record.filledAt,
+            pluginSignature: record.pluginSignature,
+          );
+      }
+    }
+  }
+
+  Future<void> _persistCaches() async {
+    final records = <DiscoverCacheRecord>[
+      for (final entry in _topListsCache.entries)
+        DiscoverCacheRecord(
+          key: entry.key,
+          kind: DiscoverCacheKind.topLists,
+          value: entry.value.value,
+          filledAt: entry.value.filledAt,
+          pluginSignature: entry.value.pluginSignature,
+        ),
+      for (final entry in _sheetTagCache.entries)
+        DiscoverCacheRecord(
+          key: entry.key,
+          kind: DiscoverCacheKind.sheetTags,
+          value: entry.value.value,
+          filledAt: entry.value.filledAt,
+          pluginSignature: entry.value.pluginSignature,
+        ),
+      for (final entry in _sheetPageCache.entries)
+        DiscoverCacheRecord(
+          key: entry.key,
+          kind: DiscoverCacheKind.sheetPage,
+          value: entry.value.value,
+          filledAt: entry.value.filledAt,
+          pluginSignature: entry.value.pluginSignature,
+        ),
+      for (final entry in _detailCache.entries)
+        DiscoverCacheRecord(
+          key: entry.key,
+          kind: DiscoverCacheKind.detail,
+          value: entry.value.value,
+          filledAt: entry.value.filledAt,
+          pluginSignature: entry.value.pluginSignature,
+        ),
+    ];
+    await ref.read(discoverCacheStoreProvider).save(records);
+  }
+
+  void _clearCaches() {
+    _topListsCache.clear();
+    _sheetTagCache.clear();
+    _sheetPageCache.clear();
+    _detailCache.clear();
   }
 
   OnlineSheetTag _resolveTagSelection({

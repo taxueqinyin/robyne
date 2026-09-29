@@ -28,6 +28,62 @@ final audioPlayerServiceProvider = Provider<AudioPlayerService>((ref) {
   return service;
 });
 
+/// Whether the [RobyneRegion.queue] panel is on screen.
+///
+/// `null` means "follow the shell's form factor": the flagship docks the
+/// queue on a desktop-shaped window and keeps it behind the player-bar toggle
+/// on a phone. An explicit `true`/`false` is a user decision and wins in both
+/// shapes. This lives in the player layer rather than the shell so the player
+/// bar can toggle the region without importing app-level routing.
+final queuePanelVisibleProvider = NotifierProvider<QueuePanelNotifier, bool?>(
+  QueuePanelNotifier.new,
+);
+
+class QueuePanelNotifier extends Notifier<bool?> {
+  @override
+  bool? build() {
+    // Restore the panel state from the last session. `null` would mean "follow
+    // the form factor", which is what made the queue re-open on every launch
+    // even after the user had dismissed it — the design docks it, but the
+    // user's last word has to outrank that default.
+    final settings = ref.watch(settingsControllerProvider).value;
+    return settings?.queuePanelVisible;
+  }
+
+  void setVisible(bool visible) {
+    state = visible;
+    // Persisting here rather than in the widget keeps the toggle and the
+    // restored value in one place, so a keyboard shortcut and a click agree.
+    unawaited(
+      ref
+          .read(settingsControllerProvider.notifier)
+          .setQueuePanelVisible(visible),
+    );
+  }
+}
+
+/// Whether the immersive now-playing surface is covering the whole shell.
+///
+/// This is application state, not a Navigator route: the design requires the
+/// full-window player to overlay `topBar`, `navBar`, `content` and the global
+/// `playerBar`, and to restore the previously selected tab on close without
+/// polluting the route stack.
+final nowPlayingImmersiveProvider =
+    NotifierProvider<NowPlayingImmersiveNotifier, bool>(
+      NowPlayingImmersiveNotifier.new,
+    );
+
+class NowPlayingImmersiveNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void open() => state = true;
+
+  void close() => state = false;
+
+  void toggle() => state = !state;
+}
+
 final playerSnapshotsProvider = StreamProvider<PlayerSnapshot>((ref) {
   return ref.watch(audioPlayerServiceProvider).snapshots;
 });
@@ -716,6 +772,72 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
       return;
     }
     _setData(_current.copyWith(history: const <PlaybackHistoryEntry>[]));
+  }
+
+  /// Appends [items] to the queue without disturbing what is playing.
+  ///
+  /// An empty queue is the one case where "append" and "replace" are the same
+  /// operation, so it starts playback instead of leaving a filled queue with
+  /// nothing selected.
+  Future<void> enqueueItems(
+    List<PlaybackItem> items, {
+    bool startPlayback = false,
+  }) async {
+    // `build()` loads the persisted queue asynchronously. Writing before it
+    // resolves would be overwritten the moment the restore lands, so both
+    // queue operations wait for the controller to finish restoring first.
+    await future;
+    if (!ref.mounted) {
+      return;
+    }
+    final additions = items
+        .where((item) => item.id.isNotEmpty)
+        .toList(growable: false);
+    if (additions.isEmpty) {
+      return;
+    }
+    final current = _current;
+    if (current.queue.isEmpty) {
+      await _playQueue(additions, currentItem: additions.first);
+      return;
+    }
+    _setData(
+      current.copyWith(queue: <PlaybackItem>[...current.queue, ...additions]),
+    );
+    if (startPlayback && current.currentItem == null) {
+      await playItem(additions.first);
+    }
+  }
+
+  /// Replaces the queue with [items] and starts the first one.
+  Future<void> replaceQueueWithItems(List<PlaybackItem> items) async {
+    await future;
+    if (!ref.mounted) {
+      return;
+    }
+    final next = items
+        .where((item) => item.id.isNotEmpty)
+        .toList(growable: false);
+    if (next.isEmpty) {
+      return;
+    }
+    await stop();
+    if (!ref.mounted) {
+      return;
+    }
+    await _playQueue(next, currentItem: next.first);
+  }
+
+  /// Installs [queue] and plays [currentItem] from it.
+  ///
+  /// Shared by [enqueueItems] and [replaceQueueWithItems] so both paths persist
+  /// the queue and the current item through the same single write.
+  Future<void> _playQueue(
+    List<PlaybackItem> queue, {
+    required PlaybackItem currentItem,
+  }) async {
+    _setData(_current.copyWith(queue: queue, currentItem: currentItem));
+    await playItem(currentItem);
   }
 
   Future<void> setPlaybackMode(PlaybackMode mode) async {

@@ -5030,6 +5030,638 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   }
 }
 
+class $FavoriteCollectionsTable extends FavoriteCollections
+    with TableInfo<$FavoriteCollectionsTable, FavoriteCollection> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FavoriteCollectionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _collectionKeyMeta = const VerificationMeta(
+    'collectionKey',
+  );
+  @override
+  late final GeneratedColumn<String> collectionKey = GeneratedColumn<String>(
+    'collection_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pluginIdMeta = const VerificationMeta(
+    'pluginId',
+  );
+  @override
+  late final GeneratedColumn<String> pluginId = GeneratedColumn<String>(
+    'plugin_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _platformMeta = const VerificationMeta(
+    'platform',
+  );
+  @override
+  late final GeneratedColumn<String> platform = GeneratedColumn<String>(
+    'platform',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _collectionIdMeta = const VerificationMeta(
+    'collectionId',
+  );
+  @override
+  late final GeneratedColumn<String> collectionId = GeneratedColumn<String>(
+    'collection_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _artworkUrlMeta = const VerificationMeta(
+    'artworkUrl',
+  );
+  @override
+  late final GeneratedColumn<String> artworkUrl = GeneratedColumn<String>(
+    'artwork_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _rawJsonMeta = const VerificationMeta(
+    'rawJson',
+  );
+  @override
+  late final GeneratedColumn<String> rawJson = GeneratedColumn<String>(
+    'raw_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _addedAtMeta = const VerificationMeta(
+    'addedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> addedAt = GeneratedColumn<DateTime>(
+    'added_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    collectionKey,
+    pluginId,
+    platform,
+    kind,
+    collectionId,
+    title,
+    description,
+    artworkUrl,
+    rawJson,
+    addedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'favorite_collections';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FavoriteCollection> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('collection_key')) {
+      context.handle(
+        _collectionKeyMeta,
+        collectionKey.isAcceptableOrUnknown(
+          data['collection_key']!,
+          _collectionKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_collectionKeyMeta);
+    }
+    if (data.containsKey('plugin_id')) {
+      context.handle(
+        _pluginIdMeta,
+        pluginId.isAcceptableOrUnknown(data['plugin_id']!, _pluginIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pluginIdMeta);
+    }
+    if (data.containsKey('platform')) {
+      context.handle(
+        _platformMeta,
+        platform.isAcceptableOrUnknown(data['platform']!, _platformMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_platformMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('collection_id')) {
+      context.handle(
+        _collectionIdMeta,
+        collectionId.isAcceptableOrUnknown(
+          data['collection_id']!,
+          _collectionIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_collectionIdMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('artwork_url')) {
+      context.handle(
+        _artworkUrlMeta,
+        artworkUrl.isAcceptableOrUnknown(data['artwork_url']!, _artworkUrlMeta),
+      );
+    }
+    if (data.containsKey('raw_json')) {
+      context.handle(
+        _rawJsonMeta,
+        rawJson.isAcceptableOrUnknown(data['raw_json']!, _rawJsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rawJsonMeta);
+    }
+    if (data.containsKey('added_at')) {
+      context.handle(
+        _addedAtMeta,
+        addedAt.isAcceptableOrUnknown(data['added_at']!, _addedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {collectionKey};
+  @override
+  FavoriteCollection map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FavoriteCollection(
+      collectionKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}collection_key'],
+      )!,
+      pluginId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}plugin_id'],
+      )!,
+      platform: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}platform'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      collectionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}collection_id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      artworkUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}artwork_url'],
+      ),
+      rawJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}raw_json'],
+      )!,
+      addedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}added_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FavoriteCollectionsTable createAlias(String alias) {
+    return $FavoriteCollectionsTable(attachedDatabase, alias);
+  }
+}
+
+class FavoriteCollection extends DataClass
+    implements Insertable<FavoriteCollection> {
+  /// `OnlineCollectionItem.uniqueKey`: `<pluginId>:<kind>:<id>`.
+  final String collectionKey;
+  final String pluginId;
+  final String platform;
+
+  /// `OnlineCollectionKind.name`, so a ranking and a sheet never collide.
+  final String kind;
+  final String collectionId;
+  final String title;
+  final String? description;
+  final String? artworkUrl;
+
+  /// The plugin payload, kept verbatim so the detail can be re-fetched.
+  final String rawJson;
+  final DateTime addedAt;
+  const FavoriteCollection({
+    required this.collectionKey,
+    required this.pluginId,
+    required this.platform,
+    required this.kind,
+    required this.collectionId,
+    required this.title,
+    this.description,
+    this.artworkUrl,
+    required this.rawJson,
+    required this.addedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['collection_key'] = Variable<String>(collectionKey);
+    map['plugin_id'] = Variable<String>(pluginId);
+    map['platform'] = Variable<String>(platform);
+    map['kind'] = Variable<String>(kind);
+    map['collection_id'] = Variable<String>(collectionId);
+    map['title'] = Variable<String>(title);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    if (!nullToAbsent || artworkUrl != null) {
+      map['artwork_url'] = Variable<String>(artworkUrl);
+    }
+    map['raw_json'] = Variable<String>(rawJson);
+    map['added_at'] = Variable<DateTime>(addedAt);
+    return map;
+  }
+
+  FavoriteCollectionsCompanion toCompanion(bool nullToAbsent) {
+    return FavoriteCollectionsCompanion(
+      collectionKey: Value(collectionKey),
+      pluginId: Value(pluginId),
+      platform: Value(platform),
+      kind: Value(kind),
+      collectionId: Value(collectionId),
+      title: Value(title),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      artworkUrl: artworkUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(artworkUrl),
+      rawJson: Value(rawJson),
+      addedAt: Value(addedAt),
+    );
+  }
+
+  factory FavoriteCollection.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FavoriteCollection(
+      collectionKey: serializer.fromJson<String>(json['collectionKey']),
+      pluginId: serializer.fromJson<String>(json['pluginId']),
+      platform: serializer.fromJson<String>(json['platform']),
+      kind: serializer.fromJson<String>(json['kind']),
+      collectionId: serializer.fromJson<String>(json['collectionId']),
+      title: serializer.fromJson<String>(json['title']),
+      description: serializer.fromJson<String?>(json['description']),
+      artworkUrl: serializer.fromJson<String?>(json['artworkUrl']),
+      rawJson: serializer.fromJson<String>(json['rawJson']),
+      addedAt: serializer.fromJson<DateTime>(json['addedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'collectionKey': serializer.toJson<String>(collectionKey),
+      'pluginId': serializer.toJson<String>(pluginId),
+      'platform': serializer.toJson<String>(platform),
+      'kind': serializer.toJson<String>(kind),
+      'collectionId': serializer.toJson<String>(collectionId),
+      'title': serializer.toJson<String>(title),
+      'description': serializer.toJson<String?>(description),
+      'artworkUrl': serializer.toJson<String?>(artworkUrl),
+      'rawJson': serializer.toJson<String>(rawJson),
+      'addedAt': serializer.toJson<DateTime>(addedAt),
+    };
+  }
+
+  FavoriteCollection copyWith({
+    String? collectionKey,
+    String? pluginId,
+    String? platform,
+    String? kind,
+    String? collectionId,
+    String? title,
+    Value<String?> description = const Value.absent(),
+    Value<String?> artworkUrl = const Value.absent(),
+    String? rawJson,
+    DateTime? addedAt,
+  }) => FavoriteCollection(
+    collectionKey: collectionKey ?? this.collectionKey,
+    pluginId: pluginId ?? this.pluginId,
+    platform: platform ?? this.platform,
+    kind: kind ?? this.kind,
+    collectionId: collectionId ?? this.collectionId,
+    title: title ?? this.title,
+    description: description.present ? description.value : this.description,
+    artworkUrl: artworkUrl.present ? artworkUrl.value : this.artworkUrl,
+    rawJson: rawJson ?? this.rawJson,
+    addedAt: addedAt ?? this.addedAt,
+  );
+  FavoriteCollection copyWithCompanion(FavoriteCollectionsCompanion data) {
+    return FavoriteCollection(
+      collectionKey: data.collectionKey.present
+          ? data.collectionKey.value
+          : this.collectionKey,
+      pluginId: data.pluginId.present ? data.pluginId.value : this.pluginId,
+      platform: data.platform.present ? data.platform.value : this.platform,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      collectionId: data.collectionId.present
+          ? data.collectionId.value
+          : this.collectionId,
+      title: data.title.present ? data.title.value : this.title,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      artworkUrl: data.artworkUrl.present
+          ? data.artworkUrl.value
+          : this.artworkUrl,
+      rawJson: data.rawJson.present ? data.rawJson.value : this.rawJson,
+      addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FavoriteCollection(')
+          ..write('collectionKey: $collectionKey, ')
+          ..write('pluginId: $pluginId, ')
+          ..write('platform: $platform, ')
+          ..write('kind: $kind, ')
+          ..write('collectionId: $collectionId, ')
+          ..write('title: $title, ')
+          ..write('description: $description, ')
+          ..write('artworkUrl: $artworkUrl, ')
+          ..write('rawJson: $rawJson, ')
+          ..write('addedAt: $addedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    collectionKey,
+    pluginId,
+    platform,
+    kind,
+    collectionId,
+    title,
+    description,
+    artworkUrl,
+    rawJson,
+    addedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FavoriteCollection &&
+          other.collectionKey == this.collectionKey &&
+          other.pluginId == this.pluginId &&
+          other.platform == this.platform &&
+          other.kind == this.kind &&
+          other.collectionId == this.collectionId &&
+          other.title == this.title &&
+          other.description == this.description &&
+          other.artworkUrl == this.artworkUrl &&
+          other.rawJson == this.rawJson &&
+          other.addedAt == this.addedAt);
+}
+
+class FavoriteCollectionsCompanion extends UpdateCompanion<FavoriteCollection> {
+  final Value<String> collectionKey;
+  final Value<String> pluginId;
+  final Value<String> platform;
+  final Value<String> kind;
+  final Value<String> collectionId;
+  final Value<String> title;
+  final Value<String?> description;
+  final Value<String?> artworkUrl;
+  final Value<String> rawJson;
+  final Value<DateTime> addedAt;
+  final Value<int> rowid;
+  const FavoriteCollectionsCompanion({
+    this.collectionKey = const Value.absent(),
+    this.pluginId = const Value.absent(),
+    this.platform = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.collectionId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.description = const Value.absent(),
+    this.artworkUrl = const Value.absent(),
+    this.rawJson = const Value.absent(),
+    this.addedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FavoriteCollectionsCompanion.insert({
+    required String collectionKey,
+    required String pluginId,
+    required String platform,
+    required String kind,
+    required String collectionId,
+    required String title,
+    this.description = const Value.absent(),
+    this.artworkUrl = const Value.absent(),
+    required String rawJson,
+    this.addedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : collectionKey = Value(collectionKey),
+       pluginId = Value(pluginId),
+       platform = Value(platform),
+       kind = Value(kind),
+       collectionId = Value(collectionId),
+       title = Value(title),
+       rawJson = Value(rawJson);
+  static Insertable<FavoriteCollection> custom({
+    Expression<String>? collectionKey,
+    Expression<String>? pluginId,
+    Expression<String>? platform,
+    Expression<String>? kind,
+    Expression<String>? collectionId,
+    Expression<String>? title,
+    Expression<String>? description,
+    Expression<String>? artworkUrl,
+    Expression<String>? rawJson,
+    Expression<DateTime>? addedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (collectionKey != null) 'collection_key': collectionKey,
+      if (pluginId != null) 'plugin_id': pluginId,
+      if (platform != null) 'platform': platform,
+      if (kind != null) 'kind': kind,
+      if (collectionId != null) 'collection_id': collectionId,
+      if (title != null) 'title': title,
+      if (description != null) 'description': description,
+      if (artworkUrl != null) 'artwork_url': artworkUrl,
+      if (rawJson != null) 'raw_json': rawJson,
+      if (addedAt != null) 'added_at': addedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FavoriteCollectionsCompanion copyWith({
+    Value<String>? collectionKey,
+    Value<String>? pluginId,
+    Value<String>? platform,
+    Value<String>? kind,
+    Value<String>? collectionId,
+    Value<String>? title,
+    Value<String?>? description,
+    Value<String?>? artworkUrl,
+    Value<String>? rawJson,
+    Value<DateTime>? addedAt,
+    Value<int>? rowid,
+  }) {
+    return FavoriteCollectionsCompanion(
+      collectionKey: collectionKey ?? this.collectionKey,
+      pluginId: pluginId ?? this.pluginId,
+      platform: platform ?? this.platform,
+      kind: kind ?? this.kind,
+      collectionId: collectionId ?? this.collectionId,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      artworkUrl: artworkUrl ?? this.artworkUrl,
+      rawJson: rawJson ?? this.rawJson,
+      addedAt: addedAt ?? this.addedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (collectionKey.present) {
+      map['collection_key'] = Variable<String>(collectionKey.value);
+    }
+    if (pluginId.present) {
+      map['plugin_id'] = Variable<String>(pluginId.value);
+    }
+    if (platform.present) {
+      map['platform'] = Variable<String>(platform.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (collectionId.present) {
+      map['collection_id'] = Variable<String>(collectionId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (artworkUrl.present) {
+      map['artwork_url'] = Variable<String>(artworkUrl.value);
+    }
+    if (rawJson.present) {
+      map['raw_json'] = Variable<String>(rawJson.value);
+    }
+    if (addedAt.present) {
+      map['added_at'] = Variable<DateTime>(addedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FavoriteCollectionsCompanion(')
+          ..write('collectionKey: $collectionKey, ')
+          ..write('pluginId: $pluginId, ')
+          ..write('platform: $platform, ')
+          ..write('kind: $kind, ')
+          ..write('collectionId: $collectionId, ')
+          ..write('title: $title, ')
+          ..write('description: $description, ')
+          ..write('artworkUrl: $artworkUrl, ')
+          ..write('rawJson: $rawJson, ')
+          ..write('addedAt: $addedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5053,6 +5685,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PlaylistItemsTable playlistItems = $PlaylistItemsTable(this);
   late final $DownloadTasksTable downloadTasks = $DownloadTasksTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $FavoriteCollectionsTable favoriteCollections =
+      $FavoriteCollectionsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5070,6 +5704,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     playlistItems,
     downloadTasks,
     appSettings,
+    favoriteCollections,
   ];
 }
 
@@ -9778,6 +10413,325 @@ typedef $$AppSettingsTableProcessedTableManager =
       AppSetting,
       PrefetchHooks Function()
     >;
+typedef $$FavoriteCollectionsTableCreateCompanionBuilder =
+    FavoriteCollectionsCompanion Function({
+      required String collectionKey,
+      required String pluginId,
+      required String platform,
+      required String kind,
+      required String collectionId,
+      required String title,
+      Value<String?> description,
+      Value<String?> artworkUrl,
+      required String rawJson,
+      Value<DateTime> addedAt,
+      Value<int> rowid,
+    });
+typedef $$FavoriteCollectionsTableUpdateCompanionBuilder =
+    FavoriteCollectionsCompanion Function({
+      Value<String> collectionKey,
+      Value<String> pluginId,
+      Value<String> platform,
+      Value<String> kind,
+      Value<String> collectionId,
+      Value<String> title,
+      Value<String?> description,
+      Value<String?> artworkUrl,
+      Value<String> rawJson,
+      Value<DateTime> addedAt,
+      Value<int> rowid,
+    });
+
+class $$FavoriteCollectionsTableFilterComposer
+    extends Composer<_$AppDatabase, $FavoriteCollectionsTable> {
+  $$FavoriteCollectionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get collectionKey => $composableBuilder(
+    column: $table.collectionKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pluginId => $composableBuilder(
+    column: $table.pluginId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get platform => $composableBuilder(
+    column: $table.platform,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get collectionId => $composableBuilder(
+    column: $table.collectionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get artworkUrl => $composableBuilder(
+    column: $table.artworkUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rawJson => $composableBuilder(
+    column: $table.rawJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FavoriteCollectionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $FavoriteCollectionsTable> {
+  $$FavoriteCollectionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get collectionKey => $composableBuilder(
+    column: $table.collectionKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pluginId => $composableBuilder(
+    column: $table.pluginId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get platform => $composableBuilder(
+    column: $table.platform,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get collectionId => $composableBuilder(
+    column: $table.collectionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get artworkUrl => $composableBuilder(
+    column: $table.artworkUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get rawJson => $composableBuilder(
+    column: $table.rawJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FavoriteCollectionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FavoriteCollectionsTable> {
+  $$FavoriteCollectionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get collectionKey => $composableBuilder(
+    column: $table.collectionKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get pluginId =>
+      $composableBuilder(column: $table.pluginId, builder: (column) => column);
+
+  GeneratedColumn<String> get platform =>
+      $composableBuilder(column: $table.platform, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get collectionId => $composableBuilder(
+    column: $table.collectionId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get artworkUrl => $composableBuilder(
+    column: $table.artworkUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get rawJson =>
+      $composableBuilder(column: $table.rawJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get addedAt =>
+      $composableBuilder(column: $table.addedAt, builder: (column) => column);
+}
+
+class $$FavoriteCollectionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FavoriteCollectionsTable,
+          FavoriteCollection,
+          $$FavoriteCollectionsTableFilterComposer,
+          $$FavoriteCollectionsTableOrderingComposer,
+          $$FavoriteCollectionsTableAnnotationComposer,
+          $$FavoriteCollectionsTableCreateCompanionBuilder,
+          $$FavoriteCollectionsTableUpdateCompanionBuilder,
+          (
+            FavoriteCollection,
+            BaseReferences<
+              _$AppDatabase,
+              $FavoriteCollectionsTable,
+              FavoriteCollection
+            >,
+          ),
+          FavoriteCollection,
+          PrefetchHooks Function()
+        > {
+  $$FavoriteCollectionsTableTableManager(
+    _$AppDatabase db,
+    $FavoriteCollectionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FavoriteCollectionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FavoriteCollectionsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$FavoriteCollectionsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> collectionKey = const Value.absent(),
+                Value<String> pluginId = const Value.absent(),
+                Value<String> platform = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> collectionId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<String?> artworkUrl = const Value.absent(),
+                Value<String> rawJson = const Value.absent(),
+                Value<DateTime> addedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FavoriteCollectionsCompanion(
+                collectionKey: collectionKey,
+                pluginId: pluginId,
+                platform: platform,
+                kind: kind,
+                collectionId: collectionId,
+                title: title,
+                description: description,
+                artworkUrl: artworkUrl,
+                rawJson: rawJson,
+                addedAt: addedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String collectionKey,
+                required String pluginId,
+                required String platform,
+                required String kind,
+                required String collectionId,
+                required String title,
+                Value<String?> description = const Value.absent(),
+                Value<String?> artworkUrl = const Value.absent(),
+                required String rawJson,
+                Value<DateTime> addedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FavoriteCollectionsCompanion.insert(
+                collectionKey: collectionKey,
+                pluginId: pluginId,
+                platform: platform,
+                kind: kind,
+                collectionId: collectionId,
+                title: title,
+                description: description,
+                artworkUrl: artworkUrl,
+                rawJson: rawJson,
+                addedAt: addedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FavoriteCollectionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FavoriteCollectionsTable,
+      FavoriteCollection,
+      $$FavoriteCollectionsTableFilterComposer,
+      $$FavoriteCollectionsTableOrderingComposer,
+      $$FavoriteCollectionsTableAnnotationComposer,
+      $$FavoriteCollectionsTableCreateCompanionBuilder,
+      $$FavoriteCollectionsTableUpdateCompanionBuilder,
+      (
+        FavoriteCollection,
+        BaseReferences<
+          _$AppDatabase,
+          $FavoriteCollectionsTable,
+          FavoriteCollection
+        >,
+      ),
+      FavoriteCollection,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -9806,4 +10760,6 @@ class $AppDatabaseManager {
       $$DownloadTasksTableTableManager(_db, _db.downloadTasks);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$FavoriteCollectionsTableTableManager get favoriteCollections =>
+      $$FavoriteCollectionsTableTableManager(_db, _db.favoriteCollections);
 }
