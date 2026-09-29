@@ -265,7 +265,9 @@ void main() {
 
     final slider = find.byKey(const Key('now-playing-progress'));
     expect(slider, findsOneWidget);
-    expect(tester.widget<ProgressSlider>(slider).onChanged, isNotNull);
+    // Scrubbing previews locally and commits on release; the end callback is
+    // the one wired to playback.
+    expect(tester.widget<ProgressSlider>(slider).onChangeEnd, isNotNull);
     await tester.drag(slider, const Offset(120, 0));
     await tester.pump();
     expect(audio.seekCalls, isNotEmpty);
