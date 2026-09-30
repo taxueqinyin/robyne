@@ -161,14 +161,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.1.2"
-  cnativeapi:
-    dependency: transitive
-    description:
-      name: cnativeapi
-      sha256: a742c60fec10c6ba5db757dc206e38a5f191a38a9009f5a4bd1d7cb21e36d7ed
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.2.7"
   code_assets:
     dependency: transitive
     description:
@@ -581,14 +573,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.19.1"
-  nativeapi:
-    dependency: "direct main"
-    description:
-      name: nativeapi
-      sha256: "97032b1275bd65a463d86c937dff8a21a33d15815b6baae6f05d30a74df5d2d2"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.2.7"
   node_preamble:
     dependency: transitive
     description:

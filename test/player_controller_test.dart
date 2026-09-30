@@ -102,6 +102,32 @@ void main() {
     expect(container.read(playerControllerProvider).value!.volume, 37);
   });
 
+  test('setVolume commits state without an eager full-state write', () async {
+    final repository = _FakePlayerStateRepository(
+      const PlayerControllerState(volume: 100),
+    );
+    final audio = _FakeAudioPlayerService();
+    final container = ProviderContainer(
+      overrides: [
+        audioPlayerServiceProvider.overrideWithValue(audio),
+        playerStateRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(playerControllerProvider.future);
+
+    final pending = container
+        .read(playerControllerProvider.notifier)
+        .setVolume(37);
+
+    // The slider must not wait for the platform round trip to show the new
+    // value, and a drag endpoint must not flush a full transaction per frame.
+    expect(container.read(playerControllerProvider).value!.volume, 37);
+    await pending;
+    expect(repository.saveCount, 0);
+    expect(repository.state.volume, 100);
+  });
+
   test('restored current item can be played from its saved position', () async {
     final tempDirectory = await Directory.systemTemp.createTemp(
       'robyne_player_restore_test_',
@@ -879,6 +905,7 @@ class _FakePlayerStateRepository implements PlayerStateRepository {
   _FakePlayerStateRepository(this.state);
 
   PlayerControllerState state;
+  int saveCount = 0;
   int progressSaveCount = 0;
 
   @override
@@ -886,6 +913,7 @@ class _FakePlayerStateRepository implements PlayerStateRepository {
 
   @override
   Future<void> save(PlayerControllerState state) async {
+    saveCount += 1;
     this.state = state;
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -77,10 +78,7 @@ void main() {
 
       final playButton = find.widgetWithIcon(IconButton, Icons.play_arrow);
       expect(tester.widget<IconButton>(playButton).onPressed, isNotNull);
-      final volumeSlider = tester.widget<Slider>(
-        find.byKey(const Key('player-volume-slider')),
-      );
-      expect(volumeSlider.value, 32);
+      expect(find.byKey(const Key('player-volume-button')), findsOneWidget);
       expect(find.text('00:09'), findsOneWidget);
       expect(find.text('03:00'), findsOneWidget);
 
@@ -118,9 +116,136 @@ void main() {
     // Design spec §5.1: below 960dp the desktop-only controls go, but
     // play/pause, mode and the queue entry must survive.
     expect(find.byKey(const Key('player-volume-slider')), findsNothing);
+    expect(find.byKey(const Key('player-volume-button')), findsNothing);
     expect(find.byIcon(Icons.play_arrow), findsOneWidget);
     expect(find.byKey(const Key('player-mode-button')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('narrow content column collapses before its controls overflow', (
+    tester,
+  ) async {
+    _setViewport(tester, const Size(1280, 900));
+    final audio = _FakeAudioPlayerService(
+      const PlayerSnapshot(
+        currentSource: MediaSource(url: 'https://example.com/a.mp3'),
+        duration: Duration(minutes: 3),
+        volume: 50,
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [audioPlayerServiceProvider.overrideWithValue(audio)],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(width: 520, child: PlayerBar()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // The window is wide, but a docked queue or a widened rail can still
+    // leave the bar with a narrow content column. That case has to fall back
+    // to the mini bar rather than overflow.
+    expect(find.byKey(const Key('player-progress-slider')), findsNothing);
+    expect(find.byKey(const Key('player-volume-button')), findsNothing);
+    expect(find.byIcon(Icons.play_arrow), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'volume popover keeps the slider and percentage without a speaker',
+    (tester) async {
+      _setViewport(tester, const Size(1280, 900));
+      final audio = _FakeAudioPlayerService(
+        const PlayerSnapshot(
+          currentSource: MediaSource(url: 'https://example.com/a.mp3'),
+          duration: Duration(minutes: 3),
+          volume: 8,
+        ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [audioPlayerServiceProvider.overrideWithValue(audio)],
+          child: const MaterialApp(home: Scaffold(body: PlayerBar())),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byKey(const Key('player-volume-slider')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('player-volume-button')));
+      await tester.pump();
+
+      final slider = tester.widget<Slider>(
+        find.byKey(const Key('player-volume-slider')),
+      );
+      expect(slider.value, 8);
+
+      final panel = tester.getRect(
+        find.byKey(const Key('player-volume-popover')),
+      );
+      final sliderRect = tester.getRect(
+        find.byKey(const Key('player-volume-slider')),
+      );
+      final button = tester.getRect(
+        find.byKey(const Key('player-volume-button')),
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('player-volume-popover')),
+          matching: find.byIcon(Icons.volume_up),
+        ),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('player-volume-percent')), findsOneWidget);
+      expect(find.text('8%'), findsOneWidget);
+      expect(sliderRect.height, greaterThan(panel.height * 0.8));
+      expect(panel.bottom, lessThan(button.bottom));
+
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const Key('player-volume-slider')), findsNothing);
+    },
+  );
+
+  testWidgets('volume popover responds to mouse wheel steps', (tester) async {
+    _setViewport(tester, const Size(1280, 900));
+    final audio = _FakeAudioPlayerService(
+      const PlayerSnapshot(
+        currentSource: MediaSource(url: 'https://example.com/a.mp3'),
+        duration: Duration(minutes: 3),
+        volume: 8,
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [audioPlayerServiceProvider.overrideWithValue(audio)],
+        child: const MaterialApp(home: Scaffold(body: PlayerBar())),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('player-volume-button')));
+    await tester.pump();
+
+    final location = tester.getCenter(
+      find.byKey(const Key('player-volume-slider')),
+    );
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    pointer.hover(location);
+
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, -20)));
+    await tester.pump();
+    expect(find.text('13%'), findsOneWidget);
+
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 20)));
+    await tester.pump();
+    expect(find.text('8%'), findsOneWidget);
   });
 
   testWidgets(
@@ -437,7 +562,9 @@ class _SeededPlayerController extends PlayerController {
 /// 960dp "desktop controls" threshold (§5.1) and hides the very sliders these
 /// tests assert on.
 void _setViewport(WidgetTester tester, Size size) {
+  tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size * tester.view.devicePixelRatio;
+  addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.view.resetPhysicalSize);
 }
 

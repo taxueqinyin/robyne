@@ -82,7 +82,7 @@ class NowPlayingPage extends ConsumerWidget {
       showWindowControls: desktopWindowControls,
       onClose: onClose,
       onCloseWindow: () async {
-        await ref.read(desktopTrayControllerProvider).onWindowClose();
+        await ref.read(desktopTrayControllerProvider).onTitleBarClose();
       },
       child: Stack(
         fit: StackFit.expand,

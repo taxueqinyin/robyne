@@ -41,6 +41,15 @@ void main() {
     expect(find.text('常规'), findsOneWidget);
     expect(find.text('快捷键'), findsOneWidget);
     expect(find.text('歌词'), findsOneWidget);
+    expect(find.text('关闭按钮行为'), findsOneWidget);
+    expect(find.text('每次询问'), findsWidgets);
+
+    await tester.tap(find.text('关闭按钮行为'));
+    await tester.pumpAndSettle();
+    expect(find.text('最小化到托盘'), findsWidgets);
+    expect(find.text('退出 Robyne'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('快捷键'));
     await tester.pumpAndSettle();

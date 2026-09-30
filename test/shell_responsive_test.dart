@@ -15,6 +15,7 @@ import 'package:robyne/features/player/application/player_providers.dart';
 import 'package:robyne/features/player/domain/playback_item.dart';
 import 'package:robyne/features/player/presentation/player_bar.dart';
 import 'package:robyne/features/library/application/library_providers.dart';
+import 'package:robyne/features/playlists/application/playlist_providers.dart';
 
 /// Stage 2 acceptance for the flagship shell.
 ///
@@ -88,10 +89,7 @@ void main() {
       expect(
         tester
             .getSize(
-              find.ancestor(
-                of: searchField,
-                matching: find.byType(TextField),
-              ),
+              find.ancestor(of: searchField, matching: find.byType(TextField)),
             )
             .width,
         lessThan(430),
@@ -99,32 +97,31 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the rail exposes a drag handle and can collapse to a capsule', (
-      tester,
-    ) async {
-      await _pumpShell(tester, _desktop, _xuan());
+    testWidgets(
+      'the rail exposes a drag handle and can collapse to a capsule',
+      (tester) async {
+        await _pumpShell(tester, _desktop, _xuan());
 
-      final handle = find.byKey(const Key('sidebar-resize-handle'));
-      expect(handle, findsOneWidget);
-      final before = tester.getSize(
-        find.byKey(const Key('shell-nav-left')),
-      );
-      await tester.drag(handle, const Offset(-180, 0));
-      await tester.pump();
+        final handle = find.byKey(const Key('sidebar-resize-handle'));
+        expect(handle, findsOneWidget);
+        final before = tester.getSize(find.byKey(const Key('shell-nav-left')));
+        await tester.drag(handle, const Offset(-180, 0));
+        await tester.pump();
 
-      final after = tester.getSize(find.byKey(const Key('shell-nav-left')));
-      expect(after.width, lessThan(before.width));
-      expect(after.width, greaterThanOrEqualTo(56));
-      // At capsule width labels are gone but icons remain reachable.
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('shell-nav-left')),
-          matching: find.byIcon(Icons.explore),
-        ),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-    });
+        final after = tester.getSize(find.byKey(const Key('shell-nav-left')));
+        expect(after.width, lessThan(before.width));
+        expect(after.width, greaterThanOrEqualTo(56));
+        // At capsule width labels are gone but icons remain reachable.
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('shell-nav-left')),
+            matching: find.byIcon(Icons.explore),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('a skin can move the nav bar', () {
@@ -299,6 +296,79 @@ void main() {
       expect(find.byKey(const Key('now-playing-immersive')), findsNothing);
       expect(tester.takeException(), isNull);
     });
+  });
+
+  group('top-bar history', () {
+    testWidgets('back and forward move through real shell destinations', (
+      tester,
+    ) async {
+      await _pumpShell(tester, _desktop, _xuan());
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RobyneShell)),
+      );
+
+      expect(find.byKey(const Key('topbar-back')), findsOneWidget);
+      expect(find.byKey(const Key('topbar-forward')), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.descendant(
+                of: find.byKey(const Key('topbar-back')),
+                matching: find.byType(IconButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('shell-nav-left')),
+          matching: find.byIcon(Icons.library_music_outlined),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(container.read(selectedTabProvider), RobyneTab.library);
+      await tester.tap(find.byKey(const Key('topbar-back')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(container.read(selectedTabProvider), RobyneTab.discover);
+
+      await tester.tap(find.byKey(const Key('topbar-forward')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(container.read(selectedTabProvider), RobyneTab.library);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  testWidgets('the phone liked entry returns from the playlist overview', (
+    tester,
+  ) async {
+    await _pumpShell(tester, _phonePortrait, _xuan());
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(RobyneShell)),
+    );
+
+    container.read(selectedPlaylistIdProvider.notifier).showOverview();
+    container.read(selectedTabProvider.notifier).select(RobyneTab.playlists);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(container.read(selectedPlaylistIdProvider), overviewPlaylistId);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('shell-nav-bottom')),
+        matching: find.byIcon(Icons.favorite),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(container.read(selectedPlaylistIdProvider), isNull);
+    expect(tester.takeException(), isNull);
   });
 
   group('content.style reaches feature pages', () {

@@ -18,6 +18,8 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
   PlayerSnapshot _snapshot = const PlayerSnapshot();
   int _operationId = 0;
   RestoreSnapshotFilter? _restoreFilter;
+  double? _queuedVolume;
+  bool _volumeWriteInFlight = false;
 
   @override
   PlayerSnapshot get snapshot => _snapshot;
@@ -142,12 +144,31 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
 
   @override
   Future<Result<void>> setVolume(double volume) async {
+    final normalized = volume.clamp(0, 100).toDouble();
+    if (_volumeWriteInFlight) {
+      // Latest value wins: dropping intermediate frames keeps a fast drag
+      // from queueing one platform round trip per pointer event.
+      _queuedVolume = normalized;
+      return const Ok(null);
+    }
+    _volumeWriteInFlight = true;
     try {
-      final normalized = volume.clamp(0, 100).toDouble();
-      await _player.setVolume(normalized);
-      _emit(_snapshot.copyWith(volume: normalized));
+      var next = normalized;
+      while (true) {
+        await _player.setVolume(next);
+        if (_snapshot.volume != next) {
+          _emit(_snapshot.copyWith(volume: next));
+        }
+        final queued = _queuedVolume;
+        _queuedVolume = null;
+        if (queued == null || queued == next) {
+          break;
+        }
+        next = queued;
+      }
       return const Ok(null);
     } catch (error, stackTrace) {
+      _queuedVolume = null;
       return Failure(
         AppError(
           code: 'player.play_failed',
@@ -156,6 +177,8 @@ class MediaKitAudioPlayerService implements AudioPlayerService {
           stackTrace: stackTrace,
         ),
       );
+    } finally {
+      _volumeWriteInFlight = false;
     }
   }
 

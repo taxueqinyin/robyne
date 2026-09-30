@@ -25,13 +25,10 @@ class PlaylistsPage extends ConsumerWidget {
     final sizeClass = WindowSizeClass.of(context);
     final compactWidth = sizeClass.width != WindowWidthClass.expanded;
     final playlistsValue = ref.watch(playlistControllerProvider);
-    var selectedPlaylistId = ref.watch(selectedPlaylistIdProvider);
+    final selectedPlaylistId = ref.watch(selectedPlaylistIdProvider);
     final rawSelectedPlaylist = playlistsValue.value
         ?.where((playlist) => playlist.id == selectedPlaylistId)
         .firstOrNull;
-    if (rawSelectedPlaylist?.isFavorites ?? false) {
-      selectedPlaylistId = null;
-    }
     // `null` means liked songs, which is a real detail view of the favourites
     // playlist — not the overview. Resolving it here keeps the liked list
     // renderable below instead of falling through to the overview cards.
@@ -42,10 +39,14 @@ class PlaylistsPage extends ConsumerWidget {
         : playlistsValue.value
               ?.where((playlist) => playlist.id == selectedPlaylistId)
               .firstOrNull;
-    final isLikedView = selectedPlaylistId == null;
+    final isLikedView =
+        selectedPlaylistId == null ||
+        (rawSelectedPlaylist?.isFavorites ?? false);
     final isOverview =
         selectedPlaylistId == overviewPlaylistId ||
         (!isLikedView && selectedPlaylist == null);
+    final isCollectionsView =
+        selectedPlaylistId == overviewCollectionsPlaylistId;
     // On a phone the title and the create button do not fit one line, so the
     // button drops to its own row instead of squeezing the title.
     final title = Text(
@@ -60,7 +61,15 @@ class PlaylistsPage extends ConsumerWidget {
         color: colors.textPrimary,
       ),
     );
-    final newButton = isLikedView
+    final categories = _PlaylistSectionTabs(
+      ownedSelected: isOverview,
+      collectionsSelected: isCollectionsView,
+      onOwned: () =>
+          ref.read(selectedPlaylistIdProvider.notifier).showOverview(),
+      onCollections: () =>
+          ref.read(selectedPlaylistIdProvider.notifier).showCollections(),
+    );
+    final newButton = isLikedView || isCollectionsView
         ? null
         : FilledButton.icon(
             onPressed: () => _showCreateDialog(context, ref),
@@ -72,6 +81,10 @@ class PlaylistsPage extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               title,
+              if (isOverview || isCollectionsView) ...[
+                const SizedBox(height: 12),
+                categories,
+              ],
               if (newButton != null) ...<Widget>[
                 const SizedBox(height: 12),
                 newButton,
@@ -81,6 +94,10 @@ class PlaylistsPage extends ConsumerWidget {
         : Row(
             children: <Widget>[
               Expanded(child: title),
+              if (isOverview || isCollectionsView) ...<Widget>[
+                categories,
+                const SizedBox(width: 12),
+              ],
               ?newButton,
             ],
           );
@@ -95,6 +112,14 @@ class PlaylistsPage extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           header,
+          if (compactWidth && isLikedView) ...<Widget>[
+            const SizedBox(height: 10),
+            _AllPlaylistsRow(
+              label: strings.resolve(ThemeStringKey.playlistsAll),
+              onTap: () =>
+                  ref.read(selectedPlaylistIdProvider.notifier).showOverview(),
+            ),
+          ],
           const SizedBox(height: 16),
           Expanded(
             child: playlistsValue.when(
@@ -110,9 +135,21 @@ class PlaylistsPage extends ConsumerWidget {
                     ? playlists
                           .where((playlist) => playlist.isFavorites)
                           .toList(growable: false)
+                    : isCollectionsView
+                    ? playlists
+                          .where(
+                            (playlist) =>
+                                !playlist.isFavorites &&
+                                isCollectionPlaylistId(playlist.id),
+                          )
+                          .toList(growable: false)
                     : isOverview
                     ? playlists
-                          .where((playlist) => !playlist.isFavorites)
+                          .where(
+                            (playlist) =>
+                                !playlist.isFavorites &&
+                                !isCollectionPlaylistId(playlist.id),
+                          )
                           .toList(growable: false)
                     : playlists
                           .where(
@@ -137,7 +174,7 @@ class PlaylistsPage extends ConsumerWidget {
                       const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final playlist = visible[index];
-                    if (isOverview) {
+                    if (isOverview || isCollectionsView) {
                       return _PlaylistCard(
                         playlist: playlist,
                         onTap: () {
@@ -163,7 +200,9 @@ class PlaylistsPage extends ConsumerWidget {
                                   ThemeStringKey.playlistsDeleteTitle,
                                 ),
                                 message: strings
-                                    .resolve(ThemeStringKey.playlistsDeleteMessage)
+                                    .resolve(
+                                      ThemeStringKey.playlistsDeleteMessage,
+                                    )
                                     .replaceAll('{name}', playlist.name),
                                 actionLabel: strings.resolve(
                                   ThemeStringKey.playlistsDelete,
@@ -248,6 +287,118 @@ class PlaylistsPage extends ConsumerWidget {
           ),
         ) ??
         false;
+  }
+}
+
+class _PlaylistSectionTabs extends StatelessWidget {
+  const _PlaylistSectionTabs({
+    required this.ownedSelected,
+    required this.collectionsSelected,
+    required this.onOwned,
+    required this.onCollections,
+  });
+
+  final bool ownedSelected;
+  final bool collectionsSelected;
+  final VoidCallback onOwned;
+  final VoidCallback onCollections;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = ProviderScope.containerOf(
+      context,
+    ).read(activeThemeStringsProvider);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _PlaylistSectionTab(
+          label: strings.resolve(ThemeStringKey.playlistsOwnedTab),
+          selected: ownedSelected,
+          onTap: onOwned,
+        ),
+        const SizedBox(width: 4),
+        _PlaylistSectionTab(
+          label: strings.resolve(ThemeStringKey.playlistsCollectionsTab),
+          selected: collectionsSelected,
+          onTap: onCollections,
+        ),
+      ],
+    );
+  }
+}
+
+class _PlaylistSectionTab extends StatelessWidget {
+  const _PlaylistSectionTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(tokens.radius.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? colors.brandBase : colors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AllPlaylistsRow extends StatelessWidget {
+  const _AllPlaylistsRow({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    return Material(
+      color: tokens.components.card.surface,
+      borderRadius: BorderRadius.circular(tokens.radius.md),
+      child: InkWell(
+        key: const Key('playlists-all-entry'),
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: <Widget>[
+              Icon(Icons.library_music_outlined, color: colors.textSecondary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right, size: 18, color: colors.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -378,9 +529,7 @@ class _SelectedPlaylistCard extends ConsumerWidget {
                 child: Row(
                   children: <Widget>[
                     Icon(
-                      playlist.isFavorites
-                          ? Icons.favorite
-                          : Icons.queue_music,
+                      playlist.isFavorites ? Icons.favorite : Icons.queue_music,
                       color: playlist.isFavorites
                           ? colors.brandBase
                           : colors.textSecondary,

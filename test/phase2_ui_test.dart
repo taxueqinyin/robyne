@@ -68,7 +68,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('player-progress-slider')), findsOneWidget);
-    expect(find.byKey(const Key('player-volume-slider')), findsOneWidget);
+    expect(find.byKey(const Key('player-volume-button')), findsOneWidget);
     expect(find.byKey(const Key('player-mode-button')), findsOneWidget);
 
     await tester.drag(
@@ -78,9 +78,11 @@ void main() {
     await tester.pump();
     expect(audio.seekCalls, isNotEmpty);
 
+    await tester.tap(find.byKey(const Key('player-volume-button')));
+    await tester.pump();
     await tester.drag(
       find.byKey(const Key('player-volume-slider')),
-      const Offset(-40, 0),
+      const Offset(0, -40),
     );
     await tester.pump();
     expect(audio.volumeCalls, isNotEmpty);

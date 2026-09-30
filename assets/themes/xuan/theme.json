@@ -247,6 +247,9 @@
     "downloads.delete": "删除",
     "playlists.title": "我的歌单",
     "playlists.likedTitle": "我喜欢",
+    "playlists.ownedTab": "自建歌单",
+    "playlists.collectionsTab": "收藏歌单",
+    "playlists.all": "全部歌单",
     "playlists.new": "新建歌单",
     "playlists.empty": "还没有歌单",
     "playlists.trackCount": "{count} 首",
@@ -358,6 +361,7 @@
     "player.download": "下载",
     "player.stopPlayback": "停止播放",
     "player.queue": "播放队列",
+    "player.volume": "音量",
     "player.desktopLyric.show": "显示桌面歌词",
     "player.desktopLyric.hide": "隐藏桌面歌词",
     "player.lyric.search": "搜索并关联歌词",
@@ -427,7 +431,12 @@
     "tray.close.title": "关闭 Robyne",
     "tray.close.body": "关闭后 Robyne 会最小化到托盘并继续播放。要退出应用吗？",
     "tray.close.minimize": "最小化到托盘",
-    "tray.close.exit": "退出"
+    "tray.close.exit": "退出",
+    "settings.tray.closeAction": "关闭按钮行为",
+    "settings.tray.closeAsk": "每次询问",
+    "settings.tray.closeMinimize": "最小化到托盘",
+    "settings.tray.closeExit": "退出 Robyne",
+    "settings.tray.closeSub": "点击窗口关闭按钮时执行的操作"
   },
   "assets": {
     "logo": "assets/logo.png"

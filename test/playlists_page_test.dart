@@ -21,6 +21,70 @@ void main() {
     expect(container.read(selectedPlaylistIdProvider), 'playlist:one');
     notifier.showLiked();
     expect(container.read(selectedPlaylistIdProvider), isNull);
+    notifier.showCollections();
+    expect(
+      container.read(selectedPlaylistIdProvider),
+      overviewCollectionsPlaylistId,
+    );
+  });
+
+  testWidgets('owned and saved playlists render in separate tabs', (
+    tester,
+  ) async {
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container = ProviderContainer(
+          overrides: [
+            playlistControllerProvider.overrideWith(
+              _ClassifiedPlaylistController.new,
+            ),
+          ],
+        ),
+        child: const MaterialApp(home: Scaffold(body: PlaylistsPage())),
+      ),
+    );
+    addTearDown(container.dispose);
+
+    container.read(selectedPlaylistIdProvider.notifier).showOverview();
+    await _pumpUi(tester);
+    expect(find.text('Created playlist'), findsOneWidget);
+    expect(find.text('Saved playlist'), findsNothing);
+
+    await tester.tap(find.text('Saved'));
+    await _pumpUi(tester);
+    expect(find.text('Created playlist'), findsNothing);
+    expect(find.text('Saved playlist'), findsOneWidget);
+  });
+
+  testWidgets('phone liked view links to the full playlist overview', (
+    tester,
+  ) async {
+    tester.view.physicalSize =
+        const Size(400, 800) * tester.view.devicePixelRatio;
+    addTearDown(tester.view.resetPhysicalSize);
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container = ProviderContainer(
+          overrides: [
+            playlistControllerProvider.overrideWith(
+              _ClassifiedPlaylistController.new,
+            ),
+          ],
+        ),
+        child: const MaterialApp(home: Scaffold(body: PlaylistsPage())),
+      ),
+    );
+    addTearDown(container.dispose);
+    await _pumpUi(tester);
+
+    expect(find.byKey(const Key('playlists-all-entry')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('playlists-all-entry')));
+    await _pumpUi(tester);
+
+    expect(container.read(selectedPlaylistIdProvider), overviewPlaylistId);
+    expect(find.text('Created playlist'), findsOneWidget);
   });
 
   testWidgets('creates Chinese playlists and confirms destructive actions', (
@@ -107,7 +171,9 @@ void main() {
       UncontrolledProviderScope(
         container: container = ProviderContainer(
           overrides: [
-            playlistControllerProvider.overrideWith(_SelectedPlaylistController.new),
+            playlistControllerProvider.overrideWith(
+              _SelectedPlaylistController.new,
+            ),
           ],
         ),
         child: const MaterialApp(home: Scaffold(body: PlaylistsPage())),
@@ -123,14 +189,14 @@ void main() {
       const ValueKey<String>('selected-playlist-playlist:selected'),
     );
     expect(card, findsOneWidget);
-    final before = (tester.widget<Container>(card).decoration as BoxDecoration)
-        .color;
+    final before =
+        (tester.widget<Container>(card).decoration as BoxDecoration).color;
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: tester.getCenter(card));
     await tester.pump();
-    final hovered = (tester.widget<Container>(card).decoration as BoxDecoration)
-        .color;
+    final hovered =
+        (tester.widget<Container>(card).decoration as BoxDecoration).color;
     expect(hovered, before);
     await mouse.removePointer();
   });
@@ -234,6 +300,24 @@ class _SelectedPlaylistController extends PlaylistController {
     MusicPlaylist(
       id: 'playlist:selected',
       name: 'Selected playlist',
+      isFavorites: false,
+      items: <PlaybackItem>[],
+    ),
+  ];
+}
+
+class _ClassifiedPlaylistController extends PlaylistController {
+  @override
+  Future<List<MusicPlaylist>> build() async => const <MusicPlaylist>[
+    MusicPlaylist(
+      id: 'playlist:owned',
+      name: 'Created playlist',
+      isFavorites: false,
+      items: <PlaybackItem>[],
+    ),
+    MusicPlaylist(
+      id: 'collection:saved',
+      name: 'Saved playlist',
       isFavorites: false,
       items: <PlaybackItem>[],
     ),

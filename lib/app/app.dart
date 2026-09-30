@@ -6,6 +6,7 @@ import '../core/theme/application/theme_providers.dart';
 import '../core/theme/application/theme_hot_reload.dart';
 import '../core/theme/infrastructure/token_resolver.dart';
 import 'desktop_tray_controller.dart';
+import 'main_window_controller.dart';
 import 'router.dart';
 
 class RobyneApp extends ConsumerWidget {
@@ -23,6 +24,7 @@ class RobyneApp extends ConsumerWidget {
     // is the one animation every user sees, and it is the obvious place for a
     // skin to say "I feel snappy" or "I feel unhurried".
     final motion = ref.watch(activeThemeMotionProvider);
+    ref.watch(mainWindowControllerProvider).attach();
     ref.watch(desktopTrayControllerProvider).attach();
 
     return MaterialApp(

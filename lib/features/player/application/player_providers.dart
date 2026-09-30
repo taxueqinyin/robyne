@@ -663,18 +663,49 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     await _flushPersist();
   }
 
-  Future<void> setVolume(double volume) async {
-    final result = await ref.read(audioPlayerServiceProvider).setVolume(volume);
+  /// Pushes [volume] to the audio engine without touching player state.
+  ///
+  /// The volume popover owns its pixel value while the pointer is down, so
+  /// running the full [setVolume] path on every drag frame rebuilt the bar and
+  /// scheduled persistence dozens of times per second. The engine still hears
+  /// each frame; only the commit is deferred to the end of the gesture.
+  void previewVolume(double volume) {
     if (!ref.mounted) {
       return;
     }
-    _setData(
-      _current.copyWith(
-        error: result.fold((_) => null, (error) => error),
-        volume: result is Ok<void> ? volume.clamp(0, 100).toDouble() : null,
-      ),
+    unawaited(
+      ref
+          .read(audioPlayerServiceProvider)
+          .setVolume(volume.clamp(0, 100).toDouble()),
     );
-    await _flushPersist();
+  }
+
+  /// Commits [volume] to player state and schedules persistence.
+  ///
+  /// The state is updated before the native write resolves: waiting for the
+  /// platform round trip made the slider trail the pointer, and flushing the
+  /// database per event made a drag write a transaction per pixel. The
+  /// debounce already scheduled by [_setData] owns the write now.
+  Future<void> setVolume(double volume) async {
+    final normalized = volume.clamp(0, 100).toDouble();
+    final previousVolume = _current.volume;
+    if (previousVolume != normalized) {
+      _setData(_current.copyWith(volume: normalized, clearError: true));
+    }
+    final result = await ref
+        .read(audioPlayerServiceProvider)
+        .setVolume(normalized);
+    if (!ref.mounted) {
+      return;
+    }
+    // A rapid wheel or shortcut burst can have a newer value in flight; only
+    // roll back when this failure still owns the committed value.
+    if (result case Failure<void>(:final error)) {
+      if (_current.volume != normalized) {
+        return;
+      }
+      _setData(_current.copyWith(volume: previousVolume, error: error));
+    }
   }
 
   Future<void> stop() async {

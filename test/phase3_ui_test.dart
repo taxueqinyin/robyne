@@ -81,7 +81,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('player-progress-slider')), findsOneWidget);
-    expect(find.byKey(const Key('player-volume-slider')), findsOneWidget);
+    expect(find.byKey(const Key('player-volume-button')), findsOneWidget);
     expect(find.byKey(const Key('player-mode-button')), findsOneWidget);
   });
 

@@ -63,7 +63,6 @@ dependencies:
   # platform MethodChannel and is the version whose Windows click events are
   # safe.
   tray_manager: 0.5.3
-  nativeapi: ^0.2.7
   image: ^4.8.0
   archive: ^4.3.0
 

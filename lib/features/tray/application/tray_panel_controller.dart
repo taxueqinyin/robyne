@@ -103,6 +103,7 @@ class TrayPanelController {
   static const updateMethod = 'tray_panel.update';
   static const showMethod = 'tray_panel.show';
   static const hideMethod = 'tray_panel.hide';
+  static const hiddenMethod = 'tray_panel.hidden';
   static const setAnchorMethod = 'tray_panel.set_anchor';
   static const sizeMethod = 'tray_panel.size';
 
@@ -110,6 +111,7 @@ class TrayPanelController {
   static const _retryGap = Duration(milliseconds: 150);
 
   WindowController? _controller;
+  Future<WindowController?>? _creatingController;
   bool _visible = false;
   Size _panelSize = const Size(288, 360);
 
@@ -132,8 +134,28 @@ class TrayPanelController {
     _panelSize = size;
   }
 
-  Future<void> sync(TrayPanelPayload payload) async {
+  /// Synchronises the parent's toggle state when the panel hides itself.
+  ///
+  /// The panel closes on focus loss, like a native context menu. Without this
+  /// signal the parent still believes it is open and the next tray click only
+  /// sends another hide, so the menu can only ever be opened once.
+  void markHidden() {
+    _visible = false;
+  }
+
+  /// Creates the panel engine once during startup.
+  ///
+  /// The panel is created lazily otherwise, which puts a whole Flutter engine
+  /// boot on the user-visible path of the very first tray click.
+  Future<void> warmUp() async {
     if (!isSupported) {
+      return;
+    }
+    await _ensureController();
+  }
+
+  Future<void> sync(TrayPanelPayload payload) async {
+    if (!isSupported || !_visible) {
       return;
     }
     final controller = await _ensureController();
@@ -176,7 +198,10 @@ class TrayPanelController {
         'workBottom': workArea.bottom,
       });
     }
-    await controller.show();
+    // Ask the panel's engine to show and focus itself. Calling
+    // WindowController.show() directly skips that path, so the panel never
+    // records when it became visible and can be dismissed by the first blur.
+    await _invokeWithRetry(controller, showMethod);
     _visible = true;
   }
 
@@ -185,9 +210,9 @@ class TrayPanelController {
   /// being dropped and leaving the menu blank.
   Future<void> _invokeWithRetry(
     WindowController controller,
-    String method,
+    String method, [
     Object? arguments,
-  ) async {
+  ]) async {
     for (var attempt = 0; attempt < _retryCount; attempt += 1) {
       try {
         await controller.invokeMethod<void>(method, arguments);
@@ -218,9 +243,22 @@ class TrayPanelController {
   }
 
   Future<WindowController?> _ensureController() async {
-    if (_controller != null) {
-      return _controller;
+    final existing = _controller;
+    if (existing != null) return existing;
+    final creating = _creatingController;
+    if (creating != null) return creating;
+    final future = _createController();
+    _creatingController = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_creatingController, future)) {
+        _creatingController = null;
+      }
     }
+  }
+
+  Future<WindowController?> _createController() async {
     try {
       final controller = await WindowController.create(
         WindowConfiguration(

@@ -122,6 +122,7 @@ enum ThemeStringKey {
   playerDownload('player.download', 'Download'),
   playerStopPlayback('player.stopPlayback', 'Stop playback'),
   playerQueue('player.queue', 'Play queue'),
+  playerVolume('player.volume', 'Volume'),
   playerShowDesktopLyric('player.desktopLyric.show', 'Show desktop lyric'),
   playerHideDesktopLyric('player.desktopLyric.hide', 'Hide desktop lyric'),
   playerSearchLyric('player.lyric.search', 'Search and link lyric'),
@@ -292,6 +293,9 @@ enum ThemeStringKey {
   // Playlists surface chrome.
   playlistsTitle('playlists.title', 'Playlists'),
   playlistsLikedTitle('playlists.likedTitle', 'Liked songs'),
+  playlistsOwnedTab('playlists.ownedTab', 'Created'),
+  playlistsCollectionsTab('playlists.collectionsTab', 'Saved'),
+  playlistsAll('playlists.all', 'All playlists'),
   playlistsNew('playlists.new', 'New playlist'),
   playlistsEmpty('playlists.empty', 'No playlists'),
   playlistsTrackCount('playlists.trackCount', '{count} tracks'),
@@ -505,14 +509,11 @@ enum ThemeStringKey {
   trayCloseExit('tray.close.exit', 'Exit'),
 
   // Close button behaviour, editable after the first prompt.
-  settingsTrayCloseAction('settings.tray.closeAction', 'Close button action'),
-  settingsTrayCloseAsk('settings.tray.closeAsk', 'Ask every time'),
-  settingsTrayCloseMinimize('settings.tray.closeMinimize', 'Minimize to tray'),
-  settingsTrayCloseExit('settings.tray.closeExit', 'Exit Robyne'),
-  settingsTrayCloseSub(
-    'settings.tray.closeSub',
-    'What happens when the window close button is clicked',
-  );
+  settingsTrayCloseAction('settings.tray.closeAction', '关闭按钮行为'),
+  settingsTrayCloseAsk('settings.tray.closeAsk', '每次询问'),
+  settingsTrayCloseMinimize('settings.tray.closeMinimize', '最小化到托盘'),
+  settingsTrayCloseExit('settings.tray.closeExit', '退出 Robyne'),
+  settingsTrayCloseSub('settings.tray.closeSub', '点击窗口关闭按钮时执行的操作');
 
   const ThemeStringKey(this.jsonKey, this.fallback);
 

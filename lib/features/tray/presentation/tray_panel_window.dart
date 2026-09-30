@@ -22,6 +22,7 @@ class _TrayPanelWindowAppState extends State<TrayPanelWindowApp>
   DateTime? _shownAt;
   Rect? _anchor;
   Rect? _workArea;
+  Size? _measuredSize;
 
   @override
   void initState() {
@@ -43,6 +44,12 @@ class _TrayPanelWindowAppState extends State<TrayPanelWindowApp>
             });
           }
         case TrayPanelController.showMethod:
+          // The anchor usually arrives after the panel's first (hidden) layout,
+          // so re-apply it here; `_fitWindowToContent` only runs once.
+          final measured = _measuredSize;
+          if (measured != null) {
+            await _applyAnchor(measured);
+          }
           await windowManager.show();
           await windowManager.focus();
           _shownAt = DateTime.now();
@@ -70,6 +77,10 @@ class _TrayPanelWindowAppState extends State<TrayPanelWindowApp>
             if (anchor != null && workArea != null) {
               _anchor = anchor;
               _workArea = workArea;
+              final measured = _measuredSize;
+              if (measured != null) {
+                await _applyAnchor(measured);
+              }
             }
           }
           return true;
@@ -100,6 +111,17 @@ class _TrayPanelWindowAppState extends State<TrayPanelWindowApp>
       await trayPanelControlChannel.invokeMethod<void>(method, arguments);
     } finally {
       await windowManager.hide();
+      await _notifyHidden();
+    }
+  }
+
+  Future<void> _notifyHidden() async {
+    try {
+      await trayPanelControlChannel.invokeMethod<void>(
+        TrayPanelController.hiddenMethod,
+      );
+    } catch (_) {
+      // The main window may already be closing.
     }
   }
 
@@ -114,6 +136,7 @@ class _TrayPanelWindowAppState extends State<TrayPanelWindowApp>
       return;
     }
     _sizeReported = true;
+    _measuredSize = size;
     unawaited(() async {
       try {
         await windowManager.setSize(size);
@@ -185,6 +208,7 @@ class _TrayPanelWindowAppState extends State<TrayPanelWindowApp>
     }
     _shownAt = null;
     unawaited(windowManager.hide());
+    unawaited(_notifyHidden());
   }
 
   @override

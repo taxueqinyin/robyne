@@ -182,7 +182,10 @@ void main() {
     );
 
     expect(find.byKey(const Key('now-playing-close')), findsOneWidget);
-    expect(find.byKey(const Key('now-playing-window-controls')), findsOneWidget);
+    expect(
+      find.byKey(const Key('now-playing-window-controls')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -362,7 +365,9 @@ void main() {
     );
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: tester.getCenter(find.byType(NowPlayingPage)));
+    await mouse.addPointer(
+      location: tester.getCenter(find.byType(NowPlayingPage)),
+    );
     await mouse.moveTo(
       tester.getCenter(find.byType(NowPlayingPage)) + const Offset(1, 1),
     );
@@ -400,7 +405,7 @@ void main() {
     );
 
     expect(find.byKey(const Key('player-progress-slider')), findsOneWidget);
-    expect(find.byKey(const Key('player-volume-slider')), findsOneWidget);
+    expect(find.byKey(const Key('player-volume-button')), findsOneWidget);
     expect(find.byKey(const Key('player-mode-button')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

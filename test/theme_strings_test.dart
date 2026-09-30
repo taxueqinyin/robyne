@@ -146,12 +146,21 @@ void main() {
       expect(package.strings.resolve(ThemeStringKey.navLibrary), '内容库');
       expect(package.strings.resolve(ThemeStringKey.navSettings), '设置');
       expect(package.strings.resolve(ThemeStringKey.queueTitle), '当前播放');
+      expect(package.strings.resolve(ThemeStringKey.playerVolume), '音量');
       expect(package.strings.resolve(ThemeStringKey.searchHint), '搜索歌曲、歌手、专辑');
       expect(
         package.strings.resolve(ThemeStringKey.discoverRankingEntry),
         '插件榜单',
       );
       expect(package.strings.resolve(ThemeStringKey.trayQueue), '队列');
+      expect(
+        package.strings.resolve(ThemeStringKey.settingsTrayCloseAction),
+        '关闭按钮行为',
+      );
+      expect(
+        package.strings.resolve(ThemeStringKey.settingsTrayCloseAsk),
+        '每次询问',
+      );
     });
 
     test('covers every navigation slot it renders', () {

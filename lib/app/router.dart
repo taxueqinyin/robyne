@@ -63,7 +63,14 @@ import 'desktop_tray_controller.dart';
 import 'navigation.dart';
 
 export 'navigation.dart'
-    show RobyneTab, SelectedTabNotifier, selectedTabProvider;
+    show
+        NavigationHistoryNotifier,
+        NavigationHistoryState,
+        NavigationSnapshot,
+        RobyneTab,
+        SelectedTabNotifier,
+        navigationHistoryProvider,
+        selectedTabProvider;
 
 /// True when the running platform provides the desktop-only integrations
 /// (`desktop_multi_window`, window_manager) used by the desktop lyric window.
@@ -91,6 +98,7 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
   final ShortcutTracker _shortcutTracker = ShortcutTracker();
   RobyneTab? _previousTab;
   final Set<RobyneTab> _mountedTabs = <RobyneTab>{};
+  bool _restoringHistory = false;
 
   @override
   void initState() {
@@ -121,12 +129,7 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
     });
     final sizeClass = WindowSizeClass.of(context);
     final mediaSize = MediaQuery.sizeOf(context);
-    ref.listen<RobyneTab>(selectedTabProvider, (previous, next) {
-      if (previous == null || previous == next) {
-        return;
-      }
-      _previousTab = previous;
-    });
+    _watchNavigation(ref);
     // D6 is about the shell's shape, not about "large enough to be pretty".
     // A medium-width *desktop window* can afford a compact rail, but an
     // 800x360 landscape phone cannot: its height is already carrying the
@@ -157,6 +160,7 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
     final queueOverride = ref.watch(queuePanelVisibleProvider);
     final queueRequested = queueOverride ?? isDesktopShell;
     final immersive = ref.watch(nowPlayingImmersiveProvider);
+    final history = ref.watch(navigationHistoryProvider);
     final showWindowControls =
         !kIsWeb && !Platform.environment.containsKey('FLUTTER_TEST');
 
@@ -217,6 +221,10 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
             height: plan.topExtent,
             child: _TopBar(
               width: mediaSize.width,
+              canGoBack: history.canGoBack,
+              canGoForward: history.canGoForward,
+              onBack: _goBack,
+              onForward: _goForward,
               // The frameless window owns its title bar: on a real desktop
               // session the controls are ours. Tests pass `false` through a
               // widget-tree default so pumping the shell does not need a
@@ -351,6 +359,71 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
         ],
       ),
     );
+  }
+
+  void _watchNavigation(WidgetRef ref) {
+    ref.listen<RobyneTab>(selectedTabProvider, (previous, next) {
+      if (_restoringHistory || previous == null || previous == next) {
+        return;
+      }
+      _previousTab = previous;
+      ref
+          .read(navigationHistoryProvider.notifier)
+          .record(
+            tab: next,
+            playlistId: next == RobyneTab.playlists
+                ? ref.read(selectedPlaylistIdProvider)
+                : null,
+          );
+    });
+    ref.listen<String?>(selectedPlaylistIdProvider, (previous, next) {
+      if (_restoringHistory ||
+          previous == next ||
+          ref.read(selectedTabProvider) != RobyneTab.playlists) {
+        return;
+      }
+      ref
+          .read(navigationHistoryProvider.notifier)
+          .record(tab: RobyneTab.playlists, playlistId: next);
+    });
+  }
+
+  void _goBack() {
+    final history = ref.read(navigationHistoryProvider);
+    if (!history.canGoBack) {
+      return;
+    }
+    ref.read(navigationHistoryProvider.notifier).back();
+    _restoreSnapshot(ref.read(navigationHistoryProvider).current);
+  }
+
+  void _goForward() {
+    final history = ref.read(navigationHistoryProvider);
+    if (!history.canGoForward) {
+      return;
+    }
+    ref.read(navigationHistoryProvider.notifier).forward();
+    _restoreSnapshot(ref.read(navigationHistoryProvider).current);
+  }
+
+  void _restoreSnapshot(NavigationSnapshot snapshot) {
+    _restoringHistory = true;
+    try {
+      if (snapshot.tab == RobyneTab.playlists) {
+        final playlistId = snapshot.playlistId;
+        final playlists = ref.read(selectedPlaylistIdProvider.notifier);
+        if (playlistId == null) {
+          playlists.showLiked();
+        } else if (playlistId == overviewPlaylistId) {
+          playlists.showOverview();
+        } else {
+          playlists.select(playlistId);
+        }
+      }
+      ref.read(selectedTabProvider.notifier).select(snapshot.tab);
+    } finally {
+      _restoringHistory = false;
+    }
   }
 
   bool _handleGlobalShortcut(KeyEvent event) {
@@ -932,9 +1005,21 @@ class _GradientSurface extends StatelessWidget {
 /// inside a page; the keyword is shared with [SearchPage] through
 /// `searchControllerProvider`.
 class _TopBar extends ConsumerStatefulWidget {
-  const _TopBar({required this.width, required this.showWindowControls});
+  const _TopBar({
+    required this.width,
+    required this.showWindowControls,
+    required this.canGoBack,
+    required this.canGoForward,
+    required this.onBack,
+    required this.onForward,
+  });
 
   final double width;
+
+  final bool canGoBack;
+  final bool canGoForward;
+  final VoidCallback onBack;
+  final VoidCallback onForward;
 
   /// Window buttons belong to `window_manager`, which only the main window
   /// initialises. The old shell never had them, so they stay opt-in.
@@ -1000,23 +1085,25 @@ class _TopBarState extends ConsumerState<_TopBar> {
               ),
               child: Row(
                 children: <Widget>[
-                  // The design's top bar leads with a dim/active history pair. The
-                  // shell has no history stack of its own (the immersive player is
-                  // an overlay, not a route), so the pair is present for the
-                  // composition the design draws and the forward arrow stays dark
-                  // while nothing is ahead — the same shape as the mockup, without
-                  // inventing a navigation stack to justify it.
+                  // The design's top bar leads with a history pair. The shell
+                  // records every destination change, including playlist views,
+                  // so both arrows move through real state instead of being
+                  // decoration.
                   _TopBarArrow(
+                    key: const Key('topbar-back'),
                     slot: ThemeIconKey.back,
                     fallback: Icons.chevron_left,
                     colors: colors,
-                    enabled: false,
+                    enabled: widget.canGoBack,
+                    onPressed: widget.canGoBack ? widget.onBack : null,
                   ),
                   _TopBarArrow(
+                    key: const Key('topbar-forward'),
                     slot: ThemeIconKey.skipNext,
                     fallback: Icons.chevron_right,
                     colors: colors,
-                    enabled: false,
+                    enabled: widget.canGoForward,
+                    onPressed: widget.canGoForward ? widget.onForward : null,
                   ),
                   const SizedBox(width: 4),
                   // The design's search field is a 430dp pill with a `Ctrl K`
@@ -1160,7 +1247,7 @@ class _WindowControls extends ConsumerWidget {
           tooltip: '关闭',
           destructive: true,
           onPressed: () => unawaited(
-            ref.read(desktopTrayControllerProvider).onWindowClose(),
+            ref.read(desktopTrayControllerProvider).onTitleBarClose(),
           ),
         ),
       ],
@@ -1181,16 +1268,19 @@ class _WindowControls extends ConsumerWidget {
 /// is the design's footprint, and the glyph inherits the theme foreground.
 class _TopBarArrow extends StatelessWidget {
   const _TopBarArrow({
+    super.key,
     required this.slot,
     required this.fallback,
     required this.colors,
     required this.enabled,
+    required this.onPressed,
   });
 
   final ThemeIconKey slot;
   final IconData fallback;
   final ThemeColors colors;
   final bool enabled;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -1210,7 +1300,7 @@ class _TopBarArrow extends StatelessWidget {
           color: foreground,
         ),
         color: foreground,
-        onPressed: null,
+        onPressed: enabled ? onPressed : null,
       ),
     );
   }
@@ -1383,169 +1473,177 @@ class _SideNavState extends ConsumerState<_SideNav> {
         fit: StackFit.expand,
         children: <Widget>[
           _GradientSurface(
-        gradient: comp.gradient,
-        fallback: comp.background.a > 0
-            ? comp.background
-            : colors.backgroundElevated,
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border(right: BorderSide(color: colors.borderSubtle)),
-          ),
-          child: SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _SideNavBrand(compact: compactRail),
-                if (labelBesideIcon && comp.showProfile)
-                  _SideNavProfile(tokens: tokens),
-                SizedBox(height: compactRail ? 4 : 10),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: <Widget>[
-                        if (compactRail)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            child: Divider(
-                              height: 1,
-                              color: colors.borderSubtle,
-                            ),
-                          ),
-                        if (compactRail) const SizedBox(height: 8),
-                        for (final entry in visible)
-                          _NavItem(
-                            entry: entry,
-                            selected:
-                                entry.tab == selected &&
-                                (entry.tab != RobyneTab.playlists ||
-                                    ref.watch(selectedPlaylistIdProvider) ==
-                                        null),
-                            showLabel: showLabel,
-                            labelBesideIcon: labelBesideIcon,
-                            tokens: tokens,
-                            onTap: () {
-                              // The rail row means "liked songs", which is the
-                              // null selection state of the playlists page.
-                              // The overview lives below in the playlist
-                              // group, where the user's playlists are listed.
-                              if (entry.tab == RobyneTab.playlists) {
-                                ref
-                                    .read(selectedPlaylistIdProvider.notifier)
-                                    .showLiked();
-                              }
-                              ref
-                                  .read(selectedTabProvider.notifier)
-                                  .select(entry.tab);
-                            },
-                            trailing: countFor(entry) == null
-                                ? null
-                                : _NavBadge(
-                                    label: countFor(entry)!,
-                                    colors: colors,
-                                    accented: entry.tab == selected,
-                                  ),
-                          ),
-                        if (labelBesideIcon) ...<Widget>[
-                          const SizedBox(height: 14),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 18),
-                            child: Divider(
-                              height: 1,
-                              color: colors.borderSubtle,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          _SideNavSectionLabel(
-                            label: strings.resolve(
-                              ThemeStringKey.navSectionPlaylists,
-                            ),
-                            tokens: tokens,
-                            onOpen: () {
-                              ref
-                                  .read(selectedPlaylistIdProvider.notifier)
-                                  .showOverview();
-                              ref
-                                  .read(selectedTabProvider.notifier)
-                                  .select(RobyneTab.playlists);
-                            },
-                          ),
-                          const SizedBox(height: 6),
-                          _SideNavPlaylistGroup(
-                            onOpenPlaylist: (id) {
-                              ref
-                                  .read(selectedPlaylistIdProvider.notifier)
-                                  .select(id);
-                              ref
-                                  .read(selectedTabProvider.notifier)
-                                  .select(RobyneTab.playlists);
-                            },
-                          ),
-                        ],
-                      ],
+            gradient: comp.gradient,
+            fallback: comp.background.a > 0
+                ? comp.background
+                : colors.backgroundElevated,
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border(right: BorderSide(color: colors.borderSubtle)),
+              ),
+              child: SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    _SideNavBrand(compact: compactRail),
+                    if (labelBesideIcon && comp.showProfile)
+                      _SideNavProfile(tokens: tokens),
+                    SizedBox(height: compactRail ? 4 : 10),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: <Widget>[
+                            if (compactRail)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
+                                child: Divider(
+                                  height: 1,
+                                  color: colors.borderSubtle,
+                                ),
+                              ),
+                            if (compactRail) const SizedBox(height: 8),
+                            for (final entry in visible)
+                              _NavItem(
+                                entry: entry,
+                                selected:
+                                    entry.tab == selected &&
+                                    (entry.tab != RobyneTab.playlists ||
+                                        ref.watch(selectedPlaylistIdProvider) ==
+                                            null),
+                                showLabel: showLabel,
+                                labelBesideIcon: labelBesideIcon,
+                                tokens: tokens,
+                                onTap: () {
+                                  // The rail row means "liked songs", which is the
+                                  // null selection state of the playlists page.
+                                  // The overview lives below in the playlist
+                                  // group, where the user's playlists are listed.
+                                  if (entry.tab == RobyneTab.playlists) {
+                                    ref
+                                        .read(
+                                          selectedPlaylistIdProvider.notifier,
+                                        )
+                                        .showLiked();
+                                  }
+                                  ref
+                                      .read(selectedTabProvider.notifier)
+                                      .select(entry.tab);
+                                },
+                                trailing: countFor(entry) == null
+                                    ? null
+                                    : _NavBadge(
+                                        label: countFor(entry)!,
+                                        colors: colors,
+                                        accented: entry.tab == selected,
+                                      ),
+                              ),
+                            if (labelBesideIcon) ...<Widget>[
+                              const SizedBox(height: 14),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                ),
+                                child: Divider(
+                                  height: 1,
+                                  color: colors.borderSubtle,
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+                              _SideNavSectionLabel(
+                                label: strings.resolve(
+                                  ThemeStringKey.navSectionPlaylists,
+                                ),
+                                tokens: tokens,
+                                onOpen: () {
+                                  ref
+                                      .read(selectedPlaylistIdProvider.notifier)
+                                      .showOverview();
+                                  ref
+                                      .read(selectedTabProvider.notifier)
+                                      .select(RobyneTab.playlists);
+                                },
+                              ),
+                              const SizedBox(height: 6),
+                              _SideNavPlaylistGroup(
+                                onOpenPlaylist: (id) {
+                                  ref
+                                      .read(selectedPlaylistIdProvider.notifier)
+                                      .select(id);
+                                  ref
+                                      .read(selectedTabProvider.notifier)
+                                      .select(RobyneTab.playlists);
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                    if (compactRail) ...<Widget>[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: Divider(height: 1, color: colors.borderSubtle),
+                      ),
+                      const SizedBox(height: 5),
+                    ],
+                    if (labelBesideIcon) ...<Widget>[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 10, 18, 4),
+                        child: Row(
+                          children: <Widget>[
+                            Text(
+                              strings.resolve(ThemeStringKey.navSectionTools),
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.6,
+                                color: colors.textDisabled,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Container(
+                                height: 1,
+                                color: colors.borderSubtle,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    for (final entry in navigation.applyOrder(
+                      _secondaryNavEntries,
+                      RobyneFormFactor.desktop,
+                      (nav) => _navKeyFor(nav.tab),
+                    ))
+                      _NavItem(
+                        entry: entry,
+                        selected:
+                            entry.tab == selected &&
+                            (entry.tab != RobyneTab.playlists ||
+                                ref.watch(selectedPlaylistIdProvider) == null),
+                        showLabel: showLabel,
+                        labelBesideIcon: labelBesideIcon,
+                        tokens: tokens,
+                        onTap: () => ref
+                            .read(selectedTabProvider.notifier)
+                            .select(entry.tab),
+                      ),
+                    SizedBox(height: compactRail ? 3 : 8),
+                    if (labelBesideIcon)
+                      _SideNavFooter(
+                        label: strings.resolve(ThemeStringKey.navFooter),
+                        version: strings.resolve(
+                          ThemeStringKey.navFooterVersion,
+                        ),
+                        tokens: tokens,
+                      ),
+                  ],
                 ),
-                if (compactRail) ...<Widget>[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: Divider(height: 1, color: colors.borderSubtle),
-                  ),
-                  const SizedBox(height: 5),
-                ],
-                if (labelBesideIcon) ...<Widget>[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 10, 18, 4),
-                    child: Row(
-                      children: <Widget>[
-                        Text(
-                          strings.resolve(ThemeStringKey.navSectionTools),
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.6,
-                            color: colors.textDisabled,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Container(
-                            height: 1,
-                            color: colors.borderSubtle,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                for (final entry in navigation.applyOrder(
-                  _secondaryNavEntries,
-                  RobyneFormFactor.desktop,
-                  (nav) => _navKeyFor(nav.tab),
-                ))
-                  _NavItem(
-                    entry: entry,
-                    selected:
-                        entry.tab == selected &&
-                        (entry.tab != RobyneTab.playlists ||
-                            ref.watch(selectedPlaylistIdProvider) == null),
-                    showLabel: showLabel,
-                    labelBesideIcon: labelBesideIcon,
-                    tokens: tokens,
-                    onTap: () => ref
-                        .read(selectedTabProvider.notifier)
-                        .select(entry.tab),
-                  ),
-                SizedBox(height: compactRail ? 3 : 8),
-                if (labelBesideIcon)
-                  _SideNavFooter(
-                    label: strings.resolve(ThemeStringKey.navFooter),
-                    version: strings.resolve(ThemeStringKey.navFooterVersion),
-                    tokens: tokens,
-                  ),
-              ],
+              ),
             ),
-          ),
-        ),
           ),
           Positioned(
             top: 0,
@@ -1961,10 +2059,8 @@ class _SideNavPlaylistGroup extends ConsumerWidget {
                               width: 2,
                               height: 16,
                               decoration: BoxDecoration(
-                                color: tokens
-                                    .components
-                                    .navBar
-                                    .selectedIndicator,
+                                color:
+                                    tokens.components.navBar.selectedIndicator,
                                 borderRadius: BorderRadius.circular(
                                   tokens.radius.full,
                                 ),
@@ -2335,9 +2431,16 @@ class _CompactTabBar extends ConsumerWidget {
                             ? comp.selectedItem
                             : colors.textSecondary;
                         return InkWell(
-                          onTap: () => ref
-                              .read(selectedTabProvider.notifier)
-                              .select(entry.tab),
+                          onTap: () {
+                            if (entry.tab == RobyneTab.playlists) {
+                              ref
+                                  .read(selectedPlaylistIdProvider.notifier)
+                                  .showLiked();
+                            }
+                            ref
+                                .read(selectedTabProvider.notifier)
+                                .select(entry.tab);
+                          },
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: <Widget>[

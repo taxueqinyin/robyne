@@ -40,9 +40,23 @@ class SelectedPlaylistIdNotifier extends Notifier<String?> {
   /// `null` is reserved for the liked-songs view, so this sentinel gives the
   /// rail a way to open the overview without overloading that state.
   void showOverview() => state = overviewPlaylistId;
+
+  /// The saved online collections view.
+  void showCollections() => state = overviewCollectionsPlaylistId;
 }
 
 const overviewPlaylistId = '__overview__';
+const overviewCollectionsPlaylistId = '__collections__';
+
+/// A local collection saved from Discover.
+///
+/// The repository deliberately stores imported collections as ordinary
+/// playlists. Their stable id prefix is the discriminator the UI needs, so no
+/// migration or second persistence model is required.
+const collectionPlaylistIdPrefix = 'collection:';
+
+bool isCollectionPlaylistId(String id) =>
+    id.startsWith(collectionPlaylistIdPrefix);
 
 class PlaylistController extends AsyncNotifier<List<MusicPlaylist>> {
   @override
@@ -100,9 +114,9 @@ class PlaylistController extends AsyncNotifier<List<MusicPlaylist>> {
 
   Future<void> toggleFavorite(PlaybackItem item) async {
     await ref.read(playlistRepositoryProvider).toggleFavorite(item);
-    final notifier = ref.read(selectedPlaylistIdProvider.notifier);
-    if (ref.read(selectedPlaylistIdProvider) == PlaylistRepository.favoritesId) {
-      notifier.showLiked();
+    if (ref.read(selectedPlaylistIdProvider) ==
+        PlaylistRepository.favoritesId) {
+      ref.read(selectedPlaylistIdProvider.notifier).showLiked();
     }
     ref.invalidateSelf();
   }

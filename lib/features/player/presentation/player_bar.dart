@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -261,6 +262,13 @@ class PlayerBar extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final barWidth = constraints.maxWidth;
+        // The shell can hand the bar much less width than the window
+        // reports: a docked queue or a user-widened rail is outside the
+        // bar's own constraints. Decide from this row's budget so a narrow
+        // content column degrades instead of overflowing.
+        if (barWidth < 600) {
+          return miniBar;
+        }
         // Design spec §5.1: below 960 the desktop lyric and volume controls
         // go; below 720 the mode badge goes too. The quality chip stays at
         // both, since it is the one control the spec never drops.
@@ -401,15 +409,16 @@ class PlayerBar extends ConsumerWidget {
                 if (showDesktopOnly) ...<Widget>[
                   _DesktopLyricToggle(ref: ref, colors: colors),
                   _QueueToggle(count: queueLength, colors: colors),
-                  SizedBox(
-                    width: 128,
-                    child: _VolumeSlider(
-                      value: volume,
-                      colors: colors,
-                      onChanged: (value) => ref
-                          .read(playerControllerProvider.notifier)
-                          .setVolume(value),
-                    ),
+                  _VolumeSlider(
+                    value: volume,
+                    colors: colors,
+                    tooltip: strings.resolve(ThemeStringKey.playerVolume),
+                    onChanged: (value) => ref
+                        .read(playerControllerProvider.notifier)
+                        .previewVolume(value),
+                    onChangeEnd: (value) => ref
+                        .read(playerControllerProvider.notifier)
+                        .setVolume(value),
                   ),
                 ] else
                   _QueueToggle(count: queueLength, colors: colors),
@@ -966,47 +975,317 @@ class _DesktopLyricToggle extends ConsumerWidget {
   }
 }
 
-/// The volume slider (design spec §6.2: `PlayerBarActions.volume`).
-class _VolumeSlider extends StatelessWidget {
+/// The volume control (design spec §6.2: `PlayerBarActions.volume`).
+///
+/// The bar owns only the speaker icon. Clicking it opens a vertical slider
+/// above the icon, drawn in the nearest [Overlay] so the player card's
+/// rounded clip cannot cut the popup off.
+///
+/// Drag frames stay local: the popover previews the engine value without
+/// committing player state, so a drag cannot schedule a database write per
+/// pixel. The commit happens once, on release. The wheel commits one step per
+/// notch, which is cheap because the engine coalesces overlapping writes.
+class _VolumeSlider extends StatefulWidget {
   const _VolumeSlider({
     required this.value,
     required this.colors,
+    required this.tooltip,
     required this.onChanged,
+    required this.onChangeEnd,
+  });
+
+  final double value;
+  final ThemeColors colors;
+  final String tooltip;
+  final ValueChanged<double> onChanged;
+  final ValueChanged<double> onChangeEnd;
+
+  @override
+  State<_VolumeSlider> createState() => _VolumeSliderState();
+}
+
+class _VolumeSliderState extends State<_VolumeSlider> {
+  static const double _panelWidth = 64;
+  static const double _panelHeight = 228;
+  static const double _panelGap = 8;
+  static const double _wheelStep = 5;
+
+  final OverlayPortalController _controller = OverlayPortalController();
+  final GlobalKey _anchorKey = GlobalKey();
+  final Object _tapGroup = Object();
+
+  double? _dragValue;
+  double? _wheelTarget;
+
+  double get _value => (_dragValue ?? widget.value).clamp(0, 100).toDouble();
+
+  void _toggle() {
+    _controller.toggle();
+  }
+
+  void _close() {
+    if (_controller.isShowing) {
+      _controller.hide();
+    }
+  }
+
+  void _onChanged(double value) {
+    final normalized = value.clamp(0, 100).toDouble();
+    setState(() => _dragValue = normalized);
+    widget.onChanged(normalized);
+  }
+
+  void _onChangeEnd(double value) {
+    final normalized = value.clamp(0, 100).toDouble();
+    setState(() => _dragValue = null);
+    widget.onChangeEnd(normalized);
+  }
+
+  @override
+  void didUpdateWidget(covariant _VolumeSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != oldWidget.value) {
+      // The committed value caught up (or rolled back); the local wheel
+      // accumulator has served its purpose.
+      _wheelTarget = null;
+    }
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) {
+      return;
+    }
+    GestureBinding.instance.pointerSignalResolver.register(event, (event) {
+      final scroll = event as PointerScrollEvent;
+      _applyWheelDelta(scroll.scrollDelta.dy);
+    });
+  }
+
+  void _applyWheelDelta(double delta) {
+    if (delta == 0) {
+      return;
+    }
+    final base = (_wheelTarget ?? _value).clamp(0, 100).toDouble();
+    // Scroll up raises the volume, matching every platform's mixer.
+    final next = (base - delta.sign * _wheelStep).clamp(0, 100).toDouble();
+    if (next == _value) {
+      return;
+    }
+    _wheelTarget = next;
+    widget.onChangeEnd(next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = RobyneTheme.of(context);
+    return OverlayPortal(
+      controller: _controller,
+      overlayChildBuilder: (context) {
+        final anchor = _anchorKey.currentContext;
+        final anchorBox = anchor?.findRenderObject() as RenderBox?;
+        final overlayBox = Overlay.of(context).context.findRenderObject();
+        if (anchorBox == null || overlayBox is! RenderBox) {
+          return const SizedBox.shrink();
+        }
+        final anchorTopLeft = anchorBox.localToGlobal(
+          Offset.zero,
+          ancestor: overlayBox,
+        );
+        final anchorSize = anchorBox.size;
+        final overlaySize = overlayBox.size;
+        final preferredCenterX = anchorTopLeft.dx + anchorSize.width / 2;
+        final minCenterX = _panelWidth / 2 + 8;
+        final maxCenterX = overlaySize.width - _panelWidth / 2 - 8;
+        final centerX = maxCenterX < minCenterX
+            ? overlaySize.width / 2
+            : preferredCenterX.clamp(minCenterX, maxCenterX).toDouble();
+        final roomAbove = anchorTopLeft.dy - _panelGap;
+        final roomBelow =
+            overlaySize.height -
+            anchorTopLeft.dy -
+            anchorSize.height -
+            _panelGap;
+        final openAbove = roomAbove >= _panelHeight || roomAbove >= roomBelow;
+        final preferredTop = openAbove
+            ? anchorTopLeft.dy - _panelHeight - _panelGap
+            : anchorTopLeft.dy + anchorSize.height + _panelGap;
+        final maxTop = overlaySize.height - _panelHeight - 8;
+        final top = maxTop < 8
+            ? 8.0
+            : preferredTop.clamp(8.0, maxTop).toDouble();
+        final left = centerX - _panelWidth / 2;
+        final connectorTop = openAbove
+            ? anchorTopLeft.dy - 5
+            : anchorTopLeft.dy + anchorSize.height - 1;
+        final regionTop = top < connectorTop ? top : connectorTop;
+        final panelBottom = top + _panelHeight;
+        final connectorBottom = connectorTop + 10;
+        final regionBottom = panelBottom > connectorBottom
+            ? panelBottom
+            : connectorBottom;
+
+        return Positioned.fill(
+          child: Stack(
+            children: <Widget>[
+              Positioned(
+                left: left,
+                top: regionTop,
+                width: _panelWidth,
+                height: regionBottom - regionTop,
+                child: TapRegion(
+                  groupId: _tapGroup,
+                  behavior: HitTestBehavior.translucent,
+                  consumeOutsideTaps: false,
+                  onTapOutside: (_) => _close(),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: <Widget>[
+                      Positioned(
+                        left: 0,
+                        top: top - regionTop,
+                        width: _panelWidth,
+                        height: _panelHeight,
+                        child: Material(
+                          key: const Key('player-volume-popover'),
+                          elevation: 12,
+                          color: widget.colors.backgroundElevated,
+                          shadowColor: widget.colors.backgroundOverlay,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.all(
+                              Radius.circular(theme.tokens.radius.md),
+                            ),
+                            side: BorderSide(color: widget.colors.borderSubtle),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Listener(
+                            onPointerSignal: _onPointerSignal,
+                            child: _VolumePanel(
+                              value: _value,
+                              colors: widget.colors,
+                              onChanged: _onChanged,
+                              onChangeEnd: _onChangeEnd,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        top: connectorTop - regionTop,
+                        width: _panelWidth,
+                        child: IgnorePointer(
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: Transform.rotate(
+                              angle: 0.7853981633974483,
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                color: widget.colors.backgroundElevated,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      child: SizedBox(
+        width: PlayerBar.actionSize,
+        height: PlayerBar.actionSize,
+        child: TapRegion(
+          groupId: _tapGroup,
+          child: IconButton(
+            key: const Key('player-volume-button'),
+            tooltip: widget.tooltip,
+            onPressed: _toggle,
+            icon: ThemeIconView(
+              key: _anchorKey,
+              slot: ThemeIconKey.volume,
+              fallback: Icons.volume_up,
+              size: 22,
+              color: _controller.isShowing
+                  ? widget.colors.brandBase
+                  : widget.colors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The vertical volume popover shown above the bar's speaker icon.
+///
+/// The trigger already carries the speaker glyph, so the popover only needs
+/// the slider and the percentage readout that labels it.
+class _VolumePanel extends StatelessWidget {
+  const _VolumePanel({
+    required this.value,
+    required this.colors,
+    required this.onChanged,
+    required this.onChangeEnd,
   });
 
   final double value;
   final ThemeColors colors;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double> onChangeEnd;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        ThemeIconView(
-          slot: ThemeIconKey.volume,
-          fallback: Icons.volume_up,
-          size: 20,
-          color: colors.textSecondary,
-        ),
-        // Flexible so a narrow bar narrows the slider instead of overflowing
-        // its row: the volume control is the one part of the trailing group
-        // that has width to give.
-        Flexible(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 96),
-            child: Slider(
-              key: const Key('player-volume-slider'),
-              value: value,
-              min: 0,
-              max: 100,
-              activeColor: colors.brandBase,
-              inactiveColor: colors.textMuted,
-              onChanged: onChanged,
+    final theme = RobyneTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        children: <Widget>[
+          Expanded(
+            child: RotatedBox(
+              quarterTurns: 3,
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  activeTrackColor: colors.brandBase,
+                  inactiveTrackColor: colors.textMuted,
+                  thumbColor: colors.brandBase,
+                  overlayColor: colors.brandBase.withValues(
+                    alpha: colors.brandBase.a * 0.16,
+                  ),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 6,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 12,
+                  ),
+                ),
+                child: Slider(
+                  key: const Key('player-volume-slider'),
+                  value: value,
+                  min: 0,
+                  max: 100,
+                  onChanged: onChanged,
+                  onChangeEnd: onChangeEnd,
+                ),
+              ),
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          Text(
+            '${value.round()}%',
+            key: const Key('player-volume-percent'),
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: theme.tokens.typography.resolvedLabelSize,
+              fontWeight: FontWeight.w600,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

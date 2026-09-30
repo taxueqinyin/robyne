@@ -16,6 +16,7 @@ import '../features/playlists/infrastructure/playlist_repository.dart';
 import '../features/settings/application/settings_providers.dart';
 import '../features/settings/domain/user_settings.dart';
 import '../features/tray/application/tray_panel_controller.dart';
+import 'main_window_controller.dart';
 import 'navigation.dart';
 
 /// Owns the Windows tray icon and the QQ-Music-style panel that hangs off it.
@@ -43,7 +44,7 @@ void registerTrayRootContext(BuildContext context) {
   _trayRootContext = context;
 }
 
-class DesktopTrayController with TrayListener {
+class DesktopTrayController with TrayListener, WindowListener {
   DesktopTrayController(this._ref);
 
   /// The tray icon must be a real Windows `.ico`.
@@ -59,6 +60,7 @@ class DesktopTrayController with TrayListener {
   TrayPanelController? _panel;
   bool _initialized = false;
   bool _closing = false;
+  bool _handlingClose = false;
   Future<void>? _pendingShow;
 
   bool get _isSupported =>
@@ -97,10 +99,19 @@ class DesktopTrayController with TrayListener {
     }
     _initialized = true;
     _panel = TrayPanelController();
+    unawaited(_panel!.warmUp());
     unawaited(_initialize());
   }
 
   Future<void> _initialize() async {
+    try {
+      // `bootstrap` already holds the native close with `setPreventClose`;
+      // this listener is what turns that intercepted event into the shared
+      // tray decision below.
+      windowManager.addListener(this);
+    } catch (_) {
+      // The in-app title bar close button still works without the listener.
+    }
     try {
       trayManager.addListener(this);
       await trayManager.setIcon(_iconAsset);
@@ -157,6 +168,9 @@ class DesktopTrayController with TrayListener {
               _panel?.updatePanelSize(Size(width, height));
             }
           }
+          return true;
+        case TrayPanelController.hiddenMethod:
+          _panel?.markHidden();
           return true;
         default:
           return null;
@@ -238,8 +252,8 @@ class DesktopTrayController with TrayListener {
 
   @override
   void onTrayIconMouseDown() {
-    // Left click opens the app, matching the behaviour every media player
-    // trains users to expect from the tray icon.
+    // The Windows tray binding reports a left click through this callback.
+    // Left click restores the app; the panel belongs to the right click.
     unawaited(_restoreMainWindow());
   }
 
@@ -376,22 +390,39 @@ class DesktopTrayController with TrayListener {
     } catch (_) {}
   }
 
-  /// The close button's "hide to tray or exit?" decision.
-  Future<void> onWindowClose() async {
+  /// Native close entry points routed to the same decision as the title bar.
+  @override
+  void onWindowClose() {
+    if (_closing) {
+      return;
+    }
+    unawaited(onTitleBarClose());
+  }
+
+  /// The Flutter-drawn close button's configurable decision.
+  Future<void> onTitleBarClose() async {
     if (!_isSupported) {
       await _exitApplication();
       return;
     }
-    final settings =
-        _ref.read(settingsControllerProvider).value ??
-        await _ref.read(settingsRepositoryProvider).load();
-    switch (settings.trayCloseAction) {
-      case TrayCloseAction.minimizeToTray:
-        await _hideToTray();
-      case TrayCloseAction.exit:
-        await _exitApplication();
-      case TrayCloseAction.ask:
-        await _askCloseAction();
+    if (_handlingClose) {
+      return;
+    }
+    _handlingClose = true;
+    try {
+      final settings =
+          _ref.read(settingsControllerProvider).value ??
+          await _ref.read(settingsRepositoryProvider).load();
+      switch (settings.trayCloseAction) {
+        case TrayCloseAction.minimizeToTray:
+          await _hideToTray();
+        case TrayCloseAction.exit:
+          await _exitApplication();
+        case TrayCloseAction.ask:
+          await _askCloseAction();
+      }
+    } finally {
+      _handlingClose = false;
     }
   }
 
@@ -456,18 +487,26 @@ class DesktopTrayController with TrayListener {
       return;
     }
     _closing = true;
+    await _ref.read(mainWindowControllerProvider).persistNow();
     try {
       await _panel?.dispose();
       await trayManager.destroy();
     } catch (_) {}
     try {
-      await windowManager.destroy();
+      // The close is intercepted for the tray decision, so it has to be
+      // released before the programmatic close can reach WM_DESTROY.
+      // `destroy()` calls `PostQuitMessage` directly, while child Flutter
+      // windows are still attached to this message loop. Closing the
+      // top-level window lets Windows unwind each engine in the normal order.
+      await windowManager.setPreventClose(false);
+      await windowManager.close();
     } catch (_) {
       exit(0);
     }
   }
 
   Future<void> dispose() async {
+    windowManager.removeListener(this);
     trayManager.removeListener(this);
     try {
       await trayPanelControlChannel.setMethodCallHandler(null);

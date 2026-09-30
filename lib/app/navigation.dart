@@ -53,3 +53,99 @@ class SelectedTabNotifier extends Notifier<RobyneTab> {
     state = tab;
   }
 }
+
+/// The shell's browser-style history.
+///
+/// This deliberately lives beside the tab notifier instead of replacing it:
+/// the notifier stays the one source for the selected destination, while this
+/// small stack records enough state to drive the top-bar arrows. The playlist
+/// id is captured as an opaque part of a history entry; the playlist page
+/// remains the owner of what that id means.
+class NavigationSnapshot {
+  const NavigationSnapshot({required this.tab, this.playlistId});
+
+  final RobyneTab tab;
+  final String? playlistId;
+
+  @override
+  bool operator ==(Object other) {
+    return other is NavigationSnapshot &&
+        other.tab == tab &&
+        other.playlistId == playlistId;
+  }
+
+  @override
+  int get hashCode => Object.hash(tab, playlistId);
+}
+
+class NavigationHistoryState {
+  const NavigationHistoryState({
+    this.entries = const <NavigationSnapshot>[
+      NavigationSnapshot(tab: RobyneTab.discover),
+    ],
+    this.index = 0,
+  });
+
+  static const int capacity = 50;
+
+  final List<NavigationSnapshot> entries;
+  final int index;
+
+  NavigationSnapshot get current => entries[index];
+  bool get canGoBack => index > 0;
+  bool get canGoForward => index + 1 < entries.length;
+
+  NavigationHistoryState push(NavigationSnapshot snapshot) {
+    if (snapshot == current) {
+      return this;
+    }
+    final next = entries.take(index + 1).toList(growable: true)..add(snapshot);
+    final trimmed = next.length > capacity
+        ? next.sublist(next.length - capacity)
+        : next;
+    return NavigationHistoryState(
+      entries: List<NavigationSnapshot>.unmodifiable(trimmed),
+      index: trimmed.length - 1,
+    );
+  }
+
+  NavigationHistoryState back() {
+    return canGoBack
+        ? NavigationHistoryState(entries: entries, index: index - 1)
+        : this;
+  }
+
+  NavigationHistoryState forward() {
+    return canGoForward
+        ? NavigationHistoryState(entries: entries, index: index + 1)
+        : this;
+  }
+}
+
+final navigationHistoryProvider =
+    NotifierProvider<NavigationHistoryNotifier, NavigationHistoryState>(
+      NavigationHistoryNotifier.new,
+    );
+
+class NavigationHistoryNotifier extends Notifier<NavigationHistoryState> {
+  @override
+  NavigationHistoryState build() => const NavigationHistoryState();
+
+  void record({required RobyneTab tab, String? playlistId}) {
+    state = state.push(NavigationSnapshot(tab: tab, playlistId: playlistId));
+  }
+
+  void back() {
+    if (!state.canGoBack) {
+      return;
+    }
+    state = state.back();
+  }
+
+  void forward() {
+    if (!state.canGoForward) {
+      return;
+    }
+    state = state.forward();
+  }
+}
