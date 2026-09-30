@@ -37,9 +37,9 @@ through the Dart HTTP bridge.
 ## Verification Commands
 
 ```powershell
-$env:PATH='D:\data\project\robyne\build\windows\x64\runner\Debug;' + $env:PATH
+$env:PATH=(Join-Path $PWD 'build\windows\x64\runner\Debug') + ';' + $env:PATH
 $env:RUN_PLUGIN_SPIKE='true'
-$env:LIBQUICKJSC_TEST_PATH='D:\data\project\robyne\build\windows\x64\runner\Debug\quickjs_c_bridge_plugin.dll'
+$env:LIBQUICKJSC_TEST_PATH=(Join-Path $PWD 'build\windows\x64\runner\Debug\quickjs_c_bridge_plugin.dll')
 flutter test test\plugin_runtime_spike_test.dart --plain-name "loads metadata for every plugin fixture without invoking network methods"
 flutter test test\plugin_runtime_spike_test.dart --plain-name "reports search and media compatibility for music plugin fixtures"
 ```
