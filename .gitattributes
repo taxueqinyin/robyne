@@ -1,0 +1,6 @@
+# Flutter 自动生成的 Windows 构建文件：统一用 LF，避免 autocrlf
+# 在不同机器上反复产生无意义的 diff。
+windows/flutter/generated_* text eol=lf
+
+# 常规源码交给 git 处理。
+* text=auto
