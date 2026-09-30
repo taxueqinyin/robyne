@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../domain/theme_materials.dart';
 import '../domain/theme_tokens.dart';
 import 'theme_path_guard.dart';
 
@@ -42,9 +43,68 @@ class TokenPatcher {
         return _background(tokens, parts, value);
       case 'components':
         return _components(tokens, parts, value);
+      case 'materials':
+        return _materials(tokens, parts, value);
       default:
         return tokens;
     }
+  }
+
+  /// Knob targets for material scalars, e.g. `materials.card.blur`.
+  ///
+  /// Only numbers are patchable here. Colour and gradient already have homes
+  /// in `components`, and exposing structured paint recipes on a slider would
+  /// let a knob smuggle arbitrary data into the renderer.
+  ThemeTokens _materials(
+    ThemeTokens tokens,
+    List<String> parts,
+    Object value,
+  ) {
+    if (parts.length < 3) {
+      return tokens;
+    }
+    final number = _asDouble(value);
+    if (number == null) {
+      return tokens;
+    }
+    final surface = parts[1];
+    final name = parts[2];
+    final current = tokens.materials[surface];
+    if (current == null) {
+      return tokens;
+    }
+    final updated = switch (name) {
+      'opacity' => current.copyWith(opacity: number.clamp(0, 1).toDouble()),
+      'blur' => current.copyWith(blur: number.clamp(0, 200).toDouble()),
+      'saturation' => current.copyWith(
+        saturation: number.clamp(0, 4).toDouble(),
+      ),
+      'brightness' => current.copyWith(
+        brightness: number.clamp(0, 4).toDouble(),
+      ),
+      'contrast' => current.copyWith(contrast: number.clamp(0, 4).toDouble()),
+      'grayscale' => current.copyWith(grayscale: number.clamp(0, 1).toDouble()),
+      'radius' => current.copyWith(radius: number.clamp(0, 4096).toDouble()),
+      _ => current,
+    };
+    return tokens.copyWith(materials: _replaceSurface(tokens.materials, surface, updated));
+  }
+
+  static ThemeMaterials _replaceSurface(
+    ThemeMaterials materials,
+    String surface,
+    ThemeMaterial material,
+  ) {
+    return switch (surface) {
+      'navBar' => materials.copyWith(navBar: material),
+      'topBar' => materials.copyWith(topBar: material),
+      'playerBar' => materials.copyWith(playerBar: material),
+      'queue' => materials.copyWith(queue: material),
+      'card' => materials.copyWith(card: material),
+      'content' => materials.copyWith(content: material),
+      'hero' => materials.copyWith(hero: material),
+      _ => materials,
+    };
   }
 
   /// Knob targets for component tokens, e.g. `components.lyric.activeLine`.

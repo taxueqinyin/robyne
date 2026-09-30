@@ -8,12 +8,14 @@ import '../../../core/layout/window_size_class.dart';
 import '../../../core/theme/application/theme_providers.dart';
 import '../../../core/theme/domain/theme_regions.dart';
 import '../../../core/theme/domain/theme_icons.dart';
+import '../../../core/theme/domain/theme_materials.dart';
 import '../../../core/theme/domain/theme_tokens.dart';
 import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/domain/theme_home.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
 import '../../../core/theme/presentation/theme_icon.dart';
 import '../../../core/theme/presentation/theme_asset_image.dart';
+import '../../../core/theme/presentation/theme_material.dart';
 import '../../player/presentation/artwork_view.dart';
 import '../../library/application/library_providers.dart';
 import '../../player/application/player_providers.dart';
@@ -683,24 +685,34 @@ class _HeroBanner extends ConsumerWidget {
     // less room than the wide board. Reflowing the copy beside the cover
     // avoids the copy column overflowing the fixed 176dp banner.
     final compactHero = sizeClass.width != WindowWidthClass.expanded;
+    final heroMaterial = tokens.materials.hero;
+    final heroRadius = BorderRadius.circular(tokens.radius.lg);
+    final effectiveHero = heroMaterial.isTransparent
+        ? heroMaterial.copyWith(
+            gradient: ThemeGradient(
+              stops: <ThemeGradientStop>[
+                ThemeGradientStop(color: colors.brandBase, offset: 0),
+                ThemeGradientStop(
+                  color: colors.brandBase.withValues(alpha: 0.72),
+                  offset: 0.5,
+                ),
+                ThemeGradientStop(color: colors.surfaceSelected, offset: 1),
+              ],
+              begin: ThemePoint.centerLeft,
+              end: ThemePoint.centerRight,
+            ),
+            radius: tokens.radius.lg,
+          )
+        : heroMaterial.copyWith(radius: heroMaterial.radius ?? tokens.radius.lg);
     return Padding(
       padding: const EdgeInsets.fromLTRB(28, 20, 28, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: <Color>[
-                  colors.brandBase,
-                  colors.brandBase.withValues(alpha: 0.72),
-                  colors.surfaceSelected,
-                ],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-              ),
-              borderRadius: BorderRadius.circular(tokens.radius.lg),
-            ),
+          MaterialSurface(
+            material: effectiveHero,
+            tokens: tokens,
+            borderRadius: heroRadius,
             child: SizedBox(
               height: 176,
               child: compactHero

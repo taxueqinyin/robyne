@@ -4,13 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/layout/window_size_class.dart';
 import '../../../core/errors/app_error.dart';
-import '../../../core/theme/domain/theme_components.dart';
+import '../../../core/theme/domain/theme_materials.dart';
 import '../../../core/theme/application/theme_providers.dart';
 import '../../../core/theme/domain/theme_icons.dart';
 import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/domain/theme_tokens.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
 import '../../../core/theme/presentation/theme_icon.dart';
+import '../../../core/theme/presentation/theme_material.dart';
 import '../../downloads/application/download_providers.dart';
 import '../../playlists/application/playlist_providers.dart';
 import '../../playlists/infrastructure/playlist_repository.dart';
@@ -143,6 +144,8 @@ class PlayerBar extends ConsumerWidget {
     final miniBar = _PlayerSurface(
       colors: colors,
       gradient: comp.gradient,
+      material: tokens.materials.playerBar,
+      tokens: tokens,
       height: 52,
       radius: compactRadius,
       margin: compactMargin,
@@ -291,6 +294,8 @@ class PlayerBar extends ConsumerWidget {
         return _PlayerSurface(
           colors: colors,
           gradient: comp.gradient,
+          material: tokens.materials.playerBar,
+          tokens: tokens,
           height: 92,
           radius: fullRadius,
           margin: fullMargin,
@@ -530,6 +535,8 @@ class _PlayerSurface extends StatelessWidget {
   const _PlayerSurface({
     required this.colors,
     required this.gradient,
+    required this.material,
+    required this.tokens,
     required this.height,
     required this.child,
     this.radius = 0,
@@ -538,6 +545,8 @@ class _PlayerSurface extends StatelessWidget {
 
   final ThemeColors colors;
   final ThemeGradient gradient;
+  final ThemeMaterial material;
+  final ThemeTokens tokens;
   final double height;
   final Widget child;
 
@@ -551,20 +560,20 @@ class _PlayerSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final borderRadius = BorderRadius.all(Radius.circular(radius));
-    final decoration = BoxDecoration(
-      color: gradient.isEmpty ? colors.backgroundElevated : null,
-      gradient: gradient.isEmpty
-          ? null
-          : LinearGradient(
-              colors: <Color>[for (final stop in gradient.stops) stop.color],
-              stops: <double>[for (final stop in gradient.stops) stop.offset],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-      borderRadius: borderRadius,
-      border: radius > 0
-          ? Border.all(color: colors.borderSubtle)
-          : const Border.fromBorderSide(BorderSide.none),
+    // A material owns the surface whenever it declares anything. Otherwise
+    // the component gradient/colour paints exactly as it always has.
+    final resolved = resolveSurfaceMaterial(
+      material: material,
+      tokens: tokens,
+      fallbackColor: gradient.isEmpty ? colors.backgroundElevated : null,
+      fallbackGradient: gradient,
+      fallbackRadius: radius,
+    );
+    final effectiveMaterial = resolved.copyWith(
+      border: resolved.border ??
+          (radius > 0
+              ? ThemeMaterialBorder(color: colors.borderSubtle)
+              : null),
     );
     // When the shell supplies a height from the skin's ratio, honour exactly
     // that; otherwise fall back to the intrinsic height. Reading the incoming
@@ -580,13 +589,15 @@ class _PlayerSurface extends StatelessWidget {
           child: SizedBox(
             height: constrained < 0 ? 0 : constrained,
             width: constraints.hasBoundedWidth ? constraints.maxWidth : null,
-            child: DecoratedBox(
-              decoration: decoration,
+            child: MaterialSurface(
+              material: effectiveMaterial,
+              tokens: tokens,
+              borderRadius: borderRadius,
               // The plan's height is exact, so rounding can leave a fraction
               // of a pixel over budget. Clipping is the honest fix: the card
               // decoration is what yields, the transport row must stay
               // visible.
-              child: ClipRRect(borderRadius: borderRadius, child: child),
+              child: child,
             ),
           ),
         );

@@ -4,6 +4,7 @@ import '../domain/theme_components.dart';
 import '../domain/theme_icons.dart';
 import '../domain/theme_home.dart';
 import '../domain/theme_layout.dart';
+import '../domain/theme_materials.dart';
 import '../domain/theme_navigation.dart';
 import '../domain/theme_package.dart';
 import '../domain/theme_regions.dart';
@@ -114,6 +115,7 @@ class ThemeManifestParser {
     final effectsRaw = raw['effects'];
     final backgroundRaw = raw['background'];
     final componentsRaw = raw['components'];
+    final materialsRaw = raw['materials'];
 
     return baseline.copyWith(
       color: _colors(colorRaw is Map ? colorRaw : null),
@@ -124,8 +126,147 @@ class ThemeManifestParser {
       effects: _effects(effectsRaw is Map ? effectsRaw : null),
       background: _background(backgroundRaw is Map ? backgroundRaw : null),
       components: _components(componentsRaw is Map ? componentsRaw : null),
+      // `materials` may be declared on its own or nested inside `components`;
+      // both spellings land in the same model so an author can keep one
+      // vocabulary per file.
+      materials: _materials(
+        materialsRaw is Map
+            ? materialsRaw
+            : (componentsRaw is Map && componentsRaw['materials'] is Map
+                  ? componentsRaw['materials'] as Map
+                  : null),
+      ),
     );
   }
+
+  // ---------------------------------------------------------------------
+  // Materials
+  // ---------------------------------------------------------------------
+
+  /// Parses the `materials` block (or `components.materials`).
+  ///
+  /// Each surface is parsed from its own baseline, so a skin that declares
+  /// only `materials.card.blur` leaves every other surface untouched.
+  static ThemeMaterials _materials(Map? raw) {
+    const baseline = ThemeMaterials.baseline();
+    if (raw == null) {
+      return baseline;
+    }
+    ThemeMaterial? group(String name) {
+      final entry = raw[name];
+      return entry is Map ? _material(entry) : null;
+    }
+
+    return baseline.copyWith(
+      navBar: group('navBar'),
+      topBar: group('topBar'),
+      playerBar: group('playerBar'),
+      queue: group('queue'),
+      card: group('card'),
+      content: group('content'),
+      hero: group('hero'),
+    );
+  }
+
+  /// Parses one [ThemeMaterial].
+  ///
+  /// Everything is optional; anything malformed is dropped rather than
+  /// rejected, and anything numeric is clamped so a hostile manifest cannot
+  /// ask Skia for a million-pixel blur.
+  static ThemeMaterial _material(Map raw) {
+    final gradient = raw['gradient'];
+    final overlayRaw = raw['overlay'];
+    final borderRaw = raw['border'];
+    final shimmerRaw = raw['shimmer'];
+    final shadowsRaw = raw['shadows'];
+
+    final shadows = <ThemeShadow>[];
+    if (shadowsRaw is List) {
+      for (final entry in shadowsRaw.take(_maxShadows)) {
+        if (entry is Map) {
+          final shadow = _shadow(entry);
+          if (shadow != null) {
+            shadows.add(shadow);
+          }
+        }
+      }
+    }
+
+    return ThemeMaterial(
+      color: _color(raw['color']),
+      gradient: _gradient(gradient),
+      opacity: _doubleRangedOrNull(raw['opacity'], 0, 1) ?? 1,
+      blur: _doubleRangedOrNull(raw['blur'], 0, _maxBlur) ?? 0,
+      saturation:
+          _doubleRangedOrNull(raw['saturation'], 0, _maxSaturation) ?? 1,
+      brightness:
+          _doubleRangedOrNull(raw['brightness'], 0, _maxColorScale) ?? 1,
+      contrast: _doubleRangedOrNull(raw['contrast'], 0, _maxColorScale) ?? 1,
+      grayscale: _doubleRangedOrNull(raw['grayscale'], 0, 1) ?? 0,
+      blend: ThemeBlendMode.fromName(_string(raw['blend'])),
+      overlay: overlayRaw is Map ? _materialOverlay(overlayRaw) : null,
+      border: borderRaw is Map ? _materialBorder(borderRaw) : null,
+      radius: _doubleRangedOrNull(raw['radius'], 0, 4096),
+      shadows: List<ThemeShadow>.unmodifiable(shadows),
+      shimmer: shimmerRaw is Map ? _shimmer(shimmerRaw) : null,
+    );
+  }
+
+  static ThemeMaterialOverlay _materialOverlay(Map raw) {
+    return ThemeMaterialOverlay(
+      color: _color(raw['color']),
+      gradient: _gradient(raw['gradient']),
+      blend: ThemeBlendMode.fromName(_string(raw['blend'])),
+      opacity: _doubleRangedOrNull(raw['opacity'], 0, 1) ?? 1,
+    );
+  }
+
+  static ThemeMaterialBorder? _materialBorder(Map raw) {
+    final color = _color(raw['color']);
+    if (color == null) {
+      return null;
+    }
+    return ThemeMaterialBorder(
+      color: color,
+      width: _doubleRangedOrNull(raw['width'], 0, 16) ?? 1,
+    );
+  }
+
+  static ThemeShadow? _shadow(Map raw) {
+    final color = _color(raw['color']);
+    if (color == null) {
+      return null;
+    }
+    return ThemeShadow(
+      color: color,
+      blur: _doubleRangedOrNull(raw['blur'], 0, _maxBlur) ?? 0,
+      spread: _doubleRangedOrNull(raw['spread'], 0, _maxBlur) ?? 0,
+      dx: _doubleRangedOrNull(raw['dx'], -_maxOffset, _maxOffset) ?? 0,
+      dy: _doubleRangedOrNull(raw['dy'], -_maxOffset, _maxOffset) ?? 0,
+    );
+  }
+
+  static ThemeShimmer? _shimmer(Map raw) {
+    final color = _color(raw['color']);
+    if (color == null) {
+      return null;
+    }
+    return ThemeShimmer(
+      color: color,
+      width: _doubleRangedOrNull(raw['width'], 0.01, 4) ?? 0.35,
+      angle:
+          _doubleRangedOrNull(raw['angle'], -360, 360) ?? -20,
+      periodMs: _intRangedOrNull(raw['periodMs'], 200, 20000) ?? 2400,
+      blend: ThemeBlendMode.fromName(_string(raw['blend'])),
+      opacity: _doubleRangedOrNull(raw['opacity'], 0, 1) ?? 0.5,
+    );
+  }
+
+  static const int _maxShadows = 8;
+  static const double _maxBlur = 200;
+  static const double _maxSaturation = 4;
+  static const double _maxColorScale = 4;
+  static const double _maxOffset = 512;
 
   static ThemeComponents _components(Map? raw) {
     const baseline = ThemeComponents.baseline();
@@ -187,6 +328,25 @@ class ThemeManifestParser {
       return null;
     }
     const base = ThemeAmbientComponents.baseline();
+    final lightsRaw = raw['lights'];
+    final lights = <ThemeAmbientLight>[];
+    if (lightsRaw is List) {
+      for (final entry in lightsRaw.take(_maxAmbientLights)) {
+        if (entry is! Map) {
+          continue;
+        }
+        lights.add(
+          ThemeAmbientLight(
+            color: _color(entry['color']),
+            anchor: ThemePoint.tryParse(entry['anchor']) ?? ThemePoint.topLeft,
+            radius: _doubleRangedOrNull(entry['radius'], 0.05, 4) ?? 0.9,
+            strength: _doubleRangedOrNull(entry['strength'], 0, 0.8) ?? 0.35,
+            blur: _doubleRangedOrNull(entry['blur'], 0, _maxBlur) ?? 60,
+            blend: ThemeBlendMode.fromName(_string(entry['blend'])),
+          ),
+        );
+      }
+    }
     return base.copyWith(
       // `_bool` also accepts "true"/"false" strings, which is what a hand
       // edited manifest is most likely to contain.
@@ -195,8 +355,13 @@ class ThemeManifestParser {
       heightFraction: _doubleRangedOrNull(raw['heightFraction'], 0.05, 1),
       blur: _doubleRangedOrNull(raw['blur'], 0, 200),
       color: _color(raw['color']),
+      driftSeconds: _doubleRangedOrNull(raw['driftSeconds'], 0, 600) ?? 0,
+      lights: List<ThemeAmbientLight>.unmodifiable(lights),
     );
   }
+
+  /// Caps how many ambient light sources may paint per frame.
+  static const int _maxAmbientLights = 6;
 
   /// Builds each component group from its own baseline, so a partial group
   /// keeps every field the skin did not mention.
@@ -288,41 +453,123 @@ class ThemeManifestParser {
 
   /// Accepts either a colour literal or a list of stops.
   ///
-  /// A single colour is the common case and is cheaper to author; stops are
-  /// for skins that want a real gradient.
+  /// Four spellings are accepted, all landing in one model:
+  ///
+  /// ```jsonc
+  /// "gradient": "#FF0000"                       // flat colour
+  /// "gradient": ["#FF0000", "#00FF00"]          // even stops
+  /// "gradient": [{ "color": "#FF0000", "offset": 0 }, ...]
+  /// "gradient": { "kind": "radial", "stops": [ ... ], "center": [0.5, 0.3] }
+  /// ```
+  ///
+  /// The last form is the full one and is where every effect lives: gradient
+  /// kind, direction, radial centre/radius, sweep angles and shader tiling.
   static ThemeGradient _gradient(Object? raw) {
     if (raw == null) {
       return ThemeGradient.none;
+    }
+    if (raw is Map) {
+      return _structuredGradient(raw);
     }
     if (raw is! List) {
       final solid = _color(raw);
       return solid == null ? ThemeGradient.none : ThemeGradient.solid(solid);
     }
+    final stops = _gradientStops(raw);
+    if (stops == null || stops.isEmpty) {
+      return ThemeGradient.none;
+    }
+    return ThemeGradient(stops: stops);
+  }
+
+  /// Parses the object spelling of a gradient.
+  ///
+  /// Both `stops` and `colors` are accepted, so a skin that predates the
+  /// object form — 《玄》declares `gradient: { "stops": [...] }` — keeps its
+  /// gradient rather than silently degrading to "no fill".
+  static ThemeGradient _structuredGradient(Map raw) {
+    final stopsRaw = raw['stops'] ?? raw['colors'];
+    final stops = stopsRaw == null ? null : _gradientStops(stopsRaw);
+    if (stops == null || stops.isEmpty) {
+      return ThemeGradient.none;
+    }
+    final begin = ThemePoint.tryParse(raw['begin']);
+    final end = ThemePoint.tryParse(raw['end']);
+    final center = ThemePoint.tryParse(raw['center']);
+    final radius = _doubleRangedOrNull(raw['radius'], 0, 8);
+    final startAngle = _doubleRangedOrNull(raw['startAngle'], -3600, 3600);
+    final endAngle = _doubleRangedOrNull(raw['endAngle'], -3600, 3600);
+    return ThemeGradient(
+      stops: stops,
+      kind: ThemeGradientKind.fromName(_string(raw['kind'])),
+      begin: begin ?? ThemePoint.topLeft,
+      end: end ?? ThemePoint.bottomRight,
+      center: center ?? ThemePoint.center,
+      radius: radius ?? 0.5,
+      startAngle: startAngle ?? 0,
+      endAngle: endAngle ?? 360,
+      tile: ThemeGradientTile.fromName(_string(raw['tile'])),
+    );
+  }
+
+  /// Parses any stop list: plain colours, `{color, offset}` maps, or a mix.
+  ///
+  /// Mixing is allowed on purpose — an author adding one positioned stop to a
+  /// few plain ones should not have to rewrite the whole list.
+  static List<ThemeGradientStop>? _gradientStops(Object? raw) {
+    if (raw is! List) {
+      return null;
+    }
     final stops = <ThemeGradientStop>[];
+    final plainCount = raw
+        .where((entry) => entry is! Map && entry is String && _color(entry) != null)
+        .length;
+    var plainIndex = 0;
     for (final entry in raw.take(_maxGradientStops)) {
-      if (entry is! Map) {
+      if (entry is Map) {
+        final color = _color(entry['color']);
+        if (color == null) {
+          continue;
+        }
+        // Offsets outside 0..1 make Skia drop the whole frame, so they are
+        // clamped rather than trusted.
+        final offset =
+            _ranged(
+              entry['offset'] ?? entry['stop'] ?? entry['position'],
+              0,
+              1,
+            ) ??
+            0;
+        stops.add(ThemeGradientStop(color: color, offset: offset));
         continue;
       }
-      final color = _color(entry['color']);
+      // A bare number is *not* a colour here: `[{"color": ...}, 42]` is a
+      // malformed stop list and must degrade to "no gradient", which is the
+      // contract the old parser had. Numeric colour literals stay available
+      // inside a stop map, where the intent is explicit.
+      final color = entry is String ? _color(entry) : null;
       if (color == null) {
         continue;
       }
-      // Offsets outside 0..1 make Skia drop the whole frame, so they are
-      // clamped rather than trusted.
-      final offset = _ranged(entry['offset'] ?? entry['stop'], 0, 1) ?? 0;
+      // Even distribution across the plain entries, so
+      // `["#a", "#b", "#c"]` spreads them rather than stacking them at 0.
+      final offset = plainCount <= 1
+          ? 0.0
+          : plainIndex / (plainCount - 1);
+      plainIndex += 1;
       stops.add(ThemeGradientStop(color: color, offset: offset));
     }
     if (stops.isEmpty) {
-      return ThemeGradient.none;
+      return stops;
     }
     // A gradient with one stop is just a colour; keep it sortable so the
     // renderer can always assume ascending offsets.
     stops.sort((a, b) => a.offset.compareTo(b.offset));
-    return ThemeGradient(stops: stops);
+    return stops;
   }
 
   /// Caps the work a hostile manifest can create in the gradient painter.
-  static const int _maxGradientStops = 8;
+  static const int _maxGradientStops = ThemeGradient.maxStops;
 
   /// Like [_ranged] but yields `null` when absent, so a partial group keeps
   /// the baseline for fields the skin did not mention.
@@ -588,13 +835,47 @@ class ThemeManifestParser {
       return baseline;
     }
     final opacity = _ranged(raw['overlayOpacity'], 0, 1);
+    final layersRaw = raw['layers'];
+    final layers = <ThemeBackgroundLayer>[];
+    if (layersRaw is List) {
+      for (final entry in layersRaw.take(_maxBackgroundLayers)) {
+        if (entry is! Map) {
+          continue;
+        }
+        final layer = ThemeBackgroundLayer(
+          color: _color(entry['color']),
+          gradient: _gradient(entry['gradient']),
+          blend: ThemeBlendMode.fromName(_string(entry['blend'])),
+          opacity: _doubleRangedOrNull(entry['opacity'], 0, 1) ?? 1,
+        );
+        if (!layer.isEmpty) {
+          layers.add(layer);
+        }
+      }
+    }
     return baseline.copyWith(
       image: ThemePathGuard.sanitizeAsset(_bounded(raw['image'], 256)),
       fillMode: ThemeBackgroundFillMode.fromName(_string(raw['fillMode'])),
       overlay: _color(raw['overlay']),
       overlayOpacity: opacity,
+      blur: _doubleRangedOrNull(raw['blur'], 0, _maxBlur) ?? 0,
+      saturation: _doubleRangedOrNull(raw['saturation'], 0, _maxSaturation) ?? 1,
+      brightness:
+          _doubleRangedOrNull(raw['brightness'], 0, _maxColorScale) ?? 1,
+      contrast: _doubleRangedOrNull(raw['contrast'], 0, _maxColorScale) ?? 1,
+      grayscale: _doubleRangedOrNull(raw['grayscale'], 0, 1) ?? 0,
+      scale: _doubleRangedOrNull(raw['scale'], 1, 4) ?? 1,
+      overlayGradient: _gradient(raw['overlayGradient']),
+      overlayBlend: ThemeBlendMode.fromName(_string(raw['overlayBlend'])),
+      layers: List<ThemeBackgroundLayer>.unmodifiable(layers),
     );
   }
+
+  /// Caps how many compositing layers a background may declare.
+  ///
+  /// Each layer is one extra raster pass over the whole window, so this is a
+  /// frame-time guard, not an arbitrary taste limit.
+  static const int _maxBackgroundLayers = 8;
 
   static ThemeAssets _assets(Map? raw, {String? iconFontFamily}) {
     const baseline = ThemeAssets.empty();

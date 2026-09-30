@@ -88,6 +88,92 @@
       "blur": 24,
       "glassOpacity": 0.84
     },
+    "materials": {
+      "navBar": {
+        "color": "#E6101214",
+        "blur": 28,
+        "saturation": 1.15,
+        "border": { "color": "#16FFFFFF", "width": 1 },
+        "shadows": [
+          { "color": "#59000000", "blur": 28, "dx": 6, "dy": 0 }
+        ]
+      },
+      "topBar": {
+        "color": "#D9101214",
+        "blur": 24,
+        "saturation": 1.1,
+        "border": { "color": "#12FFFFFF", "width": 1 }
+      },
+      "playerBar": {
+        "gradient": {
+          "kind": "linear",
+          "begin": "topLeft",
+          "end": "bottomRight",
+          "stops": [
+            { "color": "#F216181B", "offset": 0 },
+            { "color": "#E60D0E10", "offset": 1 }
+          ]
+        },
+        "blur": 20,
+        "saturation": 1.1,
+        "border": { "color": "#1AFFFFFF", "width": 1 },
+        "shadows": [
+          { "color": "#66000000", "blur": 34, "dy": -6 },
+          { "color": "#33FF6B3D", "blur": 46, "spread": 1 }
+        ]
+      },
+      "queue": {
+        "color": "#F2111214",
+        "blur": 24,
+        "saturation": 1.05
+      },
+      "card": {
+        "color": "#E6151618",
+        "blur": 14,
+        "saturation": 1.08,
+        "border": { "color": "#12FFFFFF", "width": 1 },
+        "shadows": [
+          { "color": "#40000000", "blur": 20, "dy": 8 }
+        ]
+      },
+      "content": {},
+      "hero": {
+        "gradient": {
+          "kind": "linear",
+          "begin": "centerLeft",
+          "end": "centerRight",
+          "stops": [
+            { "color": "#FF6B3D", "offset": 0 },
+            { "color": "#B33F2B", "offset": 0.55 },
+            { "color": "#1F2E2A", "offset": 1 }
+          ]
+        },
+        "overlay": {
+          "gradient": {
+            "kind": "radial",
+            "center": [0.82, 0.25],
+            "radius": 0.9,
+            "stops": [
+              { "color": "#59FFD9C2", "offset": 0 },
+              { "color": "#00FFD9C2", "offset": 1 }
+            ]
+          },
+          "blend": "screen",
+          "opacity": 0.75
+        },
+        "shadows": [
+          { "color": "#59FF6B3D", "blur": 44, "spread": -6 }
+        ],
+        "shimmer": {
+          "color": "#4DFFFFFF",
+          "width": 0.18,
+          "angle": -22,
+          "periodMs": 5200,
+          "blend": "plus",
+          "opacity": 0.4
+        }
+      }
+    },
     "background": {
       "image": null,
       "fillMode": "cover",
@@ -141,9 +227,15 @@
       },
       "ambient": {
         "enabled": true,
-        "strength": 0.28,
-        "heightFraction": 0.32,
-        "blur": 48
+        "strength": 0.3,
+        "heightFraction": 0.42,
+        "blur": 64,
+        "driftSeconds": 24,
+        "lights": [
+          { "anchor": "topLeft", "radius": 1.1, "strength": 0.3, "blur": 80 },
+          { "anchor": "topRight", "radius": 0.9, "strength": 0.22, "blur": 70 },
+          { "anchor": "center", "radius": 1.4, "strength": 0.14, "blur": 90 }
+        ]
       },
       "content": {
         "gutter": 28,

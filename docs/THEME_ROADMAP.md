@@ -714,6 +714,48 @@ MusicFree 的失败点（`THEME_LAYER_DESIGN.md:17` 已记录）正是：`.l-sid
 
 ---
 
+### 2026-09-30 材质层落地（磨砂 / 混色 / 渐变三形态 / 光晕 / 流光）
+
+**动机**：皮肤此前能换色换形，但换不了"质感"。`ThemeGradient` 只有线性且方向写死在
+渲染代码里；效果 token 只有两个全局标量，`effects.glassOpacity` 全项目无人消费；
+没有任何 `BlendMode`。结果是所有皮肤都停在"平面色块"。
+
+**做法**：把"效果"升格为一等公民，新增 `tokens.materials` 模块与
+`MaterialSurface` 渲染件，七个真实表面接入：`navBar` / `topBar` / `playerBar` /
+`queue` / `card` / `content` / `hero`。
+
+落地内容：
+
+1. **渐变三形态**：`linear` / `radial` / `sweep`，带方向、径向中心与半径、
+   扫掠角度、shader 铺贴（clamp / repeat / mirror / decal）。旧写法
+   （字符串、色标数组、`{stops: [...]}`）全部继续可用。
+   **顺带修掉一个静默缺陷**：`{ "stops": [...] }` 这种写法此前解析器不认，
+   《玄》里写的导航渐变被吞掉、实际渲染为无渐变。现在它是正式语法。
+2. **材质字段**：`color` / `gradient` / `opacity` / `blur` / `saturation` /
+   `brightness` / `contrast` / `grayscale` / `blend` / `overlay`（第二层混色）/
+   `border` / `radius` / `shadows`（光晕与投影）/ `shimmer`（流光）。
+3. **18 种混色模式**（`multiply` / `screen` / `softLight` / `color` / `plus` …）。
+4. **背景层升级**：全屏背景图可模糊、调色、缩放，支持渐变遮罩与最多 8 层任意
+   混色叠加——这是"照片当壁纸"能用的前提。
+5. **氛围层升级**：单条光带升级为最多 6 个柔光源，带可选漂移动画；`lights` 为空时
+   完全沿用旧行为。
+6. **旧 token 接活**：`effects.blur` / `effects.glassOpacity` 现在是材质的兼容
+   回退路径（只在壳层生效，避免卡片网格静默获得几十个 backdrop filter）。
+7. **旋钮扩展**：`materials.<surface>.<scalar>` 可作为用户旋钮目标。
+
+**护栏沿用既有原则**：一切数值 clamp、未知值忽略、声明为空时不改变渲染树与开销、
+流光与漂移默认关闭。装饰动画受 `MediaQuery.disableAnimations` 门控（减弱动态效果
+时停用，材质照常绘制）。
+
+**测试基线**：`flutter test` → **459 passed, 9 skipped**（2026-09-30 复核）。
+本轮新增 `theme_material_test.dart`（24 条：三形态渐变、材质字段、越界收敛、
+背景调色、多光源、旋钮、渲染断言、旗舰皮肤防回归）与
+`theme_motion_gate_test.dart`（2 条：减弱动态效果、静止仍绘制）。
+`theme_material_preview_test.dart` 是可选预览（`ROBYNE_PREVIEW=1` 时导出
+`build/shots/materials-preview.png`），默认跳过。
+
+---
+
 ### 2026-09-28 六项功能落地
 
 - **收藏歌单**：新增 `FavoriteCollections` 表（schema v2，带 `onUpgrade`）与

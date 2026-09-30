@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../theme/application/theme_providers.dart';
+import '../../theme/domain/theme_components.dart';
+import '../../theme/domain/theme_materials.dart';
 import '../../theme/infrastructure/token_resolver.dart';
+import 'theme_material.dart';
 
 /// The dominant colour of the artwork currently playing.
 ///
@@ -143,6 +147,24 @@ class ThemeAmbient extends ConsumerWidget {
     // the brand, so it outranks whatever the cover happens to be.
     final wash = ambient.color ?? derived ?? colors.brandBase;
 
+    if (ambient.lights.isNotEmpty) {
+      return Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          Positioned.fill(
+            child: IgnorePointer(
+              child: _AmbientLights(
+                lights: ambient.lights,
+                fallback: wash,
+                driftSeconds: ambient.driftSeconds,
+              ),
+            ),
+          ),
+          child,
+        ],
+      );
+    }
+
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
@@ -189,5 +211,183 @@ class ThemeAmbient extends ConsumerWidget {
         child,
       ],
     );
+  }
+}
+
+/// Paints the ambient layer as a set of soft light sources.
+///
+/// Each light is a radial gradient placed at its anchor, optionally drifting
+/// in a slow ellipse when the skin asks for motion. Drift is what separates
+/// "a coloured rectangle" from "light": the eye reads a moving highlight as a
+/// volume even when the colour is identical, and a still one reads as paint.
+///
+/// The ticker is created only for skins that declare `driftSeconds > 0`, so a
+/// static skin pays nothing.
+class _AmbientLights extends StatefulWidget {
+  const _AmbientLights({
+    required this.lights,
+    required this.fallback,
+    required this.driftSeconds,
+  });
+
+  final List<ThemeAmbientLight> lights;
+
+  /// Colour used by lights that follow the artwork.
+  final Color fallback;
+
+  final double driftSeconds;
+
+  @override
+  State<_AmbientLights> createState() => _AmbientLightsState();
+}
+
+class _AmbientLightsState extends State<_AmbientLights>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void didUpdateWidget(_AmbientLights oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.driftSeconds != widget.driftSeconds &&
+        widget.driftSeconds <= 0) {
+      _disposeController();
+    }
+  }
+
+  void _disposeController() {
+    _controller?.dispose();
+    _controller = null;
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Drift is decoration. Reduce-motion users and stepped test frames get
+    // the same lights, held still, instead of an endless ticker that never
+    // lets the shell settle.
+    final canAnimate = widget.driftSeconds > 0 && themeMotionAllowed(context);
+    if (!canAnimate) {
+      if (_controller != null) {
+        _disposeController();
+      }
+      return CustomPaint(
+        painter: _AmbientLightPainter(
+          lights: widget.lights,
+          fallback: widget.fallback,
+          phase: 0,
+        ),
+      );
+    }
+    final duration = Duration(
+      milliseconds: (widget.driftSeconds * 1000).round(),
+    );
+    var controller = _controller;
+    if (controller == null) {
+      controller = AnimationController(vsync: this, duration: duration);
+      _controller = controller;
+    } else {
+      controller.duration = duration;
+    }
+    if (!controller.isAnimating) {
+      controller.repeat();
+    }
+    final active = controller;
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: active,
+        builder: (context, _) {
+          return CustomPaint(
+            painter: _AmbientLightPainter(
+              lights: widget.lights,
+              fallback: widget.fallback,
+              phase: active.value,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _AmbientLightPainter extends CustomPainter {
+  const _AmbientLightPainter({
+    required this.lights,
+    required this.fallback,
+    required this.phase,
+  });
+
+  final List<ThemeAmbientLight> lights;
+  final Color fallback;
+
+  /// 0..1 through one drift cycle.
+  final double phase;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) {
+      return;
+    }
+    final rect = Offset.zero & size;
+    final longest = size.longestSide;
+    for (var index = 0; index < lights.length; index += 1) {
+      final light = lights[index];
+      final color = light.color ?? fallback;
+      final opacity = light.strength.clamp(0.0, 1.0);
+      if (opacity <= 0 || color.a <= 0) {
+        continue;
+      }
+      final anchor = _drift(light.anchor, index, phase);
+      final center = Offset(
+        rect.center.dx + anchor.x * size.width / 2,
+        rect.center.dy + anchor.y * size.height / 2,
+      );
+      final radius = (longest * light.radius.clamp(0.05, 4)).clamp(1.0, 8192.0);
+      final paint = Paint()
+        ..blendMode = materialBlendMode(light.blend)
+        ..shader = ui.Gradient.radial(
+          center,
+          radius,
+          <Color>[
+            color.withValues(alpha: color.a * opacity),
+            color.withValues(alpha: 0),
+          ],
+          const <double>[0, 1],
+          ui.TileMode.clamp,
+        );
+      canvas.drawRect(rect, paint);
+    }
+  }
+
+  /// Applies the drift cycle to one light's anchor.
+  ///
+  /// [index] shifts each light's phase so a multi-light skin never pulses in
+  /// lockstep, which would read as a global flash rather than as light.
+  ThemePoint _drift(ThemePoint anchor, int index, double phase) {
+    if (phase == 0) {
+      return anchor;
+    }
+    final shifted = (phase + index * 0.37) % 1.0;
+    final angle = shifted * 2 * math.pi;
+    return ThemePoint(
+      anchor.x + math.cos(angle) * 0.06,
+      anchor.y + math.sin(angle) * 0.06,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_AmbientLightPainter oldDelegate) {
+    return oldDelegate.phase != phase ||
+        oldDelegate.lights != lights ||
+        oldDelegate.fallback != fallback;
   }
 }

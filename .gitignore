@@ -43,6 +43,9 @@ app.*.map.json
 # Local tray regression captures
 /tray_right_click_*.png
 
+# Optional materials preview sheet (`ROBYNE_PREVIEW=1 flutter test ...`)
+/test/shots/
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile

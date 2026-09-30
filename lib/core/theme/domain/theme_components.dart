@@ -1,5 +1,13 @@
 import 'dart:ui';
 
+import 'theme_materials.dart';
+
+// The gradient model lives in `theme_materials.dart` (a material is where a
+// gradient is actually painted). Re-exported here because every call site and
+// every existing skin already reaches it through `components`.
+export 'theme_materials.dart'
+    show ThemeGradient, ThemeGradientKind, ThemeGradientStop, ThemeGradientTile;
+
 /// Component-level tokens: the surfaces that give a skin its identity.
 ///
 /// Semantic tokens (`ThemeTokens`) describe *what a role means* — "brand
@@ -85,89 +93,8 @@ class ThemeComponents {
   }
 }
 
-/// A multi-stop gradient, or a flat colour when a skin prefers one.
-///
-/// Gradients are how most music players establish their brand; a pure-colour
-/// token cannot express them. A skin may supply either a single `color` or a
-/// list of `stops`, and both render correctly.
-class ThemeGradient {
-  const ThemeGradient({required this.stops});
-
-  /// A single-colour gradient (renders flat).
-  ///
-  /// Not `const`: the colour comes from the skin at runtime.
-  ThemeGradient.solid(Color color)
-    : stops = <ThemeGradientStop>[ThemeGradientStop(color: color, offset: 0)];
-
-  /// No gradient at all: the surface falls back to its semantic colour.
-  static const ThemeGradient none = ThemeGradient(stops: <ThemeGradientStop>[]);
-
-  final List<ThemeGradientStop> stops;
-
-  bool get isEmpty => stops.isEmpty;
-
-  /// A single solid colour, for surfaces that cannot paint a gradient.
-  Color? get solidColor {
-    if (stops.isEmpty) {
-      return null;
-    }
-    final first = stops.first.color;
-    for (final stop in stops) {
-      if (stop.color != first) {
-        return null;
-      }
-    }
-    return first;
-  }
-
-  static ThemeGradient? lerp(ThemeGradient? a, ThemeGradient? b, double t) {
-    if (a == null && b == null) {
-      return null;
-    }
-    final from = a ?? ThemeGradient.none;
-    final to = b ?? ThemeGradient.none;
-    if (from.isEmpty || to.isEmpty) {
-      return t < 0.5 ? from : to;
-    }
-    // Cross-fade the shorter list against the longer one so switching skins
-    // never produces a null gradient mid-animation.
-    final count = from.stops.length > to.stops.length
-        ? from.stops.length
-        : to.stops.length;
-    final stops = <ThemeGradientStop>[];
-    for (var index = 0; index < count; index += 1) {
-      final left = from.stops[index % from.stops.length];
-      final right = to.stops[index % to.stops.length];
-      stops.add(ThemeGradientStop.lerp(left, right, t));
-    }
-    return ThemeGradient(stops: stops);
-  }
-}
-
 /// Sentinel distinguishing "field absent" from "field explicitly null".
 const Object _sentinel = Object();
-
-/// One colour stop in a [ThemeGradient].
-class ThemeGradientStop {
-  const ThemeGradientStop({required this.color, required this.offset});
-
-  final Color color;
-
-  /// Normalised position, 0..1. Values outside the range are clamped by the
-  /// parser, since Skia rejects them and the whole frame would be lost.
-  final double offset;
-
-  static ThemeGradientStop lerp(
-    ThemeGradientStop a,
-    ThemeGradientStop b,
-    double t,
-  ) {
-    return ThemeGradientStop(
-      color: Color.lerp(a.color, b.color, t) ?? a.color,
-      offset: (a.offset + (b.offset - a.offset) * t).clamp(0.0, 1.0),
-    );
-  }
-}
 
 /// Primary navigation surface.
 class ThemeNavBarComponents {
@@ -539,6 +466,8 @@ class ThemeAmbientComponents {
     required this.heightFraction,
     required this.blur,
     this.color,
+    this.driftSeconds = 0,
+    this.lights = const <ThemeAmbientLight>[],
   });
 
   const ThemeAmbientComponents.baseline()
@@ -546,7 +475,9 @@ class ThemeAmbientComponents {
       strength = 0.28,
       heightFraction = 0.32,
       blur = 48,
-      color = null;
+      color = null,
+      driftSeconds = 0,
+      lights = const <ThemeAmbientLight>[];
 
   /// Whether the wash renders at all.
   final bool enabled;
@@ -568,7 +499,23 @@ class ThemeAmbientComponents {
   /// glow regardless of what is playing.
   final Color? color;
 
+  /// Seconds for one full drift cycle. Zero keeps the wash perfectly still.
+  ///
+  /// Motion is what turns a static tint into light. It stays opt-in because a
+  /// permanently animating layer is a real cost on battery, and a matte skin
+  /// should pay nothing for a feature it never asked for.
+  final double driftSeconds;
+
+  /// Multiple light sources, painted as radial glows.
+  ///
+  /// Empty means "keep the original single top band", which is the behaviour
+  /// every skin written before this field depends on.
+  final List<ThemeAmbientLight> lights;
+
   bool get isVisible => enabled && strength > 0;
+
+  /// Whether this ambient layer needs an animation ticker.
+  bool get isAnimated => isVisible && driftSeconds > 0;
 
   ThemeAmbientComponents copyWith({
     bool? enabled,
@@ -576,6 +523,8 @@ class ThemeAmbientComponents {
     double? heightFraction,
     double? blur,
     Object? color = _sentinel,
+    double? driftSeconds,
+    List<ThemeAmbientLight>? lights,
   }) {
     return ThemeAmbientComponents(
       enabled: enabled ?? this.enabled,
@@ -583,6 +532,8 @@ class ThemeAmbientComponents {
       heightFraction: heightFraction ?? this.heightFraction,
       blur: blur ?? this.blur,
       color: identical(color, _sentinel) ? this.color : color as Color?,
+      driftSeconds: driftSeconds ?? this.driftSeconds,
+      lights: lights ?? this.lights,
     );
   }
 
@@ -598,6 +549,53 @@ class ThemeAmbientComponents {
           a.heightFraction + (b.heightFraction - a.heightFraction) * t,
       blur: a.blur + (b.blur - a.blur) * t,
       color: Color.lerp(a.color, b.color, t),
+      driftSeconds: a.driftSeconds + (b.driftSeconds - a.driftSeconds) * t,
+      lights: t < 0.5 ? a.lights : b.lights,
+    );
+  }
+}
+
+/// One soft light source in the ambient wash.
+class ThemeAmbientLight {
+  const ThemeAmbientLight({
+    this.color,
+    this.anchor = ThemePoint.topLeft,
+    this.radius = 0.9,
+    this.strength = 0.35,
+    this.blur = 60,
+    this.blend = ThemeBlendMode.screen,
+  });
+
+  /// Fixed colour, or null to follow the current artwork (the design's
+  /// intent) with [color] on the parent as the final fallback.
+  final Color? color;
+
+  /// Where the light sits, in normalised rect space.
+  final ThemePoint anchor;
+
+  /// Reach of the light as a fraction of the content region's longer side.
+  final double radius;
+
+  /// Peak opacity at the centre.
+  final double strength;
+
+  /// Softness of the falloff.
+  final double blur;
+
+  final ThemeBlendMode blend;
+
+  static ThemeAmbientLight lerp(
+    ThemeAmbientLight a,
+    ThemeAmbientLight b,
+    double t,
+  ) {
+    return ThemeAmbientLight(
+      color: Color.lerp(a.color, b.color, t),
+      anchor: ThemePoint.lerp(a.anchor, b.anchor, t),
+      radius: a.radius + (b.radius - a.radius) * t,
+      strength: a.strength + (b.strength - a.strength) * t,
+      blur: a.blur + (b.blur - a.blur) * t,
+      blend: t < 0.5 ? a.blend : b.blend,
     );
   }
 }

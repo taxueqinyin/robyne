@@ -284,6 +284,113 @@ Robyne 的signature：换一首歌，整页的色温跟着换。关掉它就退�
 - 封面主色由把封面解码到 16px 求平均得到，结果按 URL 缓存——不是精确调色板，
   但柔光被模糊到这个程度后只有色相还留着
 
+#### materials —— 材质（磨砂 / 渐变 / 混色 / 光晕 / 流光）
+
+`components` 回答「这个表面是什么颜色」，`materials` 回答「这个表面**怎么被画出来**」。
+两者分开是为了让皮肤可以一次只给一个表面升级质感，而不必动整份配色。
+
+七个已接线表面：`navBar` / `topBar` / `playerBar` / `queue` / `card` / `content` / `hero`。
+
+```jsonc
+"materials": {
+  "playerBar": {
+    "color": "#E60D0E10",              // 填充色（可半透明）
+    "gradient": { "kind": "linear" },  // 填充渐变，见下
+    "opacity": 0.92,                   // 整个填充层的透明度
+    "blur": 20,                        // 背景模糊 —— 磨砂玻璃
+    "saturation": 1.1,                 // 背景增饱和（玻璃的通透感）
+    "brightness": 1.0,                 // 背景明度
+    "contrast": 1.0,                   // 背景对比度
+    "grayscale": 0.0,                  // 背景去色
+    "blend": "normal",                 // 填充层与背景的混色模式
+    "overlay": {                       // 第二层，画在内容之上
+      "gradient": { "kind": "radial", "center": [0.8, 0.2] },
+      "blend": "screen",
+      "opacity": 0.6
+    },
+    "border": { "color": "#1AFFFFFF", "width": 1 },
+    "radius": 14,                      // 不写则跟随 tokens.radius
+    "shadows": [                       // 光晕 / 投影，最多 8 条
+      { "color": "#33FF6B3D", "blur": 46, "spread": 1 }
+    ],
+    "shimmer": {                       // 流光扫过，不写则完全没有开销
+      "color": "#4DFFFFFF", "width": 0.18, "angle": -22,
+      "periodMs": 5200, "blend": "plus", "opacity": 0.4
+    }
+  }
+}
+```
+
+**渐变升级为三种形态**（旧写法原样可用）：
+
+```jsonc
+// 1. 旧写法：等分色标
+"gradient": ["#FF0000", "#0000FF"]
+
+// 2. 旧写法：任意色标
+"gradient": { "stops": [ { "color": "#FF0000", "offset": 0 } ] }
+
+// 3. 完整写法：形态 + 方向 + 铺贴
+"gradient": {
+  "kind": "linear",                  // linear | radial | sweep
+  "begin": "topLeft", "end": "bottomRight",   // linear，-1..1 或 "top-right"
+  "center": [0.8, 0.2], "radius": 1.2,        // radial，radius 是短边比例
+  "startAngle": 0, "endAngle": 360,           // sweep，角度制
+  "tile": "clamp",                   // clamp | repeat | mirror | decal
+  "stops": [ { "color": "#FF6B3D", "offset": 0 } ]
+}
+```
+
+**混色模式**（`blend` / `overlay.blend` / 背景层的 `blend`）可选：
+`normal` / `multiply` / `screen` / `overlay` / `darken` / `lighten` /
+`colorDodge` / `colorBurn` / `hardLight` / `softLight` / `difference` /
+`exclusion` / `hue` / `saturation` / `color` / `luminosity` / `plus` / `modulate`。
+
+**约束：** blur ≤ 200、saturation/brightness/contrast ≤ 4、grayscale ≤ 1、
+阴影最多 8 条、流光周期 200ms–20s。越界收敛不报错，未知值忽略。
+
+> **流光与漂移默认关闭。** 只有显式写了 `shimmer`（或下面氛围的 `driftSeconds`）
+> 才会创建动画。系统开启「减弱动态效果」时，装饰动画自动停用，材质照常绘制。
+
+#### background 的调色与多层混色
+
+全屏背景图可以像任何材质一样被调色、混色，这是「照片当壁纸」能用的前提：
+
+```jsonc
+"background": {
+  "image": "assets/bg.webp", "fillMode": "cover",
+  "blur": 32, "saturation": 1.4, "brightness": 0.9,
+  "contrast": 1.1, "grayscale": 0, "scale": 1.05,
+  "overlay": "#000000", "overlayOpacity": 0.3,
+  "overlayGradient": { "kind": "radial" }, "overlayBlend": "softLight",
+  "layers": [                        // 任意多层混色，最多 8 层
+    { "gradient": { "kind": "radial" }, "blend": "screen", "opacity": 0.6 }
+  ]
+}
+```
+
+#### ambient 的多光源与漂移
+
+单条光带升级为任意多个柔光源。`lights` 为空时沿用旧行为：
+
+```jsonc
+"ambient": {
+  "enabled": true, "strength": 0.3, "heightFraction": 0.42, "blur": 64,
+  "driftSeconds": 24,                // >0 时光源缓慢漂移；0 = 完全静止
+  "lights": [                        // 最多 6 个
+    { "color": null, "anchor": "topLeft", "radius": 1.1,
+      "strength": 0.3, "blur": 80, "blend": "screen" },
+    { "anchor": [0.2, 0.6], "radius": 0.9, "strength": 0.22 }
+  ]
+}
+```
+
+`color` 省略（或 `null`）时跟随当前封面主色，这是设计稿的本意；写死颜色则是
+「无论放什么都用品牌光晕」的退路。
+
+> **`effects.blur` / `effects.glassOpacity` 仍然有效**，它们是材质出现之前的写法：
+> 只写这两个字段的旧皮肤会得到外壳磨砂。材质字段优先，两者不会互相覆盖。
+
 ### 4.3 颜色怎么写
 
 支持三种格式：

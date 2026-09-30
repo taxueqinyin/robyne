@@ -6,6 +6,7 @@ import '../../../core/layout/window_size_class.dart';
 import '../../../core/theme/application/theme_providers.dart';
 import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
+import '../../../core/theme/presentation/theme_material.dart';
 import '../../player/domain/playback_item.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/presentation/artwork_view.dart';
@@ -370,32 +371,31 @@ class _AllPlaylistsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = RobyneTheme.of(context).tokens;
     final colors = tokens.color;
-    return Material(
-      color: tokens.components.card.surface,
-      borderRadius: BorderRadius.circular(tokens.radius.md),
-      child: InkWell(
+    return ThemedSurface(
+      material: tokens.materials.card,
+      tokens: tokens,
+      fallbackColor: tokens.components.card.surface,
+      radius: tokens.radius.md,
+      onTap: onTap,
+      child: Padding(
         key: const Key('playlists-all-entry'),
-        borderRadius: BorderRadius.circular(tokens.radius.md),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: <Widget>[
-              Icon(Icons.library_music_outlined, color: colors.textSecondary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: colors.textPrimary,
-                  ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: <Widget>[
+            Icon(Icons.library_music_outlined, color: colors.textSecondary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textPrimary,
                 ),
               ),
-              Icon(Icons.chevron_right, size: 18, color: colors.textMuted),
-            ],
-          ),
+            ),
+            Icon(Icons.chevron_right, size: 18, color: colors.textMuted),
+          ],
         ),
       ),
     );
@@ -421,13 +421,13 @@ class _PlaylistCard extends StatelessWidget {
         .whereType<String>()
         .where((url) => url.isNotEmpty)
         .firstOrNull;
-    return Material(
-      color: tokens.components.card.surface,
-      borderRadius: BorderRadius.circular(tokens.radius.md),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(tokens.radius.md),
-        onTap: onTap,
-        child: Padding(
+    return ThemedSurface(
+      material: tokens.materials.card,
+      tokens: tokens,
+      fallbackColor: tokens.components.card.surface,
+      radius: tokens.radius.md,
+      onTap: onTap,
+      child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: <Widget>[
@@ -474,7 +474,6 @@ class _PlaylistCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }

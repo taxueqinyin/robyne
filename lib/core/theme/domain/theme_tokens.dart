@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'theme_components.dart';
+import 'theme_materials.dart';
 
 /// Semantic design tokens shared by every Robyne surface.
 ///
@@ -16,6 +17,7 @@ class ThemeTokens {
     required this.effects,
     required this.background,
     this.components = const ThemeComponents.baseline(),
+    this.materials = const ThemeMaterials.baseline(),
   });
 
   /// Default tokens used as the baseline whenever a skin omits a value.
@@ -27,7 +29,8 @@ class ThemeTokens {
       elevation = const ThemeElevations.baseline(),
       effects = const ThemeEffects.baseline(),
       background = const ThemeBackground.baseline(),
-      components = const ThemeComponents.baseline();
+      components = const ThemeComponents.baseline(),
+      materials = const ThemeMaterials.baseline();
 
   /// Dark-neutral tokens, used wherever the app needs a legible dark surface
   /// without a skin to describe one.
@@ -44,7 +47,8 @@ class ThemeTokens {
       elevation = const ThemeElevations.baseline(),
       effects = const ThemeEffects.baseline(),
       background = const ThemeBackground.baseline(),
-      components = const ThemeComponents.baseline();
+      components = const ThemeComponents.baseline(),
+      materials = const ThemeMaterials.baseline();
 
   final ThemeColors color;
   final ThemeRadii radius;
@@ -61,6 +65,20 @@ class ThemeTokens {
   /// Defaults to the baseline so existing skins are unaffected.
   final ThemeComponents components;
 
+  /// Paint recipes for the recognisable surfaces: frosted glass, glow,
+  /// gradients, blend layers and shimmer.
+  ///
+  /// Split out of [components] because the two answer different questions.
+  /// `components` says *what colour* a surface is; `materials` says *how the
+  /// surface is drawn* — how much backdrop it blurs, how it composites with
+  /// what is beneath it, whether it carries a glow or a moving highlight.
+  /// Keeping them apart is what lets a skin adopt materials one surface at a
+  /// time, and what keeps this file's other groups unchanged.
+  ///
+  /// Defaults to the empty material set, so every pre-existing skin renders
+  /// exactly as before.
+  final ThemeMaterials materials;
+
   ThemeTokens copyWith({
     ThemeColors? color,
     ThemeRadii? radius,
@@ -70,6 +88,7 @@ class ThemeTokens {
     ThemeEffects? effects,
     ThemeBackground? background,
     ThemeComponents? components,
+    ThemeMaterials? materials,
   }) {
     return ThemeTokens(
       color: color ?? this.color,
@@ -80,6 +99,7 @@ class ThemeTokens {
       effects: effects ?? this.effects,
       background: background ?? this.background,
       components: components ?? this.components,
+      materials: materials ?? this.materials,
     );
   }
 }
@@ -491,13 +511,31 @@ class ThemeBackground {
     required this.fillMode,
     required this.overlay,
     required this.overlayOpacity,
+    this.blur = 0,
+    this.saturation = 1,
+    this.brightness = 1,
+    this.contrast = 1,
+    this.grayscale = 0,
+    this.scale = 1,
+    this.overlayGradient = ThemeGradient.none,
+    this.overlayBlend = ThemeBlendMode.normal,
+    this.layers = const <ThemeBackgroundLayer>[],
   });
 
   const ThemeBackground.baseline()
     : image = null,
       fillMode = ThemeBackgroundFillMode.cover,
       overlay = null,
-      overlayOpacity = 0;
+      overlayOpacity = 0,
+      blur = 0,
+      saturation = 1,
+      brightness = 1,
+      contrast = 1,
+      grayscale = 0,
+      scale = 1,
+      overlayGradient = ThemeGradient.none,
+      overlayBlend = ThemeBlendMode.normal,
+      layers = const <ThemeBackgroundLayer>[];
 
   /// Asset path resolved by the theme loader. Null means no artwork.
   final String? image;
@@ -508,21 +546,107 @@ class ThemeBackground {
   final Color? overlay;
   final double overlayOpacity;
 
+  /// Backdrop treatment applied to the artwork itself.
+  ///
+  /// A full-bleed photo behind a music player is unusable without the ability
+  /// to calm it down: blur, desaturate and darken are the three levers, and
+  /// contrast is the one that keeps a flat photo from looking like a grey
+  /// wash. All four are identity by default.
+  final double blur;
+  final double saturation;
+  final double brightness;
+  final double contrast;
+  final double grayscale;
+
+  /// Artwork zoom, ≥1. `1.05` hides blur bleeding at the edges.
+  final double scale;
+
+  /// Gradient painted with the overlay, after [overlay].
+  final ThemeGradient overlayGradient;
+
+  /// Blend mode for [overlay] and [overlayGradient] against the artwork.
+  final ThemeBlendMode overlayBlend;
+
+  /// Arbitrary extra compositing layers over the artwork.
+  ///
+  /// This is where "colour grading" lives: a radial `screen` glow, a
+  /// `softLight` vignette, a `multiply` tint. Ordered, additive, and empty by
+  /// default.
+  final List<ThemeBackgroundLayer> layers;
+
+  /// Whether the artwork itself needs a colour-matrix / blur pass.
+  bool get hasImageTreatment =>
+      image != null &&
+      (blur > 0 ||
+          saturation != 1 ||
+          brightness != 1 ||
+          contrast != 1 ||
+          grayscale != 0);
+
   ThemeBackground copyWith({
     Object? image = _sentinel,
     ThemeBackgroundFillMode? fillMode,
     Object? overlay = _sentinel,
     double? overlayOpacity,
+    double? blur,
+    double? saturation,
+    double? brightness,
+    double? contrast,
+    double? grayscale,
+    double? scale,
+    ThemeGradient? overlayGradient,
+    ThemeBlendMode? overlayBlend,
+    List<ThemeBackgroundLayer>? layers,
   }) {
     return ThemeBackground(
       image: identical(image, _sentinel) ? this.image : image as String?,
       fillMode: fillMode ?? this.fillMode,
       overlay: identical(overlay, _sentinel) ? this.overlay : overlay as Color?,
       overlayOpacity: overlayOpacity ?? this.overlayOpacity,
+      blur: blur ?? this.blur,
+      saturation: saturation ?? this.saturation,
+      brightness: brightness ?? this.brightness,
+      contrast: contrast ?? this.contrast,
+      grayscale: grayscale ?? this.grayscale,
+      scale: scale ?? this.scale,
+      overlayGradient: overlayGradient ?? this.overlayGradient,
+      overlayBlend: overlayBlend ?? this.overlayBlend,
+      layers: layers ?? this.layers,
     );
   }
 
   static const Object _sentinel = Object();
+}
+
+/// One compositing layer painted over a skin's background artwork.
+class ThemeBackgroundLayer {
+  const ThemeBackgroundLayer({
+    this.color,
+    this.gradient = ThemeGradient.none,
+    this.blend = ThemeBlendMode.normal,
+    this.opacity = 1,
+  });
+
+  final Color? color;
+  final ThemeGradient gradient;
+  final ThemeBlendMode blend;
+  final double opacity;
+
+  bool get isEmpty => color == null && gradient.isEmpty;
+
+  static ThemeBackgroundLayer lerp(
+    ThemeBackgroundLayer a,
+    ThemeBackgroundLayer b,
+    double t,
+  ) {
+    return ThemeBackgroundLayer(
+      color: Color.lerp(a.color, b.color, t),
+      gradient: ThemeGradient.lerp(a.gradient, b.gradient, t) ??
+          ThemeGradient.none,
+      blend: t < 0.5 ? a.blend : b.blend,
+      opacity: a.opacity + (b.opacity - a.opacity) * t,
+    );
+  }
 }
 
 /// How background artwork fills its area.

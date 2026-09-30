@@ -8,8 +8,10 @@ import '../../../core/errors/app_error.dart';
 import '../../../core/layout/window_size_class.dart';
 import '../../../core/theme/application/theme_providers.dart';
 import '../../../core/theme/domain/theme_layout.dart';
+import '../../../core/theme/domain/theme_materials.dart';
 import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
+import '../../../core/theme/presentation/theme_material.dart';
 import '../../downloads/application/download_providers.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/domain/playback_item.dart';
@@ -1340,12 +1342,24 @@ class _PanelShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = RobyneTheme.of(context).tokens;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: tokens.components.card.surface,
-        borderRadius: BorderRadius.circular(tokens.radius.sm),
-        border: Border.all(color: tokens.color.borderSubtle),
-      ),
+    final radius = BorderRadius.circular(tokens.radius.sm);
+    final card = tokens.materials.card;
+    final material = card.isTransparent
+        ? card.copyWith(
+            color: tokens.components.card.surface,
+            radius: tokens.radius.sm,
+            border: ThemeMaterialBorder(color: tokens.color.borderSubtle),
+          )
+        : card.copyWith(
+            radius: card.radius ?? tokens.radius.sm,
+            border:
+                card.border ??
+                ThemeMaterialBorder(color: tokens.color.borderSubtle),
+          );
+    return MaterialSurface(
+      material: material,
+      tokens: tokens,
+      borderRadius: radius,
       child: Padding(padding: const EdgeInsets.all(16), child: child),
     );
   }

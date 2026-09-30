@@ -11,7 +11,7 @@ import '../core/debug/ime_trace.dart';
 import '../core/layout/window_size_class.dart';
 import '../core/theme/infrastructure/token_resolver.dart';
 import '../core/theme/application/theme_providers.dart';
-import '../core/theme/domain/theme_components.dart';
+import '../core/theme/domain/theme_materials.dart';
 import '../core/theme/domain/theme_regions.dart';
 import '../core/theme/domain/theme_navigation.dart';
 import '../core/theme/domain/theme_icons.dart';
@@ -21,6 +21,7 @@ import '../core/theme/presentation/theme_backdrop.dart' show ThemeBackdrop;
 import '../core/theme/presentation/theme_asset_image.dart';
 import '../core/theme/presentation/theme_ambient.dart';
 import '../core/theme/presentation/theme_icon.dart';
+import '../core/theme/presentation/theme_material.dart';
 import '../features/player/presentation/artwork_view.dart';
 import '../features/discover/presentation/discover_page.dart';
 import '../features/discover/presentation/xuan_home_page.dart';
@@ -167,10 +168,22 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
     // The cover-driven wash sits *behind* the tab stack, so it tints the
     // content region without becoming one more thing pages must know about.
     // `ThemeAmbient` renders nothing when the skin switches it off.
-    final content = ThemeAmbient(
+    //
+    // The content material wraps the wash so a skin can frost or tint the
+    // whole content plane, not just the chrome around it.
+    final contentTokens = RobyneTheme.of(context).tokens;
+    Widget content = ThemeAmbient(
       artworkUrl: ref.watch(currentPlaybackItemProvider)?.artworkUrl,
       child: _buildTabStack(),
     );
+    if (!contentTokens.materials.content.isTransparent) {
+      content = MaterialSurface(
+        material: contentTokens.materials.content,
+        tokens: contentTokens,
+        scaleToFill: true,
+        child: content,
+      );
+    }
     final dockedQueue =
         queueRequested && !plan.queueOverlay && plan.queueSideExtent > 0;
     // The mockups compose the content column as `content | queue`, with the
@@ -967,33 +980,43 @@ const List<_NavEntry> _compactNavEntries = <_NavEntry>[
   ),
 ];
 
-/// Paints a skin-declared [ThemeGradient], or the fallback colour when the
-/// skin prefers a flat surface.
+/// Paints a skin-declared surface: the component colour/gradient when the skin
+/// only speaks the old vocabulary, plus everything its material adds — blur,
+/// blend layers, stroke, glow and shimmer.
+///
+/// The fallback colour is what a skin without a material gets, so this is the
+/// one place shell chrome switches from "flat fill" to "painted material".
 class _GradientSurface extends StatelessWidget {
   const _GradientSurface({
+    required this.material,
     required this.gradient,
     required this.fallback,
+    required this.tokens,
     required this.child,
   });
 
+  final ThemeMaterial material;
   final ThemeGradient gradient;
   final Color fallback;
+  final ThemeTokens tokens;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    if (gradient.isEmpty) {
-      return ColoredBox(color: fallback, child: child);
-    }
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: <Color>[for (final stop in gradient.stops) stop.color],
-          stops: <double>[for (final stop in gradient.stops) stop.offset],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+    // `resolveSurfaceMaterial` folds in the pre-material `effects.blur` /
+    // `effects.glassOpacity` tokens and the component gradient, so this one
+    // call covers all three generations of skin declarations.
+    final effectiveMaterial = resolveSurfaceMaterial(
+      material: material,
+      tokens: tokens,
+      fallbackColor: gradient.isEmpty ? fallback : null,
+      fallbackGradient: gradient,
+      applyLegacyEffects: true,
+    );
+    return MaterialSurface(
+      material: effectiveMaterial,
+      tokens: tokens,
+      scaleToFill: true,
       child: child,
     );
   }
@@ -1058,8 +1081,10 @@ class _TopBarState extends ConsumerState<_TopBar> {
     // search pill too little room; cap it so the row never overflows.
     final compactSearch = widget.width < 1000;
     return _GradientSurface(
+      material: tokens.materials.topBar,
       gradient: tokens.components.navBar.gradient,
       fallback: colors.backgroundElevated,
+      tokens: tokens,
       child: Container(
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: colors.borderSubtle)),
@@ -1473,10 +1498,12 @@ class _SideNavState extends ConsumerState<_SideNav> {
         fit: StackFit.expand,
         children: <Widget>[
           _GradientSurface(
+            material: tokens.materials.navBar,
             gradient: comp.gradient,
             fallback: comp.background.a > 0
                 ? comp.background
                 : colors.backgroundElevated,
+            tokens: tokens,
             child: Container(
               decoration: BoxDecoration(
                 border: Border(right: BorderSide(color: colors.borderSubtle)),
@@ -2412,10 +2439,12 @@ class _CompactTabBar extends ConsumerWidget {
       child: SizedBox(
         key: const Key('shell-nav-bottom'),
         child: _GradientSurface(
+          material: tokens.materials.navBar,
           gradient: comp.gradient,
           fallback: comp.background.a > 0
               ? comp.background
               : colors.backgroundElevated,
+          tokens: tokens,
           child: Container(
             decoration: BoxDecoration(
               border: Border(top: BorderSide(color: colors.borderSubtle)),
@@ -2528,15 +2557,21 @@ class _QueuePanelState extends ConsumerState<_QueuePanel> {
 
     return SizedBox(
       width: widget.width,
-      child: Container(
-        decoration: BoxDecoration(
-          color: colors.backgroundElevated,
-          border: Border(left: BorderSide(color: colors.borderSubtle)),
+      child: MaterialSurface(
+        material: resolveSurfaceMaterial(
+          material: tokens.materials.queue,
+          tokens: tokens,
+          fallbackColor: colors.backgroundElevated,
         ),
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
+        tokens: tokens,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: colors.borderSubtle)),
+          ),
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 18, 10, 10),
                 child: Row(
@@ -2654,7 +2689,8 @@ class _QueuePanelState extends ConsumerState<_QueuePanel> {
                   ),
                 ),
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
