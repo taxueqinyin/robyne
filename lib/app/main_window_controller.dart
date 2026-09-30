@@ -33,8 +33,22 @@ class MainWindowController with WindowListener {
   bool _initialized = false;
   bool _saveInFlight = false;
   bool _saveAgain = false;
+  bool _suspended = false;
   Timer? _reconciliationTimer;
   MainWindowState _lastNormalState;
+
+  /// Stops persisting geometry while the window is in another shape.
+  ///
+  /// The capsule collapses the window to a few hundred pixels; without this
+  /// the periodic reconciliation writes that as the shell's normal geometry,
+  /// which is what made "close" restore a phone-sized window.
+  void suspend() {
+    _suspended = true;
+  }
+
+  void resume() {
+    _suspended = false;
+  }
 
   void attach() {
     if (_initialized || !supportsMainWindowPersistence) {
@@ -84,6 +98,9 @@ class MainWindowController with WindowListener {
   }
 
   Future<void> persistNow() async {
+    if (_suspended) {
+      return;
+    }
     if (_saveInFlight) {
       _saveAgain = true;
       return;
@@ -114,6 +131,9 @@ class MainWindowController with WindowListener {
   }
 
   Future<void> _reconcileGeometry() async {
+    if (_suspended) {
+      return;
+    }
     if (_saveInFlight) {
       return;
     }

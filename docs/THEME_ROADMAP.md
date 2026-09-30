@@ -747,6 +747,12 @@ MusicFree 的失败点（`THEME_LAYER_DESIGN.md:17` 已记录）正是：`.l-sid
 流光与漂移默认关闭。装饰动画受 `MediaQuery.disableAnimations` 门控（减弱动态效果
 时停用，材质照常绘制）。
 
+**《玄》默认关闭氛围层**：`components.ambient.enabled` 改回 `false`，首页普通视图
+的 content 平面直接落到 `background.base`（`#0B0C0E`），不再有封面取色铺出的
+模糊光晕。`lights` 的声明保留，所以想开氛围的皮肤把 `enabled` 翻回 `true` 即可
+拿到原来的多光源效果；`enabled: false` 时 `ThemeAmbient` 直接返回 child，渲染树
+和开销与没有该 token 时完全一致（这是 §3.4「皮肤可以关闭氛围层」的既有约定）。
+
 **测试基线**：`flutter test` → **459 passed, 9 skipped**（2026-09-30 复核）。
 本轮新增 `theme_material_test.dart`（24 条：三形态渐变、材质字段、越界收敛、
 背景调色、多光源、旋钮、渲染断言、旗舰皮肤防回归）与

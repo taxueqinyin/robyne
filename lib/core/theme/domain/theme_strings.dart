@@ -123,6 +123,30 @@ enum ThemeStringKey {
   playerStopPlayback('player.stopPlayback', 'Stop playback'),
   playerQueue('player.queue', 'Play queue'),
   playerVolume('player.volume', 'Volume'),
+
+  /// The title-bar entry that collapses the shell into the floating capsule.
+  ///
+  /// The capsule is a *window state*, so its label belongs with the other
+  /// title-bar chrome rather than with a feature page: a skin that writes its
+  /// own language should not have to accept an English tooltip on a button the
+  /// shell itself draws.
+  playerCapsuleEnter('player.capsule.enter', 'Capsule mode'),
+
+  /// The capsule's own close affordance: it restores the full shell.
+  playerCapsuleExit('player.capsule.exit', 'Restore window'),
+
+  /// The capsule's trailing button: it toggles the playlist panel below.
+  playerCapsuleQueue('player.capsule.queue', 'Playlist'),
+
+  /// Heading of the panel the capsule unfolds under itself.
+  playerCapsulePlaylist('player.capsule.playlist', 'Playlist'),
+
+  /// Shown when the capsule has nothing queued to list.
+  playerCapsulePlaylistEmpty(
+    'player.capsule.playlistEmpty',
+    'The playlist is empty',
+  ),
+
   playerShowDesktopLyric('player.desktopLyric.show', 'Show desktop lyric'),
   playerHideDesktopLyric('player.desktopLyric.hide', 'Hide desktop lyric'),
   playerSearchLyric('player.lyric.search', 'Search and link lyric'),

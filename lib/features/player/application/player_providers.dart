@@ -84,6 +84,27 @@ class NowPlayingImmersiveNotifier extends Notifier<bool> {
   void toggle() => state = !state;
 }
 
+/// Whether the shell is collapsed into the floating "capsule" mini layout.
+///
+/// The capsule is a *window shape*, not a route: it replaces the whole shell
+/// (top bar, rail, player bar and content) with a single draggable bar so the
+/// player can shrink out of the way while music keeps playing. It lives in the
+/// player layer for the same reason [queuePanelVisibleProvider] does — the
+/// player bar owns the entry point, so the player layer must not import the
+/// app-level shell.
+final capsuleModeProvider = NotifierProvider<CapsuleModeNotifier, bool>(
+  CapsuleModeNotifier.new,
+);
+
+class CapsuleModeNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void enter() => state = true;
+
+  void exit() => state = false;
+}
+
 final playerSnapshotsProvider = StreamProvider<PlayerSnapshot>((ref) {
   return ref.watch(audioPlayerServiceProvider).snapshots;
 });

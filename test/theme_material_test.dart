@@ -516,7 +516,12 @@ void main() {
       expect(materials.hero.overlay?.isEmpty, isFalse);
       expect(materials.hero.shimmer, isNotNull);
       expect(theme.tokens.components.ambient.lights.length, greaterThan(1));
-      expect(theme.tokens.components.ambient.isAnimated, isTrue);
+      // The flagship keeps the content plane matte: the wash is a taste
+      // decision, and 《玄》 reads as a near-black page. The declarations
+      // still have to survive the parser, because a skin that wants the
+      // atmosphere flips `enabled` and expects the lights to be there.
+      expect(theme.tokens.components.ambient.enabled, isFalse);
+      expect(theme.tokens.components.ambient.isVisible, isFalse);
     });
 
     testWidgets('a declared material reaches the rendered shell', (

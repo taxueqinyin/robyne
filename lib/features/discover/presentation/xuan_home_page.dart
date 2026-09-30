@@ -210,8 +210,8 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
     final sizeClass = WindowSizeClass.of(context);
     final isPhone = sizeClass.width != WindowWidthClass.expanded;
     // The landscape board (`mobile-landscape.png`) is a single 44dp strip:
-    // title, inline search, avatar. Stacking the portrait header there eats
-    // the entire 360dp-tall window.
+    // title, inline search, brand mark. Stacking the portrait header there
+    // eats the entire 360dp-tall window.
     final isStrip = isPhone && sizeClass.isCompactHeight;
     final assets = ref.watch(activeThemePackageProvider).assets;
     if (isStrip) {
@@ -236,22 +236,19 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
               ),
             ),
             const SizedBox(width: 12),
-            ClipOval(
+            ClipRRect(
+              borderRadius: BorderRadius.circular(tokens.radius.sm),
               child: SizedBox(
                 width: 28,
                 height: 28,
                 child: ThemeAssetImage(
-                  asset: assets.avatar,
+                  asset: assets.logo,
                   fallback: DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: <Color>[colors.brandBase, colors.accentBase],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                      color: colors.brandBase,
                     ),
                     child: Icon(
-                      Icons.person_outline,
+                      Icons.graphic_eq,
                       size: 15,
                       color: colors.onBrand,
                     ),
@@ -291,25 +288,19 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
                 ),
               ),
               if (isPhone)
-                ClipOval(
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(tokens.radius.sm),
                   child: SizedBox(
                     width: 34,
                     height: 34,
                     child: ThemeAssetImage(
-                      asset: assets.avatar,
+                      asset: assets.logo,
                       fallback: DecoratedBox(
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: <Color>[
-                              colors.brandBase,
-                              colors.accentBase,
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          color: colors.brandBase,
                         ),
                         child: Icon(
-                          Icons.person_outline,
+                          Icons.graphic_eq,
                           size: 18,
                           color: colors.onBrand,
                         ),

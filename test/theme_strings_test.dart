@@ -147,6 +147,10 @@ void main() {
       expect(package.strings.resolve(ThemeStringKey.navSettings), '设置');
       expect(package.strings.resolve(ThemeStringKey.queueTitle), '当前播放');
       expect(package.strings.resolve(ThemeStringKey.playerVolume), '音量');
+      expect(
+        package.strings.resolve(ThemeStringKey.playerCapsuleEnter),
+        '胶囊模式',
+      );
       expect(package.strings.resolve(ThemeStringKey.searchHint), '搜索歌曲、歌手、专辑');
       expect(
         package.strings.resolve(ThemeStringKey.discoverRankingEntry),

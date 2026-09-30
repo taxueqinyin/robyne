@@ -42,7 +42,12 @@ import '../features/player/application/player_providers.dart'
         playerControllerProvider,
         playerSnapshotsProvider,
         queuePanelVisibleProvider,
-        nowPlayingImmersiveProvider;
+        nowPlayingImmersiveProvider,
+        capsuleModeProvider;
+import '../features/player/presentation/capsule_player_bar.dart';
+import '../features/player/presentation/capsule_playlist_panel.dart';
+import '../features/player/application/capsule_window.dart';
+import 'main_window_controller.dart';
 import '../features/playlists/presentation/playlists_page.dart';
 import '../features/playlists/application/playlist_providers.dart';
 import '../features/playlists/domain/music_playlist.dart';
@@ -100,6 +105,7 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
   RobyneTab? _previousTab;
   final Set<RobyneTab> _mountedTabs = <RobyneTab>{};
   bool _restoringHistory = false;
+  bool _wasCapsule = false;
 
   @override
   void initState() {
@@ -114,6 +120,12 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleGlobalShortcut);
+    // Leaving the app while collapsed must not persist the capsule's small
+    // bounds as the shell's saved geometry, but the capsule's own spot is
+    // worth keeping.
+    if (_wasCapsule) {
+      unawaited(rememberCapsulePosition());
+    }
     if (isDesktopPlatform) {
       unawaited(desktopLyricControlChannel.setMethodCallHandler(null));
     }
@@ -161,9 +173,87 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
     final queueOverride = ref.watch(queuePanelVisibleProvider);
     final queueRequested = queueOverride ?? isDesktopShell;
     final immersive = ref.watch(nowPlayingImmersiveProvider);
+    final capsule = ref.watch(capsuleModeProvider);
+    final capsuleQueueOpen = ref.watch(capsuleQueueOpenProvider);
+    // Window resizing is a side effect, so it hangs off provider changes
+    // rather than off `build`: entering the capsule shrinks the OS window,
+    // leaving restores it, and toggling the playlist grows it downward.
+    ref.listen<bool>(capsuleModeProvider, (previous, next) {
+      if (next) {
+        unawaited(captureFullShellWindowSize());
+        // Stop the geometry watcher from writing the capsule's small bounds
+        // as the shell's normal geometry while the capsule is open.
+        ref.read(mainWindowControllerProvider).suspend();
+        // A drag ends without a Dart callback, so the capsule's spot is
+        // polled while it is open. Closing the app while collapsed otherwise
+        // lost the position entirely.
+        startCapsulePositionSampling();
+        unawaited(applyCapsuleWindowSize(playlistOpen: capsuleQueueOpen));
+      } else {
+        unawaited(restoreFullShellWindow());
+        stopCapsulePositionSampling();
+        ref.read(mainWindowControllerProvider).resume();
+      }
+    });
+    // The playlist toggle changes the capsule's height, so the OS window must
+    // follow the layout rather than clipping the panel or leaving dead space.
+    ref.listen<bool>(capsuleQueueOpenProvider, (previous, next) {
+      if (ref.read(capsuleModeProvider)) {
+        unawaited(applyCapsuleWindowSize(playlistOpen: next));
+      }
+    });
     final history = ref.watch(navigationHistoryProvider);
     final showWindowControls =
         !kIsWeb && !Platform.environment.containsKey('FLUTTER_TEST');
+
+    // The capsule is a *replacement* layout, not an overlay: collapsing the
+    // window must retire the rail, top bar, player bar and page tree rather
+    // than painting a bar on top of a shell that keeps laying itself out
+    // behind it. Returning here keeps the collapsed window cheap and makes
+    // "close" a plain restore of what the shell would have built anyway.
+    if (capsule) {
+      _wasCapsule = true;
+      return Scaffold(
+        // No `ThemeBackdrop` and no scaffold colour: the capsule is an
+        // irregular shape over the desktop, so painting the shell's own
+        // background here is what produced the black rectangle around it.
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          // `SafeArea` adds its own insets on top of the padding below, so
+          // the capsule's content needs the sum to fit the window it asked
+          // for. Bottom insets are left out because the capsule is
+          // bottom-anchored by design and the playlist grows into that space.
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: CapsuleWindow.windowMarginHorizontal,
+              vertical: CapsuleWindow.windowMarginVertical / 2,
+            ),
+            child: Column(
+              children: <Widget>[
+                // Top-aligned so the bar stays put and the playlist grows
+                // downward out of it, rather than the bar being pushed up.
+                const CapsulePlayerBar(),
+                if (capsuleQueueOpen) ...<Widget>[
+                  SizedBox(height: CapsuleWindow.panelGap),
+                  // `Flexible` rather than a bare child: the OS resize is
+                  // async, so for one or two frames the panel is laid out
+                  // inside the *old* small window. An unconstrained 300dp
+                  // child overflows those frames — which is exactly the
+                  // flash of overflow the toggle used to show before the
+                  // window caught up.
+                  const Flexible(
+                    child: CapsulePlaylistPanel(
+                      key: Key('capsule-playlist-panel'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     // The cover-driven wash sits *behind* the tab stack, so it tints the
     // content region without becoming one more thing pages must know about.
@@ -1254,9 +1344,21 @@ class _WindowControls extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(activeThemeStringsProvider);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
+        WindowControlButton(
+          key: const Key('titlebar-capsule'),
+          // A wide rectangle, so the capsule entry cannot be mistaken for
+          // maximise: `crop_din` is square and read as "another maximise".
+          icon: Icons.crop_landscape,
+          tooltip: strings.resolve(ThemeStringKey.playerCapsuleEnter),
+          onPressed: () {
+            ref.read(capsuleModeProvider.notifier).enter();
+            ref.read(capsuleQueueOpenProvider.notifier).close();
+          },
+        ),
         WindowControlButton(
           icon: Icons.horizontal_rule,
           tooltip: '最小化',
@@ -2322,6 +2424,12 @@ class _MoreTab extends ConsumerWidget {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      // The sheet is content-sized by default, which on a landscape phone is
+      // more than the viewport can hold. Capping it keeps the header, handle
+      // and at least one action visible without changing the portrait look.
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+      ),
       builder: (sheetContext) {
         return SafeArea(
           child: Consumer(
@@ -2330,54 +2438,59 @@ class _MoreTab extends ConsumerWidget {
               final sheetColors = sheetTokens.color;
               final sheetStrings = sheetRef.watch(activeThemeStringsProvider);
               final selected = sheetRef.watch(selectedTabProvider);
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        sheetStrings.resolve(ThemeStringKey.navMore),
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: sheetColors.textPrimary,
+              // A short viewport (landscape phone) cannot carry the full
+              // sheet, so the column scrolls instead of overflowing. The
+              // portrait layout is unchanged: everything still fits at 400x800.
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          sheetStrings.resolve(ThemeStringKey.navMore),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: sheetColors.textPrimary,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  for (final entry in entries)
-                    ListTile(
-                      leading: _NavIcon(
-                        entry: entry,
-                        selected: entry.tab == selected,
-                        size: 24,
-                        color: entry.tab == selected
-                            ? sheetColors.brandBase
-                            : sheetColors.textSecondary,
-                      ),
-                      title: Text(
-                        sheetStrings.resolve(entry.labelKey),
-                        style: TextStyle(
+                    for (final entry in entries)
+                      ListTile(
+                        leading: _NavIcon(
+                          entry: entry,
+                          selected: entry.tab == selected,
+                          size: 24,
                           color: entry.tab == selected
                               ? sheetColors.brandBase
-                              : sheetColors.textPrimary,
-                          fontWeight: entry.tab == selected
-                              ? FontWeight.w600
-                              : FontWeight.w400,
+                              : sheetColors.textSecondary,
                         ),
+                        title: Text(
+                          sheetStrings.resolve(entry.labelKey),
+                          style: TextStyle(
+                            color: entry.tab == selected
+                                ? sheetColors.brandBase
+                                : sheetColors.textPrimary,
+                            fontWeight: entry.tab == selected
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                        selected: entry.tab == selected,
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          sheetRef
+                              .read(selectedTabProvider.notifier)
+                              .select(entry.tab);
+                        },
                       ),
-                      selected: entry.tab == selected,
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        sheetRef
-                            .read(selectedTabProvider.notifier)
-                            .select(entry.tab);
-                      },
-                    ),
-                  const SizedBox(height: 12),
-                ],
+                    const SizedBox(height: 12),
+                  ],
+                ),
               );
             },
           ),

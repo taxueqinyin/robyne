@@ -226,7 +226,7 @@
         "curve": "standard"
       },
       "ambient": {
-        "enabled": true,
+        "enabled": false,
         "strength": 0.3,
         "heightFraction": 0.42,
         "blur": 64,
@@ -445,6 +445,11 @@
     "nowPlaying.close": "返回内容库",
     "player.play": "播放",
     "player.pause": "暂停",
+    "player.capsule.enter": "胶囊模式",
+    "player.capsule.exit": "还原窗口",
+    "player.capsule.queue": "播放列表",
+    "player.capsule.playlist": "播放列表",
+    "player.capsule.playlistEmpty": "播放列表还是空的",
     "player.previous": "上一首",
     "player.next": "下一首",
     "player.like.add": "添加到我喜欢",
