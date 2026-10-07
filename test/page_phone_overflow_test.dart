@@ -49,7 +49,11 @@ void main() {
         size,
         const DiscoverPage(),
         plugins: <PluginDefinition>[
-          for (final name in <String>['fixture-a', '很长很长很长很长的插件平台名称', 'fixture-c'])
+          for (final name in <String>[
+            'fixture-a',
+            '很长很长很长很长的插件平台名称',
+            'fixture-c',
+          ])
             PluginDefinition(
               id: 'plugin-$name',
               platform: name,
