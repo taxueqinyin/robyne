@@ -43,6 +43,15 @@ app.*.map.json
 # Local tray regression captures
 /tray_right_click_*.png
 
+# Signing material. A keystore in the repository is a published private key;
+# keep it out even though android/app/keystore.jks is the path the build
+# reads. `*.jks` and `*.keystore` also cover copies elsewhere.
+android/app/keystore.jks
+*.jks
+*.keystore
+# Gradle's generated local SDK paths.
+android/local.properties
+
 # Optional materials preview sheet (`ROBYNE_PREVIEW=1 flutter test ...`)
 /test/shots/
 

@@ -32,9 +32,29 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Real signing when a keystore is present, debug signing
+            // otherwise. The fallback is what makes `flutter run --release`
+            // work on a fresh clone with no keystore; a release that reaches
+            // users must be built with the keystore configured.
+            signingConfig =
+                if (file("keystore.jks").exists()) {
+                    signingConfigs.getByName("upload")
+                } else {
+                    signingConfigs.getByName("debug")
+                }
+        }
+    }
+
+    // Declared here rather than inside `buildTypes` so it exists regardless of
+    // which build type is being configured. Credentials come from environment
+    // variables, never from a file in the repository — see
+    // .github/workflows/release.yml.
+    signingConfigs {
+        create("upload") {
+            storeFile = file("keystore.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("KEY_ALIAS")
+            keyPassword = System.getenv("KEY_PASSWORD")
         }
     }
 

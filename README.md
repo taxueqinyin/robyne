@@ -79,7 +79,31 @@ native/sqlite3/  Android 用的 SQLite 源码
 flutter test
 ```
 
-约 475 个用例，覆盖 UI、业务需求、皮肤解析和安全边界。
+约 550 个用例，覆盖 UI、业务需求、皮肤解析和安全边界。
+
+## 构建产物
+
+```bash
+flutter build windows --release   # build/windows/x64/runner/Release/
+flutter build apk --release       # build/app/outputs/flutter-apk/app-release.apk
+```
+
+Windows 的产物是一个目录（exe + DLL + `data/`），必须整个目录才能运行，
+所以发布时打包成 zip。
+
+打 tag 会自动构建 Windows 和 Android 并发布到 GitHub Releases：
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+### Android 签名
+
+没有 keystore 时构建出的 APK 用 debug key 签名，能装但不能作为正式发布。
+要签正式版，配置仓库变量 `SIGN_ANDROID=true` 和这些 secrets：
+`ANDROID_KEYSTORE_BASE64`（`base64 -i keystore.jks`）、
+`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。
+keystore 本身不要提交进仓库。
 
 ## TODO
 - [ ] 头尾跳过一段时间功能
