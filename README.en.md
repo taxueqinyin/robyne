@@ -79,7 +79,32 @@ Stack: Flutter + Riverpod + media_kit (playback) + drift/SQLite (local storage) 
 flutter test
 ```
 
-Around 475 cases covering UI, business rules, skin parsing, and security boundaries.
+Around 550 cases covering UI, business rules, skin parsing, and security boundaries.
+
+## Building
+
+```bash
+flutter build windows --release   # build/windows/x64/runner/Release/
+flutter build apk --release       # build/app/outputs/flutter-apk/app-release.apk
+```
+
+The Windows output is a directory (exe + DLLs + `data/`) and only runs as a
+directory, so releases ship it as a zip.
+
+Pushing a tag builds Windows and Android and publishes them to GitHub
+Releases:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+### Android signing
+
+Without a keystore the APK is signed with the debug key — installable, but
+not a distributable release. To sign properly, set the repo variable
+`SIGN_ANDROID=true` and these secrets: `ANDROID_KEYSTORE_BASE64`
+(`base64 -i keystore.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+`ANDROID_KEY_PASSWORD`. Never commit the keystore itself.
 
 ## Status
 

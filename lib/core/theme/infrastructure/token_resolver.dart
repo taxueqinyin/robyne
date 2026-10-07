@@ -393,7 +393,10 @@ class RobyneTheme extends ThemeExtension<RobyneTheme> {
     // Themes are always resolved through TokenResolver, but keep a safe
     // baseline for widgets rendered outside that pipeline (e.g. tests).
     return extension ??
-        const RobyneTheme(ThemeTokens.baseline(), strings: ThemeStrings.empty());
+        const RobyneTheme(
+          ThemeTokens.baseline(),
+          strings: ThemeStrings.empty(),
+        );
   }
 
   /// Null-tolerant variant for widgets that may render before the theme is
@@ -404,10 +407,7 @@ class RobyneTheme extends ThemeExtension<RobyneTheme> {
 
   @override
   RobyneTheme copyWith({ThemeTokens? tokens, ThemeStrings? strings}) {
-    return RobyneTheme(
-      tokens ?? this.tokens,
-      strings: strings ?? this.strings,
-    );
+    return RobyneTheme(tokens ?? this.tokens, strings: strings ?? this.strings);
   }
 
   @override

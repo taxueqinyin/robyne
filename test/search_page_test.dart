@@ -94,6 +94,68 @@ void main() {
     expect(find.byType(ListTile), findsNothing);
   });
 
+  testWidgets('result tabs follow the plugin page order', (tester) async {
+    // The user dragged "Source C" to the top of the plugin page. Searches
+    // finish in whatever order they finish, so the tabs must be laid out from
+    // the stored arrangement rather than from completion order.
+    final plugins = <PluginDefinition>[
+      _plugin(id: 'c', platform: 'Source C', installedAt: 300, sortIndex: 1),
+      _plugin(id: 'a', platform: 'Source A', installedAt: 100, sortIndex: 2),
+      _plugin(id: 'b', platform: 'Source B', installedAt: 200, sortIndex: 3),
+    ];
+    final container = ProviderContainer(
+      overrides: [
+        pluginRepositoryProvider.overrideWithValue(_FakePluginRepository()),
+        pluginControllerProvider.overrideWith(
+          () => _FakePluginController(plugins),
+        ),
+        search_state.searchControllerProvider.overrideWith(
+          () => _SeededMultiSearchController(
+            // Deliberately handed in completion order, not the user's order.
+            <search_state.PluginSearchState>[
+              for (final plugin in <PluginDefinition>[
+                plugins[1],
+                plugins[2],
+                plugins[0],
+              ])
+                search_state.PluginSearchState(
+                  pluginId: plugin.id,
+                  platform: plugin.platform,
+                  result: const SearchResult(
+                    items: <MusicItem>[],
+                    page: 1,
+                    isEnd: true,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: SearchPage())),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final tabs = tester
+        .widgetList<Text>(
+          find.descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Text),
+          ),
+        )
+        .map((text) => text.data ?? '')
+        .where((value) => value.startsWith('Source'))
+        .toList(growable: false);
+    expect(tabs, <String>['Source C 0', 'Source A 0', 'Source B 0']);
+  });
+
   testWidgets('search page uses the skin-declared chrome strings', (
     tester,
   ) async {
@@ -131,6 +193,13 @@ class _FakePluginRepository implements PluginRepository {
   }
 
   @override
+  Future<Result<List<PluginDefinition>>> reorderPlugins(
+    List<String> orderedIds,
+  ) async {
+    return const Ok(<PluginDefinition>[]);
+  }
+
+  @override
   Future<Result<PluginDefinition>> importPluginFromPath(String path) async {
     throw UnimplementedError();
   }
@@ -145,6 +214,14 @@ class _FakePluginRepository implements PluginRepository {
 
   @override
   Future<Result<PluginDefinition>> importPluginFromUrl(String url) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<PluginImportBatchResult> importPluginBatchFromUrl(
+    String url, {
+    PluginImportProgressCallback? onProgress,
+  }) async {
     throw UnimplementedError();
   }
 
@@ -202,4 +279,38 @@ class _SeededSearchController extends search_state.SearchController {
       ],
     );
   }
+}
+
+/// A controller holding finished searches for several plugins, handed in the
+/// order the searches completed.
+class _SeededMultiSearchController extends search_state.SearchController {
+  _SeededMultiSearchController(this.results);
+
+  final List<search_state.PluginSearchState> results;
+
+  @override
+  search_state.SearchState build() {
+    return search_state.SearchState(
+      keyword: 'night',
+      selectedPluginId: results.first.pluginId,
+      pluginResults: results,
+    );
+  }
+}
+
+PluginDefinition _plugin({
+  required String id,
+  required String platform,
+  required int installedAt,
+  int sortIndex = 0,
+}) {
+  return PluginDefinition(
+    id: id,
+    platform: platform,
+    sourcePath: '$id.js',
+    enabled: true,
+    installedAt: DateTime.fromMillisecondsSinceEpoch(installedAt),
+    updatedAt: DateTime.fromMillisecondsSinceEpoch(installedAt),
+    sortIndex: sortIndex,
+  );
 }

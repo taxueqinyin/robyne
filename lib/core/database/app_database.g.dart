@@ -1957,6 +1957,18 @@ class $PluginDefinitionRowsTable extends PluginDefinitionRows
         requiredDuringInsert: false,
         defaultValue: const Constant('{}'),
       );
+  static const VerificationMeta _sortIndexMeta = const VerificationMeta(
+    'sortIndex',
+  );
+  @override
+  late final GeneratedColumn<int> sortIndex = GeneratedColumn<int>(
+    'sort_index',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1971,6 +1983,7 @@ class $PluginDefinitionRowsTable extends PluginDefinitionRows
     supportedSearchTypesJson,
     userVariablesJson,
     userVariableValuesJson,
+    sortIndex,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2078,6 +2091,12 @@ class $PluginDefinitionRowsTable extends PluginDefinitionRows
         ),
       );
     }
+    if (data.containsKey('sort_index')) {
+      context.handle(
+        _sortIndexMeta,
+        sortIndex.isAcceptableOrUnknown(data['sort_index']!, _sortIndexMeta),
+      );
+    }
     return context;
   }
 
@@ -2135,6 +2154,10 @@ class $PluginDefinitionRowsTable extends PluginDefinitionRows
         DriftSqlType.string,
         data['${effectivePrefix}user_variable_values_json'],
       )!,
+      sortIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_index'],
+      )!,
     );
   }
 
@@ -2158,6 +2181,15 @@ class PluginDefinitionRow extends DataClass
   final String supportedSearchTypesJson;
   final String userVariablesJson;
   final String userVariableValuesJson;
+
+  /// The user's manual order within the plugin page.
+  ///
+  /// Not a sort preference: dragging a row rewrites this column, which is why
+  /// it lives on the row rather than in settings. Positive values are explicit
+  /// user placements and `0` means "never dragged", so freshly imported
+  /// plugins and legacy rows stay in install order instead of colliding at a
+  /// default rank.
+  final int sortIndex;
   const PluginDefinitionRow({
     required this.id,
     required this.platform,
@@ -2171,6 +2203,7 @@ class PluginDefinitionRow extends DataClass
     required this.supportedSearchTypesJson,
     required this.userVariablesJson,
     required this.userVariableValuesJson,
+    required this.sortIndex,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2195,6 +2228,7 @@ class PluginDefinitionRow extends DataClass
     );
     map['user_variables_json'] = Variable<String>(userVariablesJson);
     map['user_variable_values_json'] = Variable<String>(userVariableValuesJson);
+    map['sort_index'] = Variable<int>(sortIndex);
     return map;
   }
 
@@ -2218,6 +2252,7 @@ class PluginDefinitionRow extends DataClass
       supportedSearchTypesJson: Value(supportedSearchTypesJson),
       userVariablesJson: Value(userVariablesJson),
       userVariableValuesJson: Value(userVariableValuesJson),
+      sortIndex: Value(sortIndex),
     );
   }
 
@@ -2243,6 +2278,7 @@ class PluginDefinitionRow extends DataClass
       userVariableValuesJson: serializer.fromJson<String>(
         json['userVariableValuesJson'],
       ),
+      sortIndex: serializer.fromJson<int>(json['sortIndex']),
     );
   }
   @override
@@ -2265,6 +2301,7 @@ class PluginDefinitionRow extends DataClass
       'userVariableValuesJson': serializer.toJson<String>(
         userVariableValuesJson,
       ),
+      'sortIndex': serializer.toJson<int>(sortIndex),
     };
   }
 
@@ -2281,6 +2318,7 @@ class PluginDefinitionRow extends DataClass
     String? supportedSearchTypesJson,
     String? userVariablesJson,
     String? userVariableValuesJson,
+    int? sortIndex,
   }) => PluginDefinitionRow(
     id: id ?? this.id,
     platform: platform ?? this.platform,
@@ -2296,6 +2334,7 @@ class PluginDefinitionRow extends DataClass
     userVariablesJson: userVariablesJson ?? this.userVariablesJson,
     userVariableValuesJson:
         userVariableValuesJson ?? this.userVariableValuesJson,
+    sortIndex: sortIndex ?? this.sortIndex,
   );
   PluginDefinitionRow copyWithCompanion(PluginDefinitionRowsCompanion data) {
     return PluginDefinitionRow(
@@ -2323,6 +2362,7 @@ class PluginDefinitionRow extends DataClass
       userVariableValuesJson: data.userVariableValuesJson.present
           ? data.userVariableValuesJson.value
           : this.userVariableValuesJson,
+      sortIndex: data.sortIndex.present ? data.sortIndex.value : this.sortIndex,
     );
   }
 
@@ -2340,7 +2380,8 @@ class PluginDefinitionRow extends DataClass
           ..write('updatedAt: $updatedAt, ')
           ..write('supportedSearchTypesJson: $supportedSearchTypesJson, ')
           ..write('userVariablesJson: $userVariablesJson, ')
-          ..write('userVariableValuesJson: $userVariableValuesJson')
+          ..write('userVariableValuesJson: $userVariableValuesJson, ')
+          ..write('sortIndex: $sortIndex')
           ..write(')'))
         .toString();
   }
@@ -2359,6 +2400,7 @@ class PluginDefinitionRow extends DataClass
     supportedSearchTypesJson,
     userVariablesJson,
     userVariableValuesJson,
+    sortIndex,
   );
   @override
   bool operator ==(Object other) =>
@@ -2375,7 +2417,8 @@ class PluginDefinitionRow extends DataClass
           other.updatedAt == this.updatedAt &&
           other.supportedSearchTypesJson == this.supportedSearchTypesJson &&
           other.userVariablesJson == this.userVariablesJson &&
-          other.userVariableValuesJson == this.userVariableValuesJson);
+          other.userVariableValuesJson == this.userVariableValuesJson &&
+          other.sortIndex == this.sortIndex);
 }
 
 class PluginDefinitionRowsCompanion
@@ -2392,6 +2435,7 @@ class PluginDefinitionRowsCompanion
   final Value<String> supportedSearchTypesJson;
   final Value<String> userVariablesJson;
   final Value<String> userVariableValuesJson;
+  final Value<int> sortIndex;
   final Value<int> rowid;
   const PluginDefinitionRowsCompanion({
     this.id = const Value.absent(),
@@ -2406,6 +2450,7 @@ class PluginDefinitionRowsCompanion
     this.supportedSearchTypesJson = const Value.absent(),
     this.userVariablesJson = const Value.absent(),
     this.userVariableValuesJson = const Value.absent(),
+    this.sortIndex = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PluginDefinitionRowsCompanion.insert({
@@ -2421,6 +2466,7 @@ class PluginDefinitionRowsCompanion
     this.supportedSearchTypesJson = const Value.absent(),
     this.userVariablesJson = const Value.absent(),
     this.userVariableValuesJson = const Value.absent(),
+    this.sortIndex = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        platform = Value(platform),
@@ -2440,6 +2486,7 @@ class PluginDefinitionRowsCompanion
     Expression<String>? supportedSearchTypesJson,
     Expression<String>? userVariablesJson,
     Expression<String>? userVariableValuesJson,
+    Expression<int>? sortIndex,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2457,6 +2504,7 @@ class PluginDefinitionRowsCompanion
       if (userVariablesJson != null) 'user_variables_json': userVariablesJson,
       if (userVariableValuesJson != null)
         'user_variable_values_json': userVariableValuesJson,
+      if (sortIndex != null) 'sort_index': sortIndex,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2474,6 +2522,7 @@ class PluginDefinitionRowsCompanion
     Value<String>? supportedSearchTypesJson,
     Value<String>? userVariablesJson,
     Value<String>? userVariableValuesJson,
+    Value<int>? sortIndex,
     Value<int>? rowid,
   }) {
     return PluginDefinitionRowsCompanion(
@@ -2491,6 +2540,7 @@ class PluginDefinitionRowsCompanion
       userVariablesJson: userVariablesJson ?? this.userVariablesJson,
       userVariableValuesJson:
           userVariableValuesJson ?? this.userVariableValuesJson,
+      sortIndex: sortIndex ?? this.sortIndex,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2538,6 +2588,9 @@ class PluginDefinitionRowsCompanion
         userVariableValuesJson.value,
       );
     }
+    if (sortIndex.present) {
+      map['sort_index'] = Variable<int>(sortIndex.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2559,6 +2612,7 @@ class PluginDefinitionRowsCompanion
           ..write('supportedSearchTypesJson: $supportedSearchTypesJson, ')
           ..write('userVariablesJson: $userVariablesJson, ')
           ..write('userVariableValuesJson: $userVariableValuesJson, ')
+          ..write('sortIndex: $sortIndex, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8056,6 +8110,7 @@ typedef $$PluginDefinitionRowsTableCreateCompanionBuilder =
       Value<String> supportedSearchTypesJson,
       Value<String> userVariablesJson,
       Value<String> userVariableValuesJson,
+      Value<int> sortIndex,
       Value<int> rowid,
     });
 typedef $$PluginDefinitionRowsTableUpdateCompanionBuilder =
@@ -8072,6 +8127,7 @@ typedef $$PluginDefinitionRowsTableUpdateCompanionBuilder =
       Value<String> supportedSearchTypesJson,
       Value<String> userVariablesJson,
       Value<String> userVariableValuesJson,
+      Value<int> sortIndex,
       Value<int> rowid,
     });
 
@@ -8141,6 +8197,11 @@ class $$PluginDefinitionRowsTableFilterComposer
 
   ColumnFilters<String> get userVariableValuesJson => $composableBuilder(
     column: $table.userVariableValuesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortIndex => $composableBuilder(
+    column: $table.sortIndex,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -8213,6 +8274,11 @@ class $$PluginDefinitionRowsTableOrderingComposer
     column: $table.userVariableValuesJson,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get sortIndex => $composableBuilder(
+    column: $table.sortIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PluginDefinitionRowsTableAnnotationComposer
@@ -8271,6 +8337,9 @@ class $$PluginDefinitionRowsTableAnnotationComposer
     column: $table.userVariableValuesJson,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get sortIndex =>
+      $composableBuilder(column: $table.sortIndex, builder: (column) => column);
 }
 
 class $$PluginDefinitionRowsTableTableManager
@@ -8328,6 +8397,7 @@ class $$PluginDefinitionRowsTableTableManager
                 Value<String> supportedSearchTypesJson = const Value.absent(),
                 Value<String> userVariablesJson = const Value.absent(),
                 Value<String> userVariableValuesJson = const Value.absent(),
+                Value<int> sortIndex = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PluginDefinitionRowsCompanion(
                 id: id,
@@ -8342,6 +8412,7 @@ class $$PluginDefinitionRowsTableTableManager
                 supportedSearchTypesJson: supportedSearchTypesJson,
                 userVariablesJson: userVariablesJson,
                 userVariableValuesJson: userVariableValuesJson,
+                sortIndex: sortIndex,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -8358,6 +8429,7 @@ class $$PluginDefinitionRowsTableTableManager
                 Value<String> supportedSearchTypesJson = const Value.absent(),
                 Value<String> userVariablesJson = const Value.absent(),
                 Value<String> userVariableValuesJson = const Value.absent(),
+                Value<int> sortIndex = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PluginDefinitionRowsCompanion.insert(
                 id: id,
@@ -8372,6 +8444,7 @@ class $$PluginDefinitionRowsTableTableManager
                 supportedSearchTypesJson: supportedSearchTypesJson,
                 userVariablesJson: userVariablesJson,
                 userVariableValuesJson: userVariableValuesJson,
+                sortIndex: sortIndex,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

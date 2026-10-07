@@ -570,10 +570,9 @@ class _PlayerSurface extends StatelessWidget {
       fallbackRadius: radius,
     );
     final effectiveMaterial = resolved.copyWith(
-      border: resolved.border ??
-          (radius > 0
-              ? ThemeMaterialBorder(color: colors.borderSubtle)
-              : null),
+      border:
+          resolved.border ??
+          (radius > 0 ? ThemeMaterialBorder(color: colors.borderSubtle) : null),
     );
     // When the shell supplies a height from the skin's ratio, honour exactly
     // that; otherwise fall back to the intrinsic height. Reading the incoming

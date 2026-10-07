@@ -46,10 +46,7 @@ void main() {
 
     Color? backgroundFor(Key key) {
       final button = tester.widget<IconButton>(
-        find.descendant(
-          of: find.byKey(key),
-          matching: find.byType(IconButton),
-        ),
+        find.descendant(of: find.byKey(key), matching: find.byType(IconButton)),
       );
       return button.style?.backgroundColor?.resolve(<WidgetState>{});
     }
@@ -60,7 +57,9 @@ void main() {
     expect(maximisedRest, Colors.transparent);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: tester.getCenter(find.byKey(const Key('minimise'))));
+    await mouse.addPointer(
+      location: tester.getCenter(find.byKey(const Key('minimise'))),
+    );
     await tester.pump();
 
     final minimisedHover = tester

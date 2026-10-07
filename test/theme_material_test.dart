@@ -159,10 +159,7 @@ void main() {
               'grayscale': 0.2,
               'blend': 'soft-light',
               'radius': 18,
-              'border': <String, Object?>{
-                'color': '#33FFFFFF',
-                'width': 2,
-              },
+              'border': <String, Object?>{'color': '#33FFFFFF', 'width': 2},
               'overlay': <String, Object?>{
                 'color': '#22FF6B3D',
                 'blend': 'screen',
@@ -380,7 +377,10 @@ void main() {
         },
       });
 
-      expect(theme.tokens.components.ambient.lights.length, lessThanOrEqualTo(6));
+      expect(
+        theme.tokens.components.ambient.lights.length,
+        lessThanOrEqualTo(6),
+      );
     });
   });
 
@@ -410,9 +410,7 @@ void main() {
   group('rendering', () {
     testWidgets('a blur material installs a backdrop filter', (tester) async {
       await tester.pumpWidget(
-        _host(
-          const ThemeMaterial(blur: 24, color: Color(0xCC101214)),
-        ),
+        _host(const ThemeMaterial(blur: 24, color: Color(0xCC101214))),
       );
 
       expect(find.byType(BackdropFilter), findsOneWidget);
@@ -435,11 +433,7 @@ void main() {
           const ThemeMaterial(
             color: Color(0xFF101214),
             shadows: <ThemeShadow>[
-              ThemeShadow(
-                color: Color(0x66FF6B3D),
-                blur: 40,
-                spread: 2,
-              ),
+              ThemeShadow(color: Color(0x66FF6B3D), blur: 40, spread: 2),
             ],
           ),
         ),
@@ -534,10 +528,7 @@ void main() {
       final package = _parse(<String, Object?>{
         'tokens': <String, Object?>{
           'materials': <String, Object?>{
-            'content': <String, Object?>{
-              'color': '#CC101214',
-              'blur': 24,
-            },
+            'content': <String, Object?>{'color': '#CC101214', 'blur': 24},
           },
         },
       });

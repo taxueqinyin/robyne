@@ -12,6 +12,7 @@ import '../../../core/theme/domain/theme_materials.dart';
 import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
 import '../../../core/theme/presentation/theme_material.dart';
+import '../../../shared/widgets/horizontal_wheel_scroll.dart';
 import '../../downloads/application/download_providers.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/domain/playback_item.dart';
@@ -31,7 +32,9 @@ class DiscoverPage extends ConsumerWidget {
     final pluginsValue = ref.watch(pluginControllerProvider);
     final discoverState = ref.watch(discoverControllerProvider);
     final controller = ref.read(discoverControllerProvider.notifier);
-    final enabledPlugins = _enabledPlugins(pluginsValue.value);
+    // Ordered the way the plugin page arranged it: the source row is the same
+    // list of sources the user sorted, so a drag there shows up here.
+    final enabledPlugins = ref.watch(orderedEnabledPluginsProvider);
     final pluginSignature = discoverPluginSignature(enabledPlugins);
     final strings = ref.watch(activeThemeStringsProvider);
     final tokens = RobyneTheme.of(context).tokens;
@@ -118,14 +121,6 @@ class DiscoverPage extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  static List<PluginDefinition> _enabledPlugins(
-    List<PluginDefinition>? plugins,
-  ) {
-    return (plugins ?? const <PluginDefinition>[])
-        .where((plugin) => plugin.enabled)
-        .toList(growable: false);
   }
 }
 
@@ -347,9 +342,9 @@ class _BrowserBody extends ConsumerWidget {
     return Consumer(
       builder: (context, ref, _) {
         ref.watch(discoverControllerProvider);
-        final enabledPlugins = DiscoverPage._enabledPlugins(
-          ref.watch(pluginControllerProvider).value,
-        );
+        // Same ordered source list as the page header, so the browser and the
+        // home page agree on which plugin is "first".
+        final enabledPlugins = ref.watch(orderedEnabledPluginsProvider);
         return LayoutBuilder(
           builder: (context, constraints) {
             // The design draws the browser as two panes (来源 | 榜单歌曲).
@@ -460,19 +455,22 @@ class _BrowsePanel extends ConsumerWidget {
           // pane instead of wrapping. Scrollable axis wants a `Row`: chips
           // keep their intrinsic width and the row scrolls when the pane is
           // narrower than the source list (seen at 400dp phone width).
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              spacing: 8,
-              children: plugins
-                  .map(
-                    (plugin) => _SourceChip(
-                      label: plugin.platform,
-                      selected: plugin.id == state.selectedPluginId,
-                      onTap: () => onSelectPlugin(plugin.id),
-                    ),
-                  )
-                  .toList(growable: false),
+          HorizontalWheelScroll(
+            builder: (context, controller) => SingleChildScrollView(
+              controller: controller,
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                spacing: 8,
+                children: plugins
+                    .map(
+                      (plugin) => _SourceChip(
+                        label: plugin.platform,
+                        selected: plugin.id == state.selectedPluginId,
+                        onTap: () => onSelectPlugin(plugin.id),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
             ),
           ),
           const SizedBox(height: 16),

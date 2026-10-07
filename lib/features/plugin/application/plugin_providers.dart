@@ -64,6 +64,17 @@ final pluginDiscoveryExecutorProvider = Provider<PluginDiscoveryExecutor>((
   return QuickJsIsolatePluginDiscoveryExecutor();
 });
 
+/// Runs an arbitrary plugin method on a worker isolate.
+///
+/// Playback, lyrics and downloads need methods the discovery interface does
+/// not name (`getMediaSource`, `getLyric`). They must not build a QuickJS
+/// runtime on the calling isolate: a native engine there shares the UI thread
+/// and address space, so a plugin that faults aborts the whole process
+/// instead of producing an error.
+final pluginMethodRunnerProvider = Provider<PluginMethodRunner>((ref) {
+  return QuickJsIsolateMethodRunner();
+});
+
 final pluginRepositoryProvider = Provider<PluginRepository>((ref) {
   return LocalPluginRepository(
     fileStore: ref.watch(localFileStoreProvider),

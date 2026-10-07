@@ -162,9 +162,7 @@ class ThemeGradient {
       tile = ThemeGradientTile.clamp;
 
   /// No gradient at all: the surface falls back to its semantic colour.
-  static const ThemeGradient none = ThemeGradient(
-    stops: <ThemeGradientStop>[],
-  );
+  static const ThemeGradient none = ThemeGradient(stops: <ThemeGradientStop>[]);
 
   /// Largest number of stops a single gradient may carry.
   ///
@@ -455,8 +453,8 @@ class ThemeMaterialOverlay {
     final discrete = t < 0.5 ? a : b;
     return ThemeMaterialOverlay(
       color: Color.lerp(a.color, b.color, t),
-      gradient: ThemeGradient.lerp(a.gradient, b.gradient, t) ??
-          ThemeGradient.none,
+      gradient:
+          ThemeGradient.lerp(a.gradient, b.gradient, t) ?? ThemeGradient.none,
       blend: discrete.blend,
       opacity: a.opacity + (b.opacity - a.opacity) * t,
     );
@@ -599,7 +597,9 @@ class ThemeMaterial {
         ? a.shadows.length
         : b.shadows.length;
     for (var index = 0; index < shadowCount; index += 1) {
-      final left = a.shadows.isEmpty ? null : a.shadows[index % a.shadows.length];
+      final left = a.shadows.isEmpty
+          ? null
+          : a.shadows[index % a.shadows.length];
       final right = b.shadows.isEmpty
           ? null
           : b.shadows[index % b.shadows.length];
@@ -611,8 +611,8 @@ class ThemeMaterial {
     }
     return ThemeMaterial(
       color: Color.lerp(a.color, b.color, t),
-      gradient: ThemeGradient.lerp(a.gradient, b.gradient, t) ??
-          ThemeGradient.none,
+      gradient:
+          ThemeGradient.lerp(a.gradient, b.gradient, t) ?? ThemeGradient.none,
       opacity: a.opacity + (b.opacity - a.opacity) * t,
       blur: a.blur + (b.blur - a.blur) * t,
       saturation: a.saturation + (b.saturation - a.saturation) * t,

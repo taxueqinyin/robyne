@@ -121,8 +121,7 @@ abstract final class CapsuleWindow {
       : artworkTop + artworkSize;
 
   /// OS window width in capsule mode.
-  static double get windowWidth =>
-      barWidth + windowMarginHorizontal * 2;
+  static double get windowWidth => barWidth + windowMarginHorizontal * 2;
 
   /// OS window height in capsule mode, with or without the playlist open.
   static double windowHeight({required bool playlistOpen}) =>
@@ -357,9 +356,7 @@ Future<void> applyCapsuleWindowSize({required bool playlistOpen}) async {
 bool _applying = false;
 
 /// Places the capsule at its remembered position, inside the work area.
-Future<void> _moveCapsuleToRememberedSpot({
-  required bool playlistOpen,
-}) async {
+Future<void> _moveCapsuleToRememberedSpot({required bool playlistOpen}) async {
   // The live session's memory wins over the persisted one. Writing the
   // capsule's spot only on exit meant collapsing a second time in the same
   // session reopened at the shell's corner, because by then the persisted

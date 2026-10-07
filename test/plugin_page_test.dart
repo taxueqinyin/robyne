@@ -6,6 +6,7 @@ import 'package:robyne/core/result/result.dart';
 import 'package:robyne/features/plugin/application/plugin_providers.dart';
 import 'package:robyne/features/plugin/domain/plugin_definition.dart';
 import 'package:robyne/features/plugin/domain/plugin_repository.dart';
+import 'package:robyne/features/plugin/domain/plugin_sort.dart';
 import 'package:robyne/features/plugin/presentation/plugin_page.dart';
 
 void main() {
@@ -75,6 +76,27 @@ class _FakePluginRepository implements PluginRepository {
   }
 
   @override
+  Future<PluginImportBatchResult> importPluginBatchFromUrl(
+    String url, {
+    PluginImportProgressCallback? onProgress,
+  }) async {
+    final errors = <AppError>[];
+    var importedCount = 0;
+    if (importResult case Ok<PluginDefinition>(:final value)) {
+      plugins.add(value);
+      importedCount = 1;
+    } else if (importResult case Failure<PluginDefinition>(:final error)) {
+      errors.add(error);
+    }
+    return PluginImportBatchResult(
+      importedCount: importedCount,
+      updatedCount: 0,
+      skippedCount: 0,
+      errors: errors,
+    );
+  }
+
+  @override
   Future<Result<PluginDefinition>> importPluginFromPath(String path) async {
     return importResult;
   }
@@ -99,6 +121,13 @@ class _FakePluginRepository implements PluginRepository {
   @override
   Future<Result<void>> deletePlugin(String id) async {
     return const Ok(null);
+  }
+
+  @override
+  Future<Result<List<PluginDefinition>>> reorderPlugins(
+    List<String> orderedIds,
+  ) async {
+    return Ok(applyPluginOrder(List<PluginDefinition>.of(plugins), orderedIds));
   }
 
   @override

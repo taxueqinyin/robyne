@@ -136,12 +136,9 @@ class _CapsulePlayerBarState extends ConsumerState<CapsulePlayerBar> {
             Positioned(
               top: 0,
               bottom: 0,
-              left:
-                  CapsuleWindow.artworkInset +
-                  art +
-                  CapsuleWindow.artworkGap,
-              right: CapsuleWindow.closeButtonSize +
-                  CapsuleWindow.closeButtonGap,
+              left: CapsuleWindow.artworkInset + art + CapsuleWindow.artworkGap,
+              right:
+                  CapsuleWindow.closeButtonSize + CapsuleWindow.closeButtonGap,
               child: Center(
                 child: AnimatedSwitcher(
                   key: const ValueKey('capsule-middle'),
@@ -212,10 +209,7 @@ class _CapsulePlayerBarState extends ConsumerState<CapsulePlayerBar> {
                 fit: StackFit.expand,
                 children: <Widget>[
                   ClipOval(
-                    child: ArtworkView(
-                      artworkUrl: item?.artworkUrl,
-                      size: art,
-                    ),
+                    child: ArtworkView(artworkUrl: item?.artworkUrl, size: art),
                   ),
                   dragLayer(const Key('capsule-artwork-drag')),
                 ],
@@ -294,9 +288,7 @@ class _SkipButton extends StatelessWidget {
       size: CapsuleWindow.sideButtonSize,
       tooltip: tooltip,
       icon: ThemeIconView(
-        slot: direction < 0
-            ? ThemeIconKey.skipPrevious
-            : ThemeIconKey.skipNext,
+        slot: direction < 0 ? ThemeIconKey.skipPrevious : ThemeIconKey.skipNext,
         fallback: direction < 0
             ? Icons.skip_previous_rounded
             : Icons.skip_next_rounded,

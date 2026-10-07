@@ -139,6 +139,65 @@ void main() {
     expect((imported as Failure).error.code, 'plugin.url_invalid');
   });
 
+  test('a dragged order survives a read back from the database', () async {
+    _setMockPreferences();
+    final tempDirectory = await Directory.systemTemp.createTemp(
+      'robyne_plugin_repo_test_',
+    );
+    final database = db.AppDatabase.memory();
+    addTearDown(database.close);
+    addTearDown(() async {
+      await tempDirectory.delete(recursive: true);
+    });
+    final files = <File>[
+      for (var index = 0; index < 3; index += 1)
+        File('${tempDirectory.path}/plugin$index.js'),
+    ];
+    for (var index = 0; index < files.length; index += 1) {
+      await files[index].writeAsString(
+        _pluginSource(
+          platform: 'Source $index',
+          author: 'Author $index',
+          version: '1.0.0',
+        ),
+      );
+    }
+
+    final repository = LocalPluginRepository(
+      fileStore: LocalFileStore(baseDirectory: tempDirectory),
+      database: database,
+      preferences: SharedPreferencesAsync(),
+      runtimeFactory: _FakeRuntimeFactory(),
+      compatAdapter: MusicFreeCompatAdapter(),
+    );
+    for (final file in files) {
+      await repository.importPluginFromPath(file.path);
+    }
+
+    final installed = (await repository.listPlugins() as Ok).value;
+    expect(installed.map((plugin) => plugin.platform).toList(), <String>[
+      'Source 0',
+      'Source 1',
+      'Source 2',
+    ]);
+
+    final reordered = await repository.reorderPlugins(<String>[
+      installed[2].id,
+      installed[0].id,
+      installed[1].id,
+    ]);
+    expect(reordered, isA<Ok>());
+
+    // Read back through the repository rather than trusting the returned list:
+    // the ranking has to be in storage, not only in the caller's memory.
+    final reloaded = (await repository.listPlugins() as Ok).value;
+    expect(reloaded.map((plugin) => plugin.platform).toList(), <String>[
+      'Source 2',
+      'Source 0',
+      'Source 1',
+    ]);
+  });
+
   test('allows same platform with different authors to coexist', () async {
     _setMockPreferences();
     final tempDirectory = await Directory.systemTemp.createTemp(

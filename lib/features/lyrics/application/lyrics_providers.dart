@@ -10,9 +10,7 @@ import '../../../core/result/result.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/domain/playback_item.dart';
 import '../../plugin/application/plugin_providers.dart';
-import '../../plugin/application/plugin_runtime_config.dart';
 import '../../plugin/domain/plugin_definition.dart';
-import '../../plugin/domain/plugin_runtime.dart';
 import '../../settings/domain/lyric_settings.dart';
 import '../../settings/application/settings_providers.dart';
 import '../../settings/domain/shortcut_action.dart';
@@ -415,22 +413,19 @@ class LyricSearchController extends AsyncNotifier<LyricSearchState> {
         clearError: true,
       ),
     );
-    final runtimeFactory = ref.read(pluginRuntimeFactoryProvider);
+    final pluginSource = await File(plugin.sourcePath).readAsString();
     final compat = ref.read(musicFreeCompatAdapterProvider);
-    PluginRuntime? runtime;
     try {
-      runtime = await runtimeFactory.create();
-      final loaded = await runtime.loadPlugin(
-        await File(plugin.sourcePath).readAsString(),
-        userVariables: plugin.userVariableValues,
+      // Off the main isolate: see QuickJsIsolateMethodRunner — a native engine
+      // on the UI isolate shares Flutter's thread, so a plugin that faults
+      // aborts the process instead of returning an error.
+      final runner = ref.read(pluginMethodRunnerProvider);
+      final lyricResult = await runner.call(
+        plugin: plugin,
+        source: pluginSource,
+        method: 'getLyric',
+        arguments: <Object?>[candidate.raw],
       );
-      if (loaded case Failure<Map<String, Object?>>(:final error)) {
-        return error;
-      }
-
-      final lyricResult = await runtime.callMethod('getLyric', <Object?>[
-        candidate.raw,
-      ], timeout: pluginMethodTimeout);
       switch (lyricResult) {
         case Ok<Object?>(:final value):
           final adapted = compat.lyricFromPluginValue(value);
@@ -460,7 +455,6 @@ class LyricSearchController extends AsyncNotifier<LyricSearchState> {
         stackTrace: stackTrace,
       );
     } finally {
-      await runtime?.dispose();
       state = AsyncData(
         (state.value ?? const LyricSearchState()).copyWith(
           isAssociating: false,

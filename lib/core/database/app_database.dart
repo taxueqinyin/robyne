@@ -79,6 +79,15 @@ class PluginDefinitionRows extends Table {
   TextColumn get userVariableValuesJson =>
       text().withDefault(const Constant('{}'))();
 
+  /// The user's manual order within the plugin page.
+  ///
+  /// Not a sort preference: dragging a row rewrites this column, which is why
+  /// it lives on the row rather than in settings. Positive values are explicit
+  /// user placements and `0` means "never dragged", so freshly imported
+  /// plugins and legacy rows stay in install order instead of colliding at a
+  /// default rank.
+  IntColumn get sortIndex => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
@@ -166,12 +175,14 @@ class FavoriteCollections extends Table {
   TextColumn get collectionKey => text()();
   TextColumn get pluginId => text()();
   TextColumn get platform => text()();
+
   /// `OnlineCollectionKind.name`, so a ranking and a sheet never collide.
   TextColumn get kind => text()();
   TextColumn get collectionId => text()();
   TextColumn get title => text()();
   TextColumn get description => text().nullable()();
   TextColumn get artworkUrl => text().nullable()();
+
   /// The plugin payload, kept verbatim so the detail can be re-fetched.
   TextColumn get rawJson => text()();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
@@ -211,7 +222,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -221,6 +232,12 @@ class AppDatabase extends _$AppDatabase {
       // every other table, so only the new one needs creating.
       if (from < 2) {
         await m.createTable(favoriteCollections);
+      }
+      // v3 added the plugin page's manual row order. Every existing row keeps
+      // the default, which means "install order" — a user's list is not
+      // silently reshuffled by upgrading.
+      if (from < 3) {
+        await m.addColumn(pluginDefinitionRows, pluginDefinitionRows.sortIndex);
       }
     },
   );

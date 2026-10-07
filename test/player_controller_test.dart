@@ -15,6 +15,7 @@ import 'package:robyne/features/plugin/application/plugin_providers.dart';
 import 'package:robyne/features/plugin/domain/plugin_definition.dart';
 import 'package:robyne/features/plugin/domain/plugin_repository.dart';
 import 'package:robyne/features/plugin/domain/plugin_runtime.dart';
+import 'package:robyne/features/plugin/infrastructure/quickjs_plugin_runtime.dart';
 import 'package:robyne/features/search/domain/music_item.dart';
 
 void main() {
@@ -30,7 +31,7 @@ void main() {
       final slowPath = await _writePluginFile(tempDirectory, 'slow.js');
       final fastPath = await _writePluginFile(tempDirectory, 'fast.js');
       final slowCompleter = Completer<void>();
-      final runtimeFactory = _FakeRuntimeFactory(slowCompleter);
+      final runner = _BlockingMethodRunner(slowCompleter);
       final audio = _FakeAudioPlayerService();
 
       final container = ProviderContainer(
@@ -41,7 +42,7 @@ void main() {
               _plugin('fast', 'Fast', fastPath),
             ]),
           ),
-          pluginRuntimeFactoryProvider.overrideWithValue(runtimeFactory),
+          pluginMethodRunnerProvider.overrideWithValue(runner),
           audioPlayerServiceProvider.overrideWithValue(audio),
         ],
       );
@@ -49,7 +50,7 @@ void main() {
 
       final controller = container.read(playerControllerProvider.notifier);
       final slowPlay = controller.playFromPlugin(_musicItem('Slow'));
-      await runtimeFactory.waitForSlowRuntimeStarted();
+      await runner.waitForSlowCallStarted();
 
       await controller.playFromPlugin(_musicItem('Fast'));
       expect(audio.playedUrls, <String>['https://example.com/Fast.mp3']);
@@ -852,8 +853,8 @@ void main() {
             _plugin('beta', 'Shared', betaPath),
           ]),
         ),
-        pluginRuntimeFactoryProvider.overrideWithValue(
-          _SourceAwareRuntimeFactory(),
+        pluginMethodRunnerProvider.overrideWithValue(
+          _SourceAwareMethodRunner(),
         ),
         audioPlayerServiceProvider.overrideWithValue(audio),
       ],
@@ -943,6 +944,13 @@ class _FakePluginRepository implements PluginRepository {
   Future<Result<void>> deletePlugin(String id) async => const Ok(null);
 
   @override
+  Future<Result<List<PluginDefinition>>> reorderPlugins(
+    List<String> orderedIds,
+  ) async {
+    return const Ok(<PluginDefinition>[]);
+  }
+
+  @override
   Future<Result<PluginDefinition>> importPluginFromPath(String path) async {
     throw UnimplementedError();
   }
@@ -961,6 +969,14 @@ class _FakePluginRepository implements PluginRepository {
   }
 
   @override
+  Future<PluginImportBatchResult> importPluginBatchFromUrl(
+    String url, {
+    PluginImportProgressCallback? onProgress,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<Result<PluginDefinition>> updateUserVariableValues(
     String id,
     Map<String, String> values,
@@ -971,20 +987,6 @@ class _FakePluginRepository implements PluginRepository {
   @override
   Future<Result<PluginDefinition>> setEnabled(String id, bool enabled) async {
     throw UnimplementedError();
-  }
-}
-
-class _FakeRuntimeFactory extends PluginRuntimeFactory {
-  _FakeRuntimeFactory(this._slowCompleter);
-
-  final Completer<void> _slowCompleter;
-  final _slowRuntimeStarted = Completer<void>();
-
-  Future<void> waitForSlowRuntimeStarted() => _slowRuntimeStarted.future;
-
-  @override
-  Future<PluginRuntime> create() async {
-    return _FakeRuntime(_slowCompleter, _slowRuntimeStarted);
   }
 }
 
@@ -1020,71 +1022,47 @@ class _CountingRuntime implements PluginRuntime {
   Future<void> dispose() async {}
 }
 
-class _SourceAwareRuntimeFactory extends PluginRuntimeFactory {
+/// Resolves a URL from whichever plugin source it was handed, so the test can
+/// prove the player picked the right plugin when several share a platform.
+class _SourceAwareMethodRunner implements PluginMethodRunner {
   @override
-  Future<PluginRuntime> create() async {
-    return _SourceAwareRuntime();
+  Future<Result<Object?>> call({
+    required PluginDefinition plugin,
+    required String source,
+    required String method,
+    required List<Object?> arguments,
+  }) async {
+    final key = source.contains('beta') ? 'beta' : 'alpha';
+    return Ok(<String, Object?>{'url': 'https://example.com/$key.mp3'});
   }
 }
 
-class _SourceAwareRuntime implements PluginRuntime {
-  String _key = 'alpha';
-
-  @override
-  Future<Result<Map<String, Object?>>> loadPlugin(
-    String source, {
-    Map<String, String> userVariables = const <String, String>{},
-  }) async {
-    _key = source.contains('beta') ? 'beta' : 'alpha';
-    return const Ok(<String, Object?>{'platform': 'Shared'});
-  }
-
-  @override
-  Future<Result<Object?>> callMethod(
-    String method,
-    List<Object?> arguments, {
-    Duration timeout = const Duration(seconds: 15),
-  }) async {
-    return Ok(<String, Object?>{'url': 'https://example.com/$_key.mp3'});
-  }
-
-  @override
-  Future<void> dispose() async {}
-}
-
-class _FakeRuntime implements PluginRuntime {
-  _FakeRuntime(this._slowCompleter, this._slowRuntimeStarted);
+/// Blocks one plugin's resolution until released, so a slow response can be
+/// overlapped by a newer play request.
+class _BlockingMethodRunner implements PluginMethodRunner {
+  _BlockingMethodRunner(this._slowCompleter);
 
   final Completer<void> _slowCompleter;
-  final Completer<void> _slowRuntimeStarted;
-  String _platform = 'unknown';
+  final _slowCallStarted = Completer<void>();
+
+  Future<void> waitForSlowCallStarted() => _slowCallStarted.future;
 
   @override
-  Future<Result<Map<String, Object?>>> loadPlugin(
-    String source, {
-    Map<String, String> userVariables = const <String, String>{},
+  Future<Result<Object?>> call({
+    required PluginDefinition plugin,
+    required String source,
+    required String method,
+    required List<Object?> arguments,
   }) async {
-    _platform = source.contains('slow') ? 'Slow' : 'Fast';
-    return Ok(<String, Object?>{'platform': _platform});
-  }
-
-  @override
-  Future<Result<Object?>> callMethod(
-    String method,
-    List<Object?> arguments, {
-    Duration timeout = const Duration(seconds: 15),
-  }) async {
-    if (_platform == 'Slow') {
-      if (!_slowRuntimeStarted.isCompleted) {
-        _slowRuntimeStarted.complete();
-      }
+    if (plugin.platform == 'Slow') {
+      _slowCallStarted.complete();
       await _slowCompleter.future;
+      return Ok(<String, Object?>{'url': 'https://example.com/Slow.mp3'});
     }
-    return Ok(<String, Object?>{'url': 'https://example.com/$_platform.mp3'});
+    return Ok(<String, Object?>{
+      'url': 'https://example.com/${plugin.platform}.mp3',
+    });
   }
-
-  @override
-  Future<void> dispose() async {}
 }
 
 class _FakeCacheService extends LocalAudioCacheService {

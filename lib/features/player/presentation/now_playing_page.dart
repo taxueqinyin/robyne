@@ -13,6 +13,7 @@ import '../../../core/theme/application/theme_providers.dart';
 import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
 import '../../../shared/widgets/search_action_button.dart';
+import '../../../shared/widgets/horizontal_wheel_scroll.dart';
 import '../../../shared/widgets/window_control_button.dart';
 import '../../lyrics/application/lyrics_providers.dart';
 import '../../playlists/application/playlist_providers.dart';
@@ -1003,26 +1004,30 @@ class _LyricSearchDialogState extends ConsumerState<_LyricSearchDialog> {
             const SizedBox(height: 12),
             SizedBox(
               height: 40,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: state.pluginResults.length,
-                separatorBuilder: (context, index) => const SizedBox(width: 8),
-                itemBuilder: (context, index) {
-                  final result = state.pluginResults[index];
-                  return ChoiceChip(
-                    selected: result.pluginId == selected?.pluginId,
-                    label: Text(
-                      result.isSearching
-                          ? '${result.platform} ...'
-                          : result.error != null
-                          ? '${result.platform} !'
-                          : '${result.platform} ${result.items.length}',
-                    ),
-                    onSelected: (_) => ref
-                        .read(lyricSearchControllerProvider.notifier)
-                        .selectPlugin(result.pluginId),
-                  );
-                },
+              child: HorizontalWheelScroll(
+                builder: (context, controller) => ListView.separated(
+                  controller: controller,
+                  scrollDirection: Axis.horizontal,
+                  itemCount: state.pluginResults.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final result = state.pluginResults[index];
+                    return ChoiceChip(
+                      selected: result.pluginId == selected?.pluginId,
+                      label: Text(
+                        result.isSearching
+                            ? '${result.platform} ...'
+                            : result.error != null
+                            ? '${result.platform} !'
+                            : '${result.platform} ${result.items.length}',
+                      ),
+                      onSelected: (_) => ref
+                          .read(lyricSearchControllerProvider.notifier)
+                          .selectPlugin(result.pluginId),
+                    );
+                  },
+                ),
               ),
             ),
             const Divider(height: 24),

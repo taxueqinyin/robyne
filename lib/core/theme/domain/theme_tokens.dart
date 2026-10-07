@@ -641,8 +641,8 @@ class ThemeBackgroundLayer {
   ) {
     return ThemeBackgroundLayer(
       color: Color.lerp(a.color, b.color, t),
-      gradient: ThemeGradient.lerp(a.gradient, b.gradient, t) ??
-          ThemeGradient.none,
+      gradient:
+          ThemeGradient.lerp(a.gradient, b.gradient, t) ?? ThemeGradient.none,
       blend: t < 0.5 ? a.blend : b.blend,
       opacity: a.opacity + (b.opacity - a.opacity) * t,
     );

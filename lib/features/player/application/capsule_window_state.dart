@@ -100,9 +100,6 @@ Rect capsuleBoundsAt({
     math.min<double>(workArea.left, maxLeft),
     maxLeft,
   );
-  final top = position.dy.clamp(
-    math.min<double>(workArea.top, maxTop),
-    maxTop,
-  );
+  final top = position.dy.clamp(math.min<double>(workArea.top, maxTop), maxTop);
   return Rect.fromLTWH(left, top, size.width, size.height);
 }

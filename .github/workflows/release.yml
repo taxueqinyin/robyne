@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to build (e.g. v1.0.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.3'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Signing is optional on purpose. Without the secrets the build still
+      # produces an installable APK signed with the debug key, so a fork can
+      # cut a build immediately; with them it produces a properly signed one.
+      # The alternative — failing when the secrets are absent — means nobody
+      # can build a release until they have set up a keystore.
+      - name: Decode the signing keystore
+        if: ${{ vars.SIGN_ANDROID == 'true' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore.jks
+
+      - name: Build APK
+        run: |
+          if [ "$SIGN_ANDROID" != "true" ]; then
+            echo "::warning::No keystore configured — this APK is signed with the debug key and is not a distributable release. Set the ANDROID_* secrets and SIGN_ANDROID to sign it properly."
+          fi
+          flutter build apk --release \
+            --build-name="${TAG_NAME#v}" \
+            --build-number="$BUILD_NUMBER"
+        env:
+          SIGN_ANDROID: ${{ vars.SIGN_ANDROID }}
+          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: robyne-android
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.3'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build
+        run: flutter build windows --release
+
+      # The build output is a directory: the .exe, its DLLs and the `data`
+      # folder. It only runs as a directory, so the release artifact is a
+      # zip of the directory rather than the bare .exe.
+      - name: Package
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.inputs.tag || github.ref_name }}"
+          Compress-Archive -Path build\windows\x64\runner\Release\* `
+            -DestinationPath "robyne-windows-x64-$tag.zip"
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: robyne-windows
+          path: robyne-windows-x64-*.zip
+
+  release:
+    name: Publish release
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.apk
+            artifacts/**/*.zip
+          generate_release_notes: true

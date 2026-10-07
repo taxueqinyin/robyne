@@ -190,9 +190,7 @@ class MaterialSurface extends StatelessWidget {
           ),
         child,
         if (material.shimmer != null)
-          Positioned.fill(
-            child: _ShimmerLayer(shimmer: material.shimmer!),
-          ),
+          Positioned.fill(child: _ShimmerLayer(shimmer: material.shimmer!)),
         if (material.overlay?.isEmpty == false)
           Positioned.fill(
             child: IgnorePointer(
@@ -268,10 +266,7 @@ List<double>? materialColorMatrix(ThemeMaterial material) {
   final saturation = material.saturation;
   final contrast = material.contrast;
   final brightness = material.brightness;
-  if (grayscale == 0 &&
-      saturation == 1 &&
-      contrast == 1 &&
-      brightness == 1) {
+  if (grayscale == 0 && saturation == 1 && contrast == 1 && brightness == 1) {
     return null;
   }
 
@@ -365,10 +360,7 @@ Shader? materialGradientShader(ThemeGradient gradient, Rect rect) {
 }
 
 Alignment _alignment(ThemePoint point) {
-  return Alignment(
-    point.x.clamp(-1.0, 1.0),
-    point.y.clamp(-1.0, 1.0),
-  );
+  return Alignment(point.x.clamp(-1.0, 1.0), point.y.clamp(-1.0, 1.0));
 }
 
 double _radians(double degrees) => degrees * math.pi / 180;
@@ -673,7 +665,8 @@ class _ShimmerPainter extends CustomPainter {
     final diagonal = math.sqrt(width * width + height * height);
     final bandWidth = (diagonal * shimmer.width.clamp(0.01, 4)).abs();
     final travel = diagonal + bandWidth * 2;
-    final center = Offset(width / 2, height / 2) +
+    final center =
+        Offset(width / 2, height / 2) +
         direction * (progress * travel - travel / 2);
     final half = direction * (bandWidth / 2);
     final perpendicular = Offset(-direction.dy, direction.dx);
@@ -700,21 +693,22 @@ class _ShimmerPainter extends CustomPainter {
     canvas.drawPath(
       quad,
       Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: <Color>[
-            shimmer.color.withValues(alpha: 0),
-            shimmer.color.withValues(alpha: shimmer.color.a * opacity),
-            shimmer.color.withValues(alpha: 0),
-          ],
-        ).createShader(
-          Rect.fromCenter(
-            center: center,
-            width: bandWidth * 2,
-            height: reach * 2,
-          ),
-        )
+        ..shader =
+            LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: <Color>[
+                shimmer.color.withValues(alpha: 0),
+                shimmer.color.withValues(alpha: shimmer.color.a * opacity),
+                shimmer.color.withValues(alpha: 0),
+              ],
+            ).createShader(
+              Rect.fromCenter(
+                center: center,
+                width: bandWidth * 2,
+                height: reach * 2,
+              ),
+            )
         ..blendMode = materialBlendMode(shimmer.blend),
     );
   }

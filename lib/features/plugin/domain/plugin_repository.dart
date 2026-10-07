@@ -41,6 +41,8 @@ class PluginImportBatchResult {
   bool get hasErrors => errors.isNotEmpty;
 
   bool get changedPlugins => importedCount > 0 || updatedCount > 0;
+
+  int get successCount => importedCount + updatedCount;
 }
 
 abstract interface class PluginRepository {
@@ -55,12 +57,32 @@ abstract interface class PluginRepository {
 
   Future<Result<PluginDefinition>> importPluginFromUrl(String url);
 
+  /// Imports every plugin reachable from [url].
+  ///
+  /// A single-plugin URL yields a one-item batch. A plugin-list URL fans out
+  /// to its entries. Unlike [importPluginFromUrl], a partial failure still
+  /// reports how many plugins landed, so the caller can refresh its list
+  /// instead of discarding the successes.
+  Future<PluginImportBatchResult> importPluginBatchFromUrl(
+    String url, {
+    PluginImportProgressCallback? onProgress,
+  });
+
   Future<Result<PluginDefinition>> updateUserVariableValues(
     String id,
     Map<String, String> values,
   );
 
   Future<Result<PluginDefinition>> setEnabled(String id, bool enabled);
+
+  /// Persists the user's manual row order.
+  ///
+  /// Ids absent from [orderedIds] keep the rank they already hold, so moving
+  /// one row cannot flatten an arrangement built up over several drags. The
+  /// returned list is the new plugin list in the app's default order.
+  Future<Result<List<PluginDefinition>>> reorderPlugins(
+    List<String> orderedIds,
+  );
 
   Future<Result<void>> deletePlugin(String id);
 }

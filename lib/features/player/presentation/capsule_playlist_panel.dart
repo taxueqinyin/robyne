@@ -81,10 +81,7 @@ class CapsulePlaylistPanel extends ConsumerWidget {
                           Text(
                             strings
                                 .resolve(ThemeStringKey.queueCount)
-                                .replaceAll(
-                                  '{count}',
-                                  '${state.queue.length}',
-                                ),
+                                .replaceAll('{count}', '${state.queue.length}'),
                             style: TextStyle(
                               fontSize: 10.5,
                               color: colors.textMuted,
@@ -120,6 +117,12 @@ class CapsulePlaylistPanel extends ConsumerWidget {
                                 index: index,
                                 item: item,
                                 active: item.id == current?.id,
+                                removeLabel: strings.resolve(
+                                  ThemeStringKey.actionRemove,
+                                ),
+                                onRemove: () => ref
+                                    .read(playerControllerProvider.notifier)
+                                    .removeFromQueue(item.id),
                                 onTap: () => ref
                                     .read(playerControllerProvider.notifier)
                                     .playItem(item),
@@ -144,12 +147,16 @@ class _CapsulePlaylistRow extends StatelessWidget {
     required this.item,
     required this.active,
     required this.onTap,
+    this.onRemove,
+    this.removeLabel,
   });
 
   final int index;
   final PlaybackItem item;
   final bool active;
   final VoidCallback onTap;
+  final VoidCallback? onRemove;
+  final String? removeLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -211,6 +218,18 @@ class _CapsulePlaylistRow extends StatelessWidget {
                 ],
               ),
             ),
+            if (onRemove != null)
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 14,
+                  tooltip: removeLabel,
+                  onPressed: onRemove,
+                  icon: Icon(Icons.close, color: colors.textMuted),
+                ),
+              ),
           ],
         ),
       ),

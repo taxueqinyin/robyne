@@ -254,8 +254,7 @@ class ThemeManifestParser {
     return ThemeShimmer(
       color: color,
       width: _doubleRangedOrNull(raw['width'], 0.01, 4) ?? 0.35,
-      angle:
-          _doubleRangedOrNull(raw['angle'], -360, 360) ?? -20,
+      angle: _doubleRangedOrNull(raw['angle'], -360, 360) ?? -20,
       periodMs: _intRangedOrNull(raw['periodMs'], 200, 20000) ?? 2400,
       blend: ThemeBlendMode.fromName(_string(raw['blend'])),
       opacity: _doubleRangedOrNull(raw['opacity'], 0, 1) ?? 0.5,
@@ -522,7 +521,9 @@ class ThemeManifestParser {
     }
     final stops = <ThemeGradientStop>[];
     final plainCount = raw
-        .where((entry) => entry is! Map && entry is String && _color(entry) != null)
+        .where(
+          (entry) => entry is! Map && entry is String && _color(entry) != null,
+        )
         .length;
     var plainIndex = 0;
     for (final entry in raw.take(_maxGradientStops)) {
@@ -553,9 +554,7 @@ class ThemeManifestParser {
       }
       // Even distribution across the plain entries, so
       // `["#a", "#b", "#c"]` spreads them rather than stacking them at 0.
-      final offset = plainCount <= 1
-          ? 0.0
-          : plainIndex / (plainCount - 1);
+      final offset = plainCount <= 1 ? 0.0 : plainIndex / (plainCount - 1);
       plainIndex += 1;
       stops.add(ThemeGradientStop(color: color, offset: offset));
     }
@@ -859,7 +858,8 @@ class ThemeManifestParser {
       overlay: _color(raw['overlay']),
       overlayOpacity: opacity,
       blur: _doubleRangedOrNull(raw['blur'], 0, _maxBlur) ?? 0,
-      saturation: _doubleRangedOrNull(raw['saturation'], 0, _maxSaturation) ?? 1,
+      saturation:
+          _doubleRangedOrNull(raw['saturation'], 0, _maxSaturation) ?? 1,
       brightness:
           _doubleRangedOrNull(raw['brightness'], 0, _maxColorScale) ?? 1,
       contrast: _doubleRangedOrNull(raw['contrast'], 0, _maxColorScale) ?? 1,

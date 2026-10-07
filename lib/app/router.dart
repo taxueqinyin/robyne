@@ -65,6 +65,7 @@ import '../features/settings/domain/shortcut_action.dart';
 import '../features/settings/domain/shortcut_settings.dart';
 import '../features/settings/presentation/settings_page.dart';
 import '../shared/widgets/window_control_button.dart';
+import '../shared/widgets/search_field_with_history.dart';
 import 'desktop_tray_controller.dart';
 import 'navigation.dart';
 
@@ -1144,6 +1145,7 @@ class _TopBar extends ConsumerStatefulWidget {
 
 class _TopBarState extends ConsumerState<_TopBar> {
   late final TextEditingController _keyword;
+  late final FocusNode _keywordFocus;
 
   @override
   void initState() {
@@ -1152,11 +1154,13 @@ class _TopBarState extends ConsumerState<_TopBar> {
       text:
           ref.read(search_state.searchControllerProvider).value?.keyword ?? '',
     );
+    _keywordFocus = FocusNode();
     attachImeTextControllerTrace(_keyword, 'topbar.keyword');
   }
 
   @override
   void dispose() {
+    _keywordFocus.dispose();
     _keyword.dispose();
     super.dispose();
   }
@@ -1231,76 +1235,45 @@ class _TopBarState extends ConsumerState<_TopBar> {
                       constraints: BoxConstraints(
                         maxWidth: compactSearch ? 280 : 360,
                       ),
-                      child: TextField(
+                      // The remembered searches now live in a dropdown on the
+                      // field itself: the suggestion has to appear while the
+                      // user is typing, which a section further down the
+                      // results page never managed to do.
+                      child: SearchFieldWithHistory(
                         controller: _keyword,
-                        style: TextStyle(color: colors.textPrimary),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          filled: true,
-                          // The design's field is a translucent pill on the bar,
-                          // not an opaque card: it reads as chrome rather than as a
-                          // field floating over the page.
-                          fillColor: colors.textPrimary.withValues(
-                            alpha: 0.055,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          prefixIcon: IconButton(
-                            key: const Key('topbar-search-submit'),
-                            tooltip: ref
-                                .watch(activeThemeStringsProvider)
-                                .resolve(ThemeStringKey.searchAction),
-                            onPressed: () => _search(plugins),
-                            padding: EdgeInsets.zero,
-                            iconSize: 18,
-                            icon: ThemeIconView(
-                              slot: ThemeIconKey.search,
-                              fallback: Icons.search,
-                              size: 18,
-                              color: colors.textMuted,
-                            ),
-                          ),
-                          hintText: ref
+                        focusNode: _keywordFocus,
+                        onSubmit: (keyword) => _search(plugins),
+                        // The design's field is a translucent pill on the bar,
+                        // not an opaque card: it reads as chrome rather than as a
+                        // field floating over the page.
+                        fillColor: colors.textPrimary.withValues(alpha: 0.055),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        prefix: IconButton(
+                          key: const Key('topbar-search-submit'),
+                          tooltip: ref
                               .watch(activeThemeStringsProvider)
-                              .resolve(ThemeStringKey.searchHint),
-                          hintStyle: TextStyle(
-                            fontSize: 13,
+                              .resolve(ThemeStringKey.searchAction),
+                          onPressed: () => _search(plugins),
+                          padding: EdgeInsets.zero,
+                          iconSize: 18,
+                          icon: ThemeIconView(
+                            slot: ThemeIconKey.search,
+                            fallback: Icons.search,
+                            size: 18,
                             color: colors.textMuted,
                           ),
-                          suffixIcon: Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: _CtrlKHint(colors: colors, tokens: tokens),
-                          ),
-                          suffixIconConstraints: const BoxConstraints(
-                            minHeight: 0,
-                            minWidth: 0,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(
-                              Radius.circular(tokens.radius.full),
-                            ),
-                            borderSide: BorderSide(color: colors.borderSubtle),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(
-                              Radius.circular(tokens.radius.full),
-                            ),
-                            borderSide: BorderSide(color: colors.borderSubtle),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(
-                              Radius.circular(tokens.radius.full),
-                            ),
-                            borderSide: BorderSide(
-                              color: colors.borderFocus,
-                              width: 2,
-                            ),
-                          ),
                         ),
-                        textInputAction: TextInputAction.search,
-                        onSubmitted: (_) => _search(plugins),
+                        suffix: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: _CtrlKHint(colors: colors, tokens: tokens),
+                        ),
+                        suffixConstraints: const BoxConstraints(
+                          minHeight: 0,
+                          minWidth: 0,
+                        ),
                       ),
                     ),
                   ),
@@ -2685,123 +2658,131 @@ class _QueuePanelState extends ConsumerState<_QueuePanel> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 18, 10, 10),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            strings.resolve(ThemeStringKey.queueTitle),
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: colors.textPrimary,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 10, 10),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              strings.resolve(ThemeStringKey.queueTitle),
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: colors.textPrimary,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            strings
-                                .resolve(ThemeStringKey.queueCount)
-                                .replaceAll('{count}', '${state.queue.length}'),
+                            const SizedBox(height: 2),
+                            Text(
+                              strings
+                                  .resolve(ThemeStringKey.queueCount)
+                                  .replaceAll(
+                                    '{count}',
+                                    '${state.queue.length}',
+                                  ),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: colors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        key: const Key('player-queue-close'),
+                        tooltip: strings.resolve(ThemeStringKey.queueCollapse),
+                        icon: const Icon(Icons.close, size: 18),
+                        color: colors.textMuted,
+                        onPressed: () => ref
+                            .read(queuePanelVisibleProvider.notifier)
+                            .setVisible(false),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: <Widget>[
+                      _QueueTab(
+                        label: strings.resolve(ThemeStringKey.queueTabQueue),
+                        selected: !_showLiked,
+                        onTap: () => setState(() => _showLiked = false),
+                      ),
+                      const SizedBox(width: 6),
+                      _QueueTab(
+                        label: strings.resolve(ThemeStringKey.queueTabLiked),
+                        selected: _showLiked,
+                        onTap: () => setState(() => _showLiked = true),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: items.isEmpty
+                      ? Center(
+                          child: Text(
+                            _showLiked
+                                ? strings.resolve(
+                                    ThemeStringKey.queueLikedEmpty,
+                                  )
+                                : strings.resolve(ThemeStringKey.queueEmpty),
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 12,
                               color: colors.textMuted,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      key: const Key('player-queue-close'),
-                      tooltip: strings.resolve(ThemeStringKey.queueCollapse),
-                      icon: const Icon(Icons.close, size: 18),
-                      color: colors.textMuted,
-                      onPressed: () => ref
-                          .read(queuePanelVisibleProvider.notifier)
-                          .setVisible(false),
-                    ),
-                  ],
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          itemCount: items.length,
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            final active = item.id == current?.id;
+                            return _QueueRow(
+                              item: item,
+                              active: active,
+                              onTap: () => ref
+                                  .read(playerControllerProvider.notifier)
+                                  .playItem(item),
+                            );
+                          },
+                        ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Row(
-                  children: <Widget>[
-                    _QueueTab(
-                      label: strings.resolve(ThemeStringKey.queueTabQueue),
-                      selected: !_showLiked,
-                      onTap: () => setState(() => _showLiked = false),
+                Divider(height: 1, color: colors.borderSubtle),
+                InkWell(
+                  onTap: state.queue.isEmpty
+                      ? null
+                      : () => ref
+                            .read(playerControllerProvider.notifier)
+                            .clearQueue(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 12,
                     ),
-                    const SizedBox(width: 6),
-                    _QueueTab(
-                      label: strings.resolve(ThemeStringKey.queueTabLiked),
-                      selected: _showLiked,
-                      onTap: () => setState(() => _showLiked = true),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: items.isEmpty
-                    ? Center(
-                        child: Text(
-                          _showLiked
-                              ? strings.resolve(ThemeStringKey.queueLikedEmpty)
-                              : strings.resolve(ThemeStringKey.queueEmpty),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.delete_sweep_outlined,
+                          size: 16,
+                          color: colors.textMuted,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          strings.resolve(ThemeStringKey.queueClear),
                           style: TextStyle(
                             fontSize: 12,
                             color: colors.textMuted,
                           ),
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        itemCount: items.length,
-                        itemBuilder: (context, index) {
-                          final item = items[index];
-                          final active = item.id == current?.id;
-                          return _QueueRow(
-                            item: item,
-                            active: active,
-                            onTap: () => ref
-                                .read(playerControllerProvider.notifier)
-                                .playItem(item),
-                          );
-                        },
-                      ),
-              ),
-              Divider(height: 1, color: colors.borderSubtle),
-              InkWell(
-                onTap: state.queue.isEmpty
-                    ? null
-                    : () => ref
-                          .read(playerControllerProvider.notifier)
-                          .clearQueue(),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: <Widget>[
-                      Icon(
-                        Icons.delete_sweep_outlined,
-                        size: 16,
-                        color: colors.textMuted,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        strings.resolve(ThemeStringKey.queueClear),
-                        style: TextStyle(fontSize: 12, color: colors.textMuted),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
               ],
             ),
           ),

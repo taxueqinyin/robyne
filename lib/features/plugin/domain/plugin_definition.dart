@@ -6,6 +6,7 @@ class PluginDefinition {
     required this.enabled,
     required this.installedAt,
     required this.updatedAt,
+    this.sortIndex = 0,
     this.version,
     this.author,
     this.description,
@@ -23,6 +24,13 @@ class PluginDefinition {
   final bool enabled;
   final DateTime installedAt;
   final DateTime updatedAt;
+
+  /// The user's manual row order; see `PluginDefinitionRows.sortIndex`.
+  ///
+  /// `0` means "never dragged", which sorts before every explicit placement
+  /// so newly imported plugins land at the top of a list the user has already
+  /// arranged rather than at an arbitrary index.
+  final int sortIndex;
   final List<String> supportedSearchTypes;
   final List<Map<String, Object?>> userVariables;
   final Map<String, String> userVariableValues;
@@ -37,6 +45,7 @@ class PluginDefinition {
     bool? enabled,
     DateTime? installedAt,
     DateTime? updatedAt,
+    int? sortIndex,
     List<String>? supportedSearchTypes,
     List<Map<String, Object?>>? userVariables,
     Map<String, String>? userVariableValues,
@@ -51,6 +60,7 @@ class PluginDefinition {
       enabled: enabled ?? this.enabled,
       installedAt: installedAt ?? this.installedAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      sortIndex: sortIndex ?? this.sortIndex,
       supportedSearchTypes: supportedSearchTypes ?? this.supportedSearchTypes,
       userVariables: userVariables ?? this.userVariables,
       userVariableValues: userVariableValues ?? this.userVariableValues,
@@ -68,6 +78,7 @@ class PluginDefinition {
       enabled: json['enabled'] as bool? ?? true,
       installedAt: DateTime.parse(json['installedAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
+      sortIndex: (json['sortIndex'] as num?)?.toInt() ?? 0,
       supportedSearchTypes:
           (json['supportedSearchTypes'] as List<dynamic>? ?? const <dynamic>[])
               .map((type) => type.toString())
@@ -102,6 +113,7 @@ class PluginDefinition {
       'enabled': enabled,
       'installedAt': installedAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'sortIndex': sortIndex,
       'supportedSearchTypes': supportedSearchTypes,
       'userVariables': userVariables,
       'userVariableValues': userVariableValues,
