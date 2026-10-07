@@ -19,8 +19,8 @@ void main() {
     final harness = await _Harness.start(
       manifest: jsonEncode(<String, Object?>{
         'plugins': <Object?>[
-          <String, Object?>{'name': '酷我', 'url': '/a.js'},
-          <String, Object?>{'name': '酷狗', 'url': '/b.js'},
+          <String, Object?>{'name': 'source-a', 'url': '/a.js'},
+          <String, Object?>{'name': 'source-b', 'url': '/b.js'},
           <String, Object?>{'name': 'QQ', 'url': '/c.js'},
         ],
       }),

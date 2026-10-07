@@ -128,8 +128,8 @@ void main() {
 
       final failures = <String>[];
       for (final path in <String>[
-        'test_files/bilibili.js',
-        'test_files/网易云.js',
+        'test_files/fixture-a.js',
+        'test_files/fixture-b.js',
       ]) {
         final runtime = QuickJsPluginRuntime(
           httpClient: PluginHttpClient(),

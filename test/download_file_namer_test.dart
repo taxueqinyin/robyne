@@ -34,7 +34,7 @@ void main() {
 
   test('uses target extension when download format converts audio', () {
     final item = PlaybackItem.plugin(
-      platform: 'bilibili',
+      platform: 'fixture-a',
       musicId: '1',
       title: 'Song',
       artist: 'Artist',
@@ -47,7 +47,7 @@ void main() {
         Uri.parse('https://e.test/audio.m4s'),
         targetExtension: '.mp3',
       ),
-      'Song - Artist - bilibili.mp3',
+      'Song - Artist - fixture-a.mp3',
     );
   });
 }

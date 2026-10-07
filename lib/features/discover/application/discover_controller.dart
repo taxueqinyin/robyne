@@ -283,7 +283,7 @@ class DiscoverController extends Notifier<DiscoverState> {
   /// hot playlists.
   ///
   /// Plugin capabilities are probed by calling, not declared up front, so a
-  /// plugin can be enabled yet still fail `getRecommendSheetTags` (bilibili is
+  /// plugin can be enabled yet still fail `getRecommendSheetTags` (one bundled fixture is
   /// the standing example: it has rankings but no recommend-sheet tags).
   /// Without this the home rail would stay empty forever on a machine whose
   /// first plugin is ranking-only. Each candidate is tried in order and the

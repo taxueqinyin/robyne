@@ -102,7 +102,7 @@ void main() {
 
     final controller = container.read(discoverControllerProvider.notifier);
     await controller.syncPlugins(<PluginDefinition>[
-      _plugin('plugin-a', 'bilibili', pluginPath),
+      _plugin('plugin-a', 'fixture-a', pluginPath),
     ]);
     await controller.selectSurface(DiscoverSurface.hotPlaylists);
 
@@ -111,7 +111,7 @@ void main() {
     expect(
       error?.message,
       contains(
-        'bilibili plugin does not expose getRecommendSheetTags, so hot playlist tags is unavailable',
+        'fixture-a plugin does not expose getRecommendSheetTags, so hot playlist tags is unavailable',
       ),
     );
     expect(error?.message, contains('Check whether the plugin is outdated'));
@@ -143,7 +143,7 @@ void main() {
 
       final controller = container.read(discoverControllerProvider.notifier);
       await controller.syncPlugins(<PluginDefinition>[
-        _plugin('plugin-a', 'bilibili', pluginPath),
+        _plugin('plugin-a', 'fixture-a', pluginPath),
       ]);
       final collection = container
           .read(discoverControllerProvider)
@@ -158,7 +158,7 @@ void main() {
       expect(error?.code, 'plugin.runtime_error');
       expect(
         error?.message,
-        contains('bilibili plugin failed while calling getTopListDetail'),
+        contains('fixture-a plugin failed while calling getTopListDetail'),
       );
       expect(
         error?.message,

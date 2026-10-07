@@ -8,7 +8,7 @@ void main() {
       final result = PluginListManifest.parse('''
 {
   "plugins": [
-    {"name": "碳酸酷我", "url": "https://example.com/a.js", "id": 1},
+    {"name": "source-a", "url": "https://example.com/a.js", "id": 1},
     {"name": "碳酸Meting", "url": "https://example.com/b.js", "id": 2}
   ]
 }
@@ -16,8 +16,8 @@ void main() {
       final manifest = (result as Ok<PluginListManifest?>).value!;
       expect(manifest.entries, hasLength(2));
       expect(manifest.entries[0].url, 'https://example.com/a.js');
-      expect(manifest.entries[0].name, '碳酸酷我');
-      expect(manifest.entries[0].label, '碳酸酷我 (https://example.com/a.js)');
+      expect(manifest.entries[0].name, 'source-a');
+      expect(manifest.entries[0].label, 'source-a (https://example.com/a.js)');
     });
 
     test('accepts a bare array and bare strings', () {

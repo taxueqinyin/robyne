@@ -927,7 +927,7 @@ const discoverBrowserOverlay = () => `
       <div class="pane">
         <h4>来源</h4>
         <div class="tagwrap" style="padding-bottom:12px">
-          <span class="tchip on">QQ音乐</span><span class="tchip">网易云</span><span class="tchip">酷狗</span>
+          <span class="tchip on">XXX</span><span class="tchip">XXX</span><span class="tchip">XXX</span>
         </div>
         <div class="segbar" style="margin-bottom:12px"><b class="on">${ico('trophy','sm')} 排行榜</b><b>${ico('grid','sm')} 热门歌单</b></div>
         <h4>热门歌单标签</h4>
@@ -991,8 +991,8 @@ const desktopSearch = (o = {}) => `
             <div class="pillbtn primary">${ico('search','xs')} 搜索</div>
           </div>
           <div class="tagwrap" style="padding-bottom:14px">
-            <span class="tchip on">全部插件 128</span><span class="tchip">QQ音乐 42</span>
-            <span class="tchip">网易云 36</span><span class="tchip">酷狗 50</span>
+            <span class="tchip on">全部插件 128</span><span class="tchip">XXX 42</span>
+            <span class="tchip">XXX 36</span><span class="tchip">XXX 50</span>
           </div>
           <div class="mlist" style="flex:1;min-height:0">
             ${TRACKS.map((t, i) => `
@@ -1002,7 +1002,7 @@ const desktopSearch = (o = {}) => `
                   <div class="art ${t.art}"></div>
                   <div class="grow ell" style="margin-left:12px">
                     <div class="row"><span class="tt ell">${t.t}</span>
-                      <span class="qchips"><span class="chip">${['QQ音乐','网易云','酷狗'][i % 3]}</span></span></div>
+                      <span class="qchips"><span class="chip">${['XXX','XXX','XXX'][i % 3]}</span></span></div>
                     <div class="ta ell">${t.a} · ${t.al}</div>
                   </div>
                 </div>
@@ -1134,10 +1134,10 @@ const desktopPluginsChrome = (o = {}) => `
         </div>
         <div class="mlist" style="flex:1;min-height:0">
           ${[
-            { n:'QQ音乐', v:'v1.2', a:'官方', t:'song,album', on:true },
-            { n:'网易云音乐', v:'v0.9', a:'社区', t:'song,playlist', on:true },
-            { n:'酷狗音乐', v:'v1.0', a:'社区', t:'song', on:false },
-            { n:'咪咕音乐', v:'v0.3', a:'社区', t:'song', on:true, vars:true },
+            { n:'XXX', v:'v1.2', a:'官方', t:'song,album', on:true },
+            { n:'XXX', v:'v0.9', a:'社区', t:'song,playlist', on:true },
+            { n:'XXX', v:'v1.0', a:'社区', t:'song', on:false },
+            { n:'XXX', v:'v0.3', a:'社区', t:'song', on:true, vars:true },
           ].map((p) => `
             <div class="plugrow">
               <div class="pi">${ico('extension')}</div>
@@ -1350,7 +1350,7 @@ const desktopPluginVariables = () => `
         <div class="dh">
           <div class="di">${ico('sliders','sm')}</div>
           <div style="flex:1;min-width:0">
-            <div class="dt">配置 咪咕音乐</div>
+        <div class="dt">配置 XXX</div>
             <div class="ds">该插件声明了 3 个用户变量</div>
           </div>
         </div>

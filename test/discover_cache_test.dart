@@ -186,7 +186,7 @@ class _CountingExecutor implements PluginDiscoveryExecutor {
   int sheetCalls = 0;
 
   /// Plugin ids whose `getRecommendSheetTags` should fail, standing in for the
-  /// real "plugin method not found" case (bilibili has no recommend sheets).
+  /// real "plugin method not found" case (fixture-a has no recommend sheets).
   Set<String> failTagsFor = <String>{};
 
   /// Each plugin id passed to `getRecommendSheetTags`, in call order, so a

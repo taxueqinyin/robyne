@@ -94,7 +94,7 @@ int _byEnabled(PluginDefinition left, PluginDefinition right) {
   return leftRank.compareTo(rightRank);
 }
 
-/// Case-insensitive comparison key, so "bilibili" sorts next to "Bilibili"
+/// Case-insensitive comparison key, so "abc" sorts next to "ABC"
 /// instead of ending up in a separate block.
 String _collated(String value) => value.trim().toLowerCase();
 

@@ -647,7 +647,7 @@ class QuickJsPluginRuntime implements PluginRuntime {
   ///
   /// The value is a compromise, measured against the bundled fixtures rather
   /// than guessed: 256KB and 512KB were both too tight — real plugins
-  /// (快手's request serialisation, 网易云's MiniSearch index build) tripped
+  /// (a fixture's request serialisation and another's search-index build) tripped
   /// the guard during ordinary work. At 768KB every fixture searches
   /// successfully, while unbounded recursion is still caught as a JS
   /// RangeError instead of a dead process. The margin to 1MB is what keeps

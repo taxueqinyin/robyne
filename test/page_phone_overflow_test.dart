@@ -49,7 +49,7 @@ void main() {
         size,
         const DiscoverPage(),
         plugins: <PluginDefinition>[
-          for (final name in <String>['bilibili', '很长很长很长很长的插件平台名称', '网易音乐'])
+          for (final name in <String>['fixture-a', '很长很长很长很长的插件平台名称', 'fixture-c'])
             PluginDefinition(
               id: 'plugin-$name',
               platform: name,

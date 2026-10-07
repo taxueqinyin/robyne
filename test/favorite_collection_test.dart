@@ -20,7 +20,7 @@ void main() {
     return OnlineCollectionItem(
       id: id,
       pluginId: 'plugin-a',
-      platform: '元力QQ',
+      platform: 'fixture-b',
       kind: OnlineCollectionKind.musicSheet,
       title: 'Sheet $id',
       description: 'desc $id',

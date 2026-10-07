@@ -2,10 +2,15 @@
 
 Last updated: 2026-05-27
 
-This matrix tracks the plugins under `test_files/` against the current QuickJS
+This matrix tracks local plugin fixtures against the current QuickJS
 runtime. Static scanning treats plugin scripts as untrusted input. The runtime
 does not expose filesystem, process, or shell APIs; plugin network access goes
 through the Dart HTTP bridge.
+
+Fixtures are labelled by their file hash rather than by the service they talk
+to: this repository ships no plugin scripts, and naming the third-party
+services a fixture happens to reach is not information this document needs to
+carry.
 
 ## Runtime Support
 
@@ -21,18 +26,18 @@ through the Dart HTTP bridge.
 
 ## Fixture Matrix
 
-| File | Platform | Static dependencies | Static risk flags | Metadata load | Search/play status | Notes |
-|---|---|---|---|---|---|---|
-| `bilibili.js` | bilibili | axios, cheerio, crypto-js, dayjs, he | default export wrapper | Passed | Search and media source passed in spike | Primary MVP acceptance plugin. Latest controlled spike returned 19 music items and a media URL. |
-| `网易云.js` | 网易音乐 | axios, crypto-js, dayjs | default export wrapper | Passed | Search and media source passed in spike | Primary MVP acceptance plugin. Real playback may still depend on third-party availability. |
-| `0IQTeNzG-mRfNH7FNBd_s.js` | 元力KW | axios, he | obfuscated | Passed | Search and media source passed in spike | `jsjiami.com.v7` obfuscation detected. Static scan did not find filesystem/process/eval patterns. Latest controlled spike returned 30 music items and a non-empty media URL. |
-| `4uaTktrNrheK2mRTLkWkX.js` | 歌词网 | axios, cheerio | default export wrapper | Passed | Music search returned null | Lyric-only fixture; it declares only lyric search, so `search(..., "music")` returns null. |
-| `50XUo72q28oDOOVP8z2z9.js` | 小蜗音乐 | axios, he | setTimeout, top-level demo calls, default export wrapper | Passed | Search passed, media returned empty URL | Uses timers; covered by runtime timer bridge. Latest controlled spike returned music items, but `getMediaSource` produced an empty `url`. The fixture also runs demo search/media/lyric calls at top level, causing extra console output and one lyric null-data rejection. |
-| `6E2X5gk_jkY0aLp8Qiv5X.js` | 歌词千寻 | axios, cheerio | default export wrapper | Passed | Music search returned null | Lyric-only fixture; it declares only lyric search, so `search(..., "music")` returns null. |
-| `8AoRogfyKbdBA8ko0UhHw.js` | 6yueting | axios, cheerio, crypto-js | default export wrapper | Passed | Music search returned null | Declares music in metadata, but latest controlled spike returned null for `search("周杰伦", 1, "music")`; classify as plugin business/implementation behavior until a supported query/type path is identified. |
-| `A5pLWGV_vC_q2By3Vyik3.js` | 果核音乐 | axios | default export wrapper | Passed | Search failed | Latest controlled spike failed during POST to `https://ghyinyue.com/index/index/search` with connection closed before headers; classified as third-party service/network failure, not a runtime missing capability. |
-| `cwWVJ4uUbdIM_5x6pcJG3.js` | 酷狗 | axios, cheerio | default export wrapper | Passed | Search returned no items | Latest controlled spike completed `search("周杰伦", 1, "music")` but returned an empty item list; classified as plugin/third-party data behavior. |
-| `dyEokUdXPnyztXWVdT_z2.js` | 快手 | axios | default export wrapper | Passed | Search returned no items | Latest controlled spike completed search adaptation but returned an empty item list for `周杰伦`; classified as plugin/third-party data behavior. |
+| Fixture | Static dependencies | Static risk flags | Metadata load | Search/play status | Notes |
+|---|---|---|---|---|---|
+| `fixture-01` | axios, cheerio, crypto-js, dayjs, he | default export wrapper | Passed | Search and media source passed in spike | Primary MVP acceptance fixture. Latest controlled spike returned 19 music items and a media URL. |
+| `fixture-02` | axios, crypto-js, dayjs | default export wrapper | Passed | Search and media source passed in spike | Primary MVP acceptance fixture. Real playback may still depend on third-party availability. |
+| `fixture-03` | axios, he | obfuscated | Passed | Search and media source passed in spike | `jsjiami.com.v7` obfuscation detected. Static scan did not find filesystem/process/eval patterns. Latest controlled spike returned 30 music items and a non-empty media URL. |
+| `fixture-04` | axios, cheerio | default export wrapper | Passed | Music search returned null | Lyric-only fixture; it declares only lyric search, so `search(..., "music")` returns null. |
+| `fixture-05` | axios, he | setTimeout, top-level demo calls, default export wrapper | Passed | Search passed, media returned empty URL | Uses timers; covered by runtime timer bridge. Latest controlled spike returned music items, but `getMediaSource` produced an empty `url`. The fixture also runs demo search/media/lyric calls at top level, causing extra console output and one lyric null-data rejection. |
+| `fixture-06` | axios, cheerio | default export wrapper | Passed | Music search returned null | Lyric-only fixture; it declares only lyric search, so `search(..., "music")` returns null. |
+| `fixture-07` | axios, cheerio, crypto-js | default export wrapper | Passed | Music search returned null | Declares music in metadata, but the latest controlled spike returned no items; classify as plugin business/implementation behavior until a supported query/type path is identified. |
+| `fixture-08` | axios | default export wrapper | Passed | Search failed | Latest controlled spike failed with the connection closed before headers; classified as third-party service/network failure, not a runtime missing capability. |
+| `fixture-09` | axios, cheerio | default export wrapper | Passed | Search returned no items | Latest controlled spike completed a music search but returned an empty item list; classified as plugin/third-party data behavior. |
+| `fixture-10` | axios | default export wrapper | Passed | Search returned no items | Latest controlled spike completed search adaptation but returned an empty item list; classified as plugin/third-party data behavior. |
 
 ## Verification Commands
 
@@ -47,12 +52,12 @@ flutter test test\plugin_runtime_spike_test.dart --plain-name "reports search an
 Current result: all 10 fixture plugins loaded metadata successfully. The full
 spike also verified the two primary MVP plugins still complete music search and
 media-source extraction. The compatibility report additionally verified the
-obfuscated 元力KW fixture can complete search and media-source extraction.
+obfuscated `fixture-03` can complete search and media-source extraction.
 
 ## Next Compatibility Work
 
-- Investigate whether `8AoRogfyKbdBA8ko0UhHw.js`, `cwWVJ4uUbdIM_5x6pcJG3.js`,
-  and `dyEokUdXPnyztXWVdT_z2.js` require a different query, user variable, or
-  plugin-specific request shape before they can return music items.
+- Investigate whether `fixture-07`, `fixture-09`, and `fixture-10` require a
+  different query, user variable, or plugin-specific request shape before they
+  can return music items.
 - Keep failures classified as runtime missing capability, third-party service/network failure, or plugin business failure.
 - Do not expand runtime permissions for filesystem, process, shell, local network, or arbitrary browser APIs without an explicit security review.

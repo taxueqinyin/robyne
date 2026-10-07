@@ -18,7 +18,7 @@
 
 由此确定的总目标：
 
-> **一个完备的皮肤系统（可调布局 / 界面 / 图片 / 颜色）+ 一个 QQ音乐量级的官方默认皮肤，
+> **一个完备的皮肤系统（可调布局 / 界面 / 图片 / 颜色）+ 一个旗舰音乐量级的官方默认皮肤，
 > 后者作为系统能力的展示示范。**
 
 ---
@@ -52,11 +52,11 @@
 
 ### D3 · 实施顺序：系统与旗舰皮肤锁步推进，不是先后 【已定】
 
-`THEME_LAYER_DESIGN.md:19` 已立原则：**默认 UI 不是特例，它就是内置皮肤包**。既然如此，「完备的皮肤系统」和「QQ音乐式官方皮肤」就是同一件事的两面，不是一个先一个后。
+`THEME_LAYER_DESIGN.md:19` 已立原则：**默认 UI 不是特例，它就是内置皮肤包**。既然如此，「完备的皮肤系统」和「旗舰级官方皮肤」就是同一件事的两面，不是一个先一个后。
 
 **理由**：token 清单与区域契约只有在被一个真实、复杂、有审美要求的 UI 撑过一遍之后，才知道定得对不对。若先抽象设计系统再写 UI，写到一半必然发现「导航栏渐变没地方表达」「歌词高亮没地方放」，然后回头改 token —— 返工。
 
-**所以**：QQ音乐式 UI 不是系统的「应用」，它是系统的**规格来源和唯一压力测试**。
+**所以**：旗舰级 UI 不是系统的「应用」，它是系统的**规格来源和唯一压力测试**。
 
 ### D4 · 尺寸一律主轴比例，不用绝对像素 【已定】
 
@@ -243,7 +243,7 @@ RobyneSlot（槽位，按形态选择）
 - `theme_settings_tab.dart:155`
 - `theme_setting_control.dart:32`
 
-**所有 feature 页面都写 `Theme.of(context).colorScheme.xxx`。** 目前能工作，是因为 token 会流进 colorScheme；但 colorScheme 的语义角色是 Material 固定的那十几个，QQ音乐式 UI 真正有辨识度的东西**没有落脚点**：
+**所有 feature 页面都写 `Theme.of(context).colorScheme.xxx`。** 目前能工作，是因为 token 会流进 colorScheme；但 colorScheme 的语义角色是 Material 固定的那十几个，旗舰级 UI 真正有辨识度的东西**没有落脚点**：
 
 - 导航栏渐变
 - 歌词当前行 / 非当前行
@@ -366,7 +366,7 @@ RobyneSlot（槽位，按形态选择）
 三个问题（区域集合是否就是这 5 个、`topBar` 在手机上如何处理、各形态默认比例）
 在 §2.4 / §3.2 中已有答案，区域集合据此定稿。
 
-- 按视觉设计文档实现 QQ音乐式 UI
+- 按视觉设计文档实现 旗舰级 UI
 - **每一行都走 `RobyneTheme.of(context)`**，不得出现 `colorScheme` 直取或硬编码
 - UI 从第一天就对着 `RegionRegistry` 写（哪怕此时皮肤还不能覆盖它）
 - 响应式遵循 ADR-001（Window Size Class），并落地 D6 的两层模型：
@@ -674,7 +674,7 @@ MusicFree 的失败点（`THEME_LAYER_DESIGN.md:17` 已记录）正是：`.l-sid
   `discover browser fits 400×800 / 800×360` 两条溢出护栏。
 - 《玄》首页不再等用户自己点进「插件榜单」才拉插件数据：首页挂载时
   `seedHomeShelf` 同步启用的插件后，按顺序试到第一个能返回热门歌单的
-  插件为止（bilibili 只有排行榜、没有 `getRecommendSheetTags`，是现成的
+  插件为止（某个插件只有排行榜、没有 `getRecommendSheetTags`，是现成的
   反例）。选中的插件留在成功那个上，浏览器打开时看到的是同一份货架而不是
   一个错误页。为此新增 `discover_cache_test.dart` 两条用例。
 - **测试基线**：`flutter test` → **380 passed, 8 skipped**（2026-09-28 复核；

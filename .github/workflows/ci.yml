@@ -72,6 +72,19 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      # A mirror URL in the lock file is a local setting that leaked into
+      # version control. Every contributor outside that mirror's region, and
+      # CI, rewrites all 142 entries on their first `pub get`, which shows up
+      # as a huge unrelated diff in their next commit. Catch it here instead
+      # of letting it reach a review.
+      - name: Reject a mirrored pub host in the lock file
+        run: |
+          if (Select-String -Path pubspec.lock -Pattern 'https://pub\.flutter-io\.cn' -Quiet) {
+            Write-Host "::error::pubspec.lock records a package mirror. Run flutter pub get with the default pub host (PUB_HOSTED_URL unset) and commit the result."
+            exit 1
+          }
+          Write-Host "pubspec.lock uses the default pub host."
+
       - name: Test
         run: flutter test --coverage
 

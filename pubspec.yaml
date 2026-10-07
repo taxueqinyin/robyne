@@ -100,7 +100,6 @@ flutter:
 
   assets:
     - assets/js/
-    - test_files/
     - assets/branding/
     - windows/runner/resources/app_icon.ico
     # 《玄》 is the only bundled skin. The retired `official-*` directories are

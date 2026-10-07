@@ -124,7 +124,7 @@ MVP 明确选择 Riverpod，不使用旧的 provider 包。这里的 Provider �
 
 - 底层基于 mpv，Windows、Android、macOS 多端播放行为更一致。
 - 更适合处理在线音频流的 headers、User-Agent、Referer 等请求头透传。
-- 对 FLAC、Hi-Res、Bilibili dash audio、非标准音频流等格式兼容性通常更强。
+- 对 FLAC、Hi-Res、DASH 音频流、非标准音频流等格式兼容性通常更强。
 - 与本项目的 MusicFree 插件播放场景更匹配，插件返回的 MediaSource 经常不只是一个简单 mp3 URL。
 
 注意事项：
@@ -191,7 +191,7 @@ QuickJS 相关原生编译要求必须提前处理：
 - Android 构建环境必须在 Android Studio SDK Manager 中安装 NDK Side by side 和 CMake，确保 QuickJS 这类 C/C++ 原生依赖可以编译为 Android `.so` 动态库。
 - 阶段 1 选择 QuickJS Flutter 绑定库时，必须验证 Windows 与 Android 两端的实际构建，不允许只看 pub.dev 声称支持的平台。
 
-第一阶段目标明确为：跑通 `test_files/网易云.js` 和 `test_files/bilibili.js` 的 music 搜索与播放地址获取。
+第一阶段目标明确为：跑通 `fixture A` 和 `fixture B` 的 music 搜索与播放地址获取。
 
 插件兼容范围：MVP 只兼容 MusicFree 插件协议的简单子集，先支持 search 和 getMediaSource，后续再逐步扩展歌词、歌单、用户变量 UI、插件调试控制台、更多内置依赖和完整兼容矩阵。
 
@@ -520,7 +520,7 @@ network.request_failed
 
 ### 阶段 1：QuickJS 插件运行时 Spike（Windows 已完成）
 
-目标：在 Windows 上优先跑通 `test_files/网易云.js` 和 `test_files/bilibili.js` 的 music 搜索与播放地址获取，验证 QuickJS + 受控 CommonJS 兼容层路线可行。
+目标：在 Windows 上优先跑通 `fixture A` 和 `fixture B` 的 music 搜索与播放地址获取，验证 QuickJS + 受控 CommonJS 兼容层路线可行。
 
 任务：
 
@@ -532,8 +532,8 @@ network.request_failed
 - 打包 vendor.js，验证 crypto-js、dayjs、cheerio、he 在 QuickJS 中的导出形态。
 - 实现 axios shim，将 axios(config)、axios.get、axios.post 转发到 Dart HTTP Bridge。
 - 实现 env.getUserVariables bridge，先允许返回空配置，后续接插件用户变量 UI。
-- 加载 `test_files/网易云.js`，读取 platform、supportedSearchType、userVariables。
-- 加载 `test_files/bilibili.js`，读取 platform、supportedSearchType。
+- 加载 `fixture A`，读取 platform、supportedSearchType、userVariables。
+- 加载 `fixture B`，读取 platform、supportedSearchType。
 - 调用两个插件的 search(query, 1, "music")。
 - 使用搜索结果 raw item 调用 getMediaSource(musicItem, "standard")。
 - 将插件返回的 url、headers、quality 转换为内部 MediaSource。
@@ -543,16 +543,16 @@ network.request_failed
 
 - Dart 可以通过 QuickJS 加载两个测试插件：已完成。
 - 可以读取两个插件的 platform、version、supportedSearchType：已完成。
-- 网易云插件可以执行 `search("周杰伦", 1, "music")` 并返回可解析列表：已完成。
-- Bilibili 插件可以执行 `search("周杰伦", 1, "music")` 并返回可解析列表：已完成。
+- fixture A 插件可以执行 `search("周杰伦", 1, "music")` 并返回可解析列表：已完成。
+- fixture B 插件可以执行 `search("周杰伦", 1, "music")` 并返回可解析列表：已完成。
 - 两个插件的搜索结果都保留 raw 数据：已完成。
-- 可以对至少一条网易云搜索结果调用 getMediaSource 并得到 MediaSource 或明确的业务失败结果：已完成。
-- 可以对至少一条 Bilibili 搜索结果调用 getMediaSource 并得到包含 url 和 headers 的 MediaSource：已完成。
+- 可以对至少一条 fixture A 搜索结果调用 getMediaSource 并得到 MediaSource 或明确的业务失败结果：已完成。
+- 可以对至少一条 fixture B 搜索结果调用 getMediaSource 并得到包含 url 和 headers 的 MediaSource：已完成。
 - axios shim 支持 config、get、post 三种调用形态：已完成。
 - crypto-js 的 MD5、AES、HmacSHA256 能被插件正常调用：已完成。
-- cheerio 的 load 能被 Bilibili 插件正常调用：已完成。
+- cheerio 的 load 能被 fixture B 插件正常调用：已完成。
 - dayjs.unix(...).format(...) 能被插件正常调用：已完成。
-- he.decode 能被 Bilibili 插件正常调用：已完成。
+- he.decode 能被 fixture B 插件正常调用：已完成。
 - 插件运行异常、网络异常、超时都能被捕获并转换为 AppError：已实现基础能力，并补充了 QuickJS Promise/HTTP bridge 超时和释放竞态保护。
 - 插件不能访问文件系统和系统命令：当前 QuickJS 运行时未暴露文件系统和系统命令能力，仍需在阶段 5 兼容矩阵中记录安全边界。
 
@@ -621,7 +621,7 @@ network.request_failed
 
 任务：
 
-- 整理 `test_files/网易云.js` 和 `test_files/bilibili.js` 已使用到的 CommonJS、axios、vendor、env、headers、MediaSource 能力。
+- 整理 `fixture A` 和 `fixture B` 已使用到的 CommonJS、axios、vendor、env、headers、MediaSource 能力。
 - 形成插件 API 兼容矩阵，标记已支持、部分支持、未支持：已创建 `docs/plugin_compatibility_matrix.md`，覆盖当前 `test_files` 中 10 个插件的静态依赖、风险标记和元信息加载状态。
 - 选择新的 1 到 2 个社区插件作为扩展验证样本。
 - 按需补齐必要 shim，但不得破坏已有两个验收插件：已补 `exports.default` 导出解包和受控 `setTimeout` / `clearTimeout`。
@@ -630,7 +630,7 @@ network.request_failed
 验收标准：
 
 - 两个验收插件仍能完成 music 搜索和播放地址获取：保持为 spike 验证项。
-- 至少新增一个真实插件能完成搜索，能否播放按插件实际接口和第三方服务情况记录：已验证混淆后的元力KW 插件能完成 music 搜索和播放地址获取。
+- 至少新增一个真实插件能完成搜索，能否播放按插件实际接口和第三方服务情况记录：已验证一个混淆过的 fixture能完成 music 搜索和播放地址获取。
 - 每个失败插件都能给出明确失败分类：矩阵已记录第三方服务/网络失败、插件业务空数据、插件顶层副作用、歌词类非 music 插件等分类。
 - 形成兼容矩阵，为后续扩展开发提供依据：已完成初版。
 
@@ -764,7 +764,7 @@ network.request_failed
 - media_kit 底层基于 mpv，Windows、Android、macOS 多端行为更一致。
 - Robyne 的核心场景是播放插件解析出来的在线音频流，这些流经常依赖 headers、User-Agent、Referer、Cookie 或非标准格式。
 - Windows 上 just_audio 依赖系统 Media Foundation，面对带自定义请求头的在线流风险较高。
-- media_kit 对 FLAC、Hi-Res、Bilibili dash audio 和非标准音频流的兼容性更适合本项目。
+- media_kit 对 FLAC、Hi-Res、DASH 音频流 和非标准音频流的兼容性更适合本项目。
 - 通过 AudioPlayerService 封装后，仍然可以隔离平台差异并方便测试。
 
 代价：
@@ -808,7 +808,7 @@ network.request_failed
 
 ### ADR-006：第一阶段以两个真实测试插件作为验收目标
 
-决定：第一阶段不再只验证 demo 插件，而是以 `test_files/网易云.js` 和 `test_files/bilibili.js` 作为主要验收插件，目标是跑通 music 搜索和播放地址获取。
+决定：第一阶段不再只验证 demo 插件，而是以 `fixture A` 和 `fixture B` 作为主要验收插件，目标是跑通 music 搜索和播放地址获取。
 
 原因：
 
@@ -859,8 +859,8 @@ network.request_failed
 第一阶段以两个真实插件作为主要验收目标：
 
 ```text
-test_files/网易云.js
-test_files/bilibili.js
+fixture A
+fixture B
 ```
 
 必须优先跑通：
