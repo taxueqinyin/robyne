@@ -11,9 +11,12 @@ import 'package:robyne/core/layout/window_size_class.dart';
 import 'package:robyne/core/theme/application/theme_providers.dart';
 import 'package:robyne/core/theme/domain/theme_strings.dart';
 import 'package:robyne/core/theme/infrastructure/token_resolver.dart';
+import 'package:robyne/shared/widgets/plugin_sort_picker.dart';
+import 'package:robyne/shared/widgets/reorderable_handle.dart';
 import 'package:robyne/features/plugin/application/plugin_controller.dart';
 import 'package:robyne/features/plugin/domain/plugin_definition.dart';
 import 'package:robyne/features/plugin/domain/plugin_repository.dart';
+import 'package:robyne/features/plugin/domain/plugin_sort.dart';
 
 class PluginPage extends ConsumerWidget {
   const PluginPage({super.key});
@@ -119,15 +122,21 @@ class PluginPage extends ConsumerWidget {
                         if (url == null || !context.mounted) {
                           return;
                         }
-                        final error = await ref
+                        final result = await ref
                             .read(pluginControllerProvider.notifier)
-                            .importFromUrl(url);
-                        if (error != null && context.mounted) {
-                          _showPluginError(context, error);
+                            .importFromUrlBatch(url);
+                        if (context.mounted) {
+                          _showPluginImportResult(context, result, strings);
                         }
                       },
                 icon: const Icon(Icons.link),
                 label: Text(strings.resolve(ThemeStringKey.pluginsImportUrl)),
+              ),
+              PluginSortPicker(
+                strings: strings,
+                order: ref.watch(pluginSortOrderProvider),
+                onChanged: (order) =>
+                    ref.read(pluginSortOrderProvider.notifier).set(order),
               ),
             ],
           ),
@@ -157,6 +166,7 @@ class _PluginList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = ref.watch(activeThemeStringsProvider);
     final colors = RobyneTheme.of(context).tokens.color;
+    final sortOrder = ref.watch(pluginSortOrderProvider);
     final plugins = pluginsValue.value;
     if (plugins == null) {
       return pluginsValue.when(
@@ -167,7 +177,9 @@ class _PluginList extends ConsumerWidget {
       );
     }
 
-    if (plugins.isEmpty) {
+    final visible = sortPlugins(plugins, sortOrder);
+
+    if (visible.isEmpty) {
       return Center(
         child: Text(
           strings.resolve(ThemeStringKey.pluginsEmpty),
@@ -176,66 +188,152 @@ class _PluginList extends ConsumerWidget {
       );
     }
 
-    return ListView.separated(
-      itemCount: plugins.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final plugin = plugins[index];
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.extension),
-          title: Text(plugin.platform),
-          subtitle: Text(
-            <String?>[
-                  plugin.version,
-                  plugin.author,
-                  plugin.supportedSearchTypes.join(', '),
-                ]
-                .whereType<String>()
-                .where((value) => value.isNotEmpty)
-                .join(' - '),
+    // Dragging is only offered in the manual order, because the manual order
+    // is the only one the rows actually store: dragging while sorted by name
+    // would have to either silently switch the mode or throw the drag away,
+    // and both are worse than showing why the handle is missing.
+    final canReorder = sortOrder == PluginSortOrder.manual;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        if (canReorder && visible.length > 1) ...<Widget>[
+          Text(
+            strings.resolve(ThemeStringKey.pluginsSortDragHint),
+            style: TextStyle(fontSize: 11.5, color: colors.textMuted),
           ),
-          trailing: Wrap(
-            spacing: 8,
-            children: <Widget>[
-              if (plugin.userVariables.isNotEmpty)
-                IconButton(
-                  tooltip: strings.resolve(
-                    ThemeStringKey.pluginsConfigureTooltip,
-                  ),
-                  icon: const Icon(Icons.tune),
-                  onPressed: () async {
-                    final values = await _showUserVariablesDialog(
-                      context,
-                      plugin,
-                    );
-                    if (values == null || !context.mounted) {
-                      return;
+          const SizedBox(height: 8),
+        ],
+        Expanded(
+          child: ReorderableListView.builder(
+            buildDefaultDragHandles: false,
+            itemCount: visible.length,
+            onReorder: canReorder
+                ? (oldIndex, newIndex) {
+                    final next = List<PluginDefinition>.of(visible);
+                    if (newIndex > oldIndex) {
+                      newIndex -= 1;
                     }
-                    await ref
-                        .read(pluginControllerProvider.notifier)
-                        .updateUserVariableValues(plugin.id, values);
-                  },
-                ),
-              Switch(
-                value: plugin.enabled,
-                onChanged: (enabled) {
-                  ref
-                      .read(pluginControllerProvider.notifier)
-                      .setEnabled(plugin.id, enabled);
-                },
-              ),
-              IconButton(
-                tooltip: strings.resolve(ThemeStringKey.pluginsDelete),
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () {
-                  ref.read(pluginControllerProvider.notifier).delete(plugin.id);
-                },
-              ),
-            ],
+                    final moved = next.removeAt(oldIndex);
+                    next.insert(newIndex, moved);
+                    unawaited(
+                      ref
+                          .read(pluginControllerProvider.notifier)
+                          .reorderPlugins(
+                            next.map((plugin) => plugin.id).toList(
+                              growable: false,
+                            ),
+                          ),
+                    );
+                  }
+                // Not draggable in a computed order: the row renders without
+                // a handle, so a reorder is never requested from this mode.
+                : (int from, int to) {},
+            itemBuilder: (context, index) {
+              final plugin = visible[index];
+              return _PluginRow(
+                key: ValueKey<String>(plugin.id),
+                plugin: plugin,
+                index: index,
+                strings: strings,
+                draggable: canReorder,
+              );
+            },
           ),
-        );
-      },
+        ),
+      ],
+    );
+  }
+}
+
+/// One plugin row, with its own drag handle when the order is draggable.
+///
+/// A keyed widget rather than an inline `ListTile`: reordering rebuilds rows
+/// by key, and the switch and button callbacks need the row's own plugin, not
+/// an index that is already stale by the time the drag settles.
+class _PluginRow extends ConsumerWidget {
+  const _PluginRow({
+    super.key,
+    required this.plugin,
+    required this.index,
+    required this.strings,
+    required this.draggable,
+  });
+
+  final PluginDefinition plugin;
+  final int index;
+  final ThemeStrings strings;
+  final bool draggable;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    return Container(
+      // The row carries its own divider: `ReorderableListView` has no
+      // separator builder, and the design's rows are separated lines.
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: colors.borderSubtle, width: 1),
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.only(right: 8),
+        leading: draggable
+            ? ReorderableHandle(
+                index: index,
+                tooltip: strings.resolve(ThemeStringKey.pluginsDragHandle),
+              )
+            : const Icon(Icons.extension),
+        title: Text(plugin.platform),
+        subtitle: Text(
+          <String?>[
+                plugin.version,
+                plugin.author,
+                plugin.supportedSearchTypes.join(', '),
+              ]
+              .whereType<String>()
+              .where((value) => value.isNotEmpty)
+              .join(' - '),
+        ),
+        trailing: Wrap(
+          spacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            if (plugin.userVariables.isNotEmpty)
+              IconButton(
+                tooltip: strings.resolve(
+                  ThemeStringKey.pluginsConfigureTooltip,
+                ),
+                icon: const Icon(Icons.tune),
+                onPressed: () async {
+                  final values = await _showUserVariablesDialog(context, plugin);
+                  if (values == null || !context.mounted) {
+                    return;
+                  }
+                  await ref
+                      .read(pluginControllerProvider.notifier)
+                      .updateUserVariableValues(plugin.id, values);
+                },
+              ),
+            Switch(
+              value: plugin.enabled,
+              onChanged: (enabled) {
+                ref
+                    .read(pluginControllerProvider.notifier)
+                    .setEnabled(plugin.id, enabled);
+              },
+            ),
+            IconButton(
+              tooltip: strings.resolve(ThemeStringKey.pluginsDelete),
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () {
+                ref.read(pluginControllerProvider.notifier).delete(plugin.id);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

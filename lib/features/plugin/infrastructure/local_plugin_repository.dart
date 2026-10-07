@@ -13,7 +13,9 @@ import '../../../core/errors/app_error.dart';
 import '../../../core/result/result.dart';
 import '../../../core/storage/local_file_store.dart';
 import '../domain/plugin_definition.dart';
+import '../domain/plugin_list_manifest.dart';
 import '../domain/plugin_repository.dart';
+import '../domain/plugin_sort.dart';
 import '../domain/plugin_runtime.dart';
 import 'music_free_compat_adapter.dart';
 
@@ -41,6 +43,12 @@ class LocalPluginRepository implements PluginRepository {
            );
 
   static const _maxPluginBytes = 2 * 1024 * 1024;
+
+  /// How many plugin manifests are downloaded at once.
+  static const _manifestFetchConcurrency = 4;
+
+  /// Per-plugin download budget when importing a list of plugin URLs.
+  static const _maxManifestBytes = 8 * 1024 * 1024;
 
   final LocalFileStore _fileStore;
   final db.AppDatabase _database;
@@ -84,28 +92,17 @@ class LocalPluginRepository implements PluginRepository {
     List<String> paths, {
     PluginImportProgressCallback? onProgress,
   }) async {
-    var stagedImportedCount = 0;
-    var stagedUpdatedCount = 0;
-    var skippedCount = 0;
-    final errors = <AppError>[];
-    final plannedImports = <_PlannedPluginImport>[];
-
-    void emitProgress({required int completed, String? currentLabel}) {
+    if (paths.isEmpty) {
       onProgress?.call(
-        PluginImportProgressSnapshot(
-          total: paths.length,
-          completed: completed,
-          importedCount: stagedImportedCount,
-          updatedCount: stagedUpdatedCount,
-          skippedCount: skippedCount,
-          failedCount: errors.length,
-          currentLabel: currentLabel,
+        const PluginImportProgressSnapshot(
+          total: 0,
+          completed: 0,
+          importedCount: 0,
+          updatedCount: 0,
+          skippedCount: 0,
+          failedCount: 0,
         ),
       );
-    }
-
-    emitProgress(completed: 0);
-    if (paths.isEmpty) {
       return const PluginImportBatchResult(
         importedCount: 0,
         updatedCount: 0,
@@ -114,149 +111,59 @@ class LocalPluginRepository implements PluginRepository {
       );
     }
 
-    try {
-      await _legacyMigration?.ensureMigrated();
-      final installed = await _readDefinitions();
-      final currentByIdentity = <String, PluginDefinition>{
-        for (final definition in installed)
-          _identityKeyForDefinition(definition): definition,
-      };
-      final pluginDirectory = await _fileStore.pluginsDirectory();
-
-      for (var index = 0; index < paths.length; index += 1) {
-        final path = paths[index];
-        emitProgress(completed: index, currentLabel: path);
-
-        final requestResult = await _pluginRequestFromPath(path);
-        if (requestResult case Failure<_PluginImportRequest>(:final error)) {
-          errors.add(error);
-          emitProgress(completed: index + 1, currentLabel: path);
-          continue;
-        }
-
-        final request = (requestResult as Ok<_PluginImportRequest>).value;
-        final planned = await _planImportRequest(
-          request: request,
-          pluginDirectory: pluginDirectory,
-          currentByIdentity: currentByIdentity,
-          sequence: index,
-        );
-
-        switch (planned.kind) {
-          case _PlannedImportKind.imported:
-            stagedImportedCount += 1;
-            plannedImports.add(planned);
-            currentByIdentity[_identityKeyForDefinition(planned.definition!)] =
-                planned.definition!;
-          case _PlannedImportKind.updated:
-            stagedUpdatedCount += 1;
-            plannedImports.add(planned);
-            currentByIdentity[_identityKeyForDefinition(planned.definition!)] =
-                planned.definition!;
-          case _PlannedImportKind.skipped:
-            skippedCount += 1;
-          case _PlannedImportKind.failed:
-            errors.add(planned.error!);
-        }
-
-        emitProgress(completed: index + 1, currentLabel: path);
+    final requests = <_PluginImportRequest?>[
+      for (var index = 0; index < paths.length; index += 1) null,
+    ];
+    final failures = <AppError?>[
+      for (var index = 0; index < paths.length; index += 1) null,
+    ];
+    for (var index = 0; index < paths.length; index += 1) {
+      final requestResult = await _pluginRequestFromPath(paths[index]);
+      switch (requestResult) {
+        case Ok<_PluginImportRequest>(:final value):
+          requests[index] = value;
+        case Failure<_PluginImportRequest>(:final error):
+          failures[index] = error;
       }
-
-      final commitError = await _commitPlannedImports(plannedImports);
-      if (commitError != null) {
-        errors.add(commitError);
-        stagedImportedCount = 0;
-        stagedUpdatedCount = 0;
-      }
-
-      return PluginImportBatchResult(
-        importedCount: stagedImportedCount,
-        updatedCount: stagedUpdatedCount,
-        skippedCount: skippedCount,
-        errors: List<AppError>.unmodifiable(errors),
-      );
-    } catch (error, stackTrace) {
-      errors.add(
-        AppError(
-          code: 'plugin.load_failed',
-          message: 'Failed to import plugin files.',
-          cause: error,
-          stackTrace: stackTrace,
-        ),
-      );
-      return PluginImportBatchResult(
-        importedCount: 0,
-        updatedCount: 0,
-        skippedCount: skippedCount,
-        errors: List<AppError>.unmodifiable(errors),
-      );
     }
+
+    final result = await _importRequests(
+      requests,
+      labels: List<String>.unmodifiable(paths),
+      loadFailures: failures,
+      onProgress: onProgress,
+    );
+    return result.batch;
   }
 
   @override
   Future<Result<PluginDefinition>> importPluginFromUrl(String url) async {
     try {
-      final uri = Uri.tryParse(url.trim());
-      if (uri == null || !uri.hasAbsolutePath) {
-        return const Failure(
-          AppError(
-            code: 'plugin.url_invalid',
-            message: 'Enter a valid plugin URL.',
-          ),
-        );
-      }
-      if (uri.scheme != 'http' && uri.scheme != 'https') {
-        return const Failure(
-          AppError(
-            code: 'plugin.url_invalid',
-            message: 'Plugin URL must start with http:// or https://.',
-          ),
-        );
+      final plan = await _planUrlImport(url);
+      final error = plan.error;
+      if (error != null) {
+        return Failure(error);
       }
 
-      final response = await _dio.get<Object?>(
-        uri.toString(),
-        options: Options(
-          responseType: ResponseType.plain,
-          validateStatus: (_) => true,
-        ),
+      final outcome = await _importRequests(
+        plan.requests!,
+        labels: plan.labels!,
+        loadFailures: plan.loadFailures,
       );
-      final statusCode = response.statusCode ?? 0;
-      if (statusCode < 200 || statusCode >= 300) {
-        return Failure(
-          AppError(
-            code: 'plugin.download_failed',
-            message: 'Plugin download failed with HTTP $statusCode.',
-          ),
-        );
+      final result = outcome.batch;
+      if (outcome.importedDefinition case final PluginDefinition definition) {
+        return Ok(definition);
       }
 
-      final rawData = response.data;
-      if (rawData is! String || rawData.trim().isEmpty) {
-        return const Failure(
-          AppError(
-            code: 'plugin.download_failed',
-            message: 'Plugin URL did not return a JavaScript text response.',
-          ),
-        );
-      }
-      final sourceBytes = utf8.encode(rawData).length;
-      if (sourceBytes > _maxPluginBytes) {
-        return const Failure(
-          AppError(
-            code: 'plugin.download_too_large',
-            message: 'Plugin file is too large.',
-          ),
-        );
-      }
-
-      return _importSingleRequest(
-        _PluginImportRequest(
-          source: rawData,
-          fileName: _fileNameFromUri(uri),
-          importLabel: uri.toString(),
-        ),
-      );
+      final firstError = result.errors.isEmpty
+          ? AppError(
+              code: 'plugin.skipped',
+              message: outcome.skippedMessage.isNotEmpty
+                  ? outcome.skippedMessage
+                  : 'Plugin is already imported and up to date.',
+            )
+          : result.errors.first;
+      return Failure(firstError);
     } catch (error, stackTrace) {
       return Failure(
         AppError(
@@ -267,6 +174,283 @@ class LocalPluginRepository implements PluginRepository {
         ),
       );
     }
+  }
+
+  @override
+  Future<PluginImportBatchResult> importPluginBatchFromUrl(
+    String url, {
+    PluginImportProgressCallback? onProgress,
+  }) async {
+    try {
+      final plan = await _planUrlImport(url);
+      final error = plan.error;
+      if (error != null) {
+        return PluginImportBatchResult(
+          importedCount: 0,
+          updatedCount: 0,
+          skippedCount: 0,
+          errors: List<AppError>.unmodifiable(<AppError>[error]),
+        );
+      }
+
+      final outcome = await _importRequests(
+        plan.requests!,
+        labels: plan.labels!,
+        loadFailures: plan.loadFailures,
+        onProgress: onProgress,
+      );
+      return outcome.batch;
+    } catch (error, stackTrace) {
+      return PluginImportBatchResult(
+        importedCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        errors: List<AppError>.unmodifiable(<AppError>[
+          AppError(
+            code: 'plugin.download_failed',
+            message: 'Failed to download plugin from $url.',
+            cause: error,
+            stackTrace: stackTrace,
+          ),
+        ]),
+      );
+    }
+  }
+
+  /// Resolves [url] into the set of plugin sources to import.
+  ///
+  /// A plugin-list URL expands into its entries; anything else is treated as
+  /// a single plugin. Returns a failure only for problems that prevent the
+  /// work from starting at all.
+  Future<_UrlImportPlan> _planUrlImport(String url) async {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || !uri.hasAbsolutePath) {
+      return _UrlImportPlan.failure(
+        const AppError(
+          code: 'plugin.url_invalid',
+          message: 'Enter a valid plugin URL.',
+        ),
+      );
+    }
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      return _UrlImportPlan.failure(
+        const AppError(
+          code: 'plugin.url_invalid',
+          message: 'Plugin URL must start with http:// or https://.',
+        ),
+      );
+    }
+
+    final response = await _downloadText(uri);
+    if (response case Failure<String>(:final error)) {
+      return _UrlImportPlan.failure(error);
+    }
+    final rawData = (response as Ok<String>).value;
+
+    final manifestResult = PluginListManifest.parse(rawData, base: uri);
+    if (manifestResult case Failure<PluginListManifest?>(:final error)) {
+      return _UrlImportPlan.failure(error);
+    }
+    final manifest = (manifestResult as Ok<PluginListManifest?>).value;
+    if (manifest != null) {
+      if (manifest.isEmpty) {
+        return _UrlImportPlan.failure(pluginListEmptyError);
+      }
+      final downloads = await _downloadPluginRequests(manifest.entries);
+      return _UrlImportPlan.requests(
+        requests: downloads.requests,
+        loadFailures: downloads.failures,
+        labels: manifest.entries
+            .map((entry) => entry.label)
+            .toList(growable: false),
+      );
+    }
+
+    if (utf8.encode(rawData).length > _maxPluginBytes) {
+      return _UrlImportPlan.failure(
+        const AppError(
+          code: 'plugin.download_too_large',
+          message: 'Plugin file is too large.',
+        ),
+      );
+    }
+    return _UrlImportPlan.requests(
+      requests: <_PluginImportRequest?>[
+        _PluginImportRequest(
+          source: rawData,
+          fileName: _fileNameFromUri(uri),
+          importLabel: uri.toString(),
+        ),
+      ],
+      loadFailures: const <AppError?>[null],
+      labels: <String>[uri.toString()],
+    );
+  }
+
+  /// The response body as text, however dio happened to decode it.
+  ///
+  /// dio decodes JSON content types even when asked for a plain response, so
+  /// a plugin-list body can arrive already parsed; re-encode it rather than
+  /// rejecting it.
+  static String? _asText(Object? data) {
+    if (data is String) {
+      return data;
+    }
+    if (data is List<int>) {
+      return utf8.decode(data, allowMalformed: true);
+    }
+    if (data == null) {
+      return null;
+    }
+    try {
+      return jsonEncode(data);
+    } catch (_) {
+      return data.toString();
+    }
+  }
+
+  /// Downloads plugin sources concurrently, preserving manifest order.
+  ///
+  /// Slots stay null where the download failed; [failures] carries the reason
+  /// for those slots so the batch can report them.
+  Future<_ManifestDownloads> _downloadPluginRequests(
+    List<PluginListEntry> entries,
+  ) async {
+    final results = List<_PluginImportRequest?>.filled(entries.length, null);
+    final failures = List<AppError?>.filled(entries.length, null);
+    var cursor = 0;
+    Future<void> worker() async {
+      while (true) {
+        final index = cursor;
+        if (index >= entries.length) {
+          return;
+        }
+        cursor += 1;
+        final result = await _downloadPluginRequest(entries[index]);
+        switch (result) {
+          case Ok<_PluginImportRequest>(:final value):
+            results[index] = value;
+          case Failure<_PluginImportRequest>(:final error):
+            failures[index] = error;
+        }
+      }
+    }
+
+    final workerCount = entries.length < _manifestFetchConcurrency
+        ? entries.length
+        : _manifestFetchConcurrency;
+    await Future.wait(
+      List<Future<void>>.generate(workerCount, (_) => worker()),
+      eagerError: false,
+    );
+    return _ManifestDownloads(requests: results, failures: failures);
+  }
+
+  /// Downloads one plugin source, yielding either a request or a reason it
+  /// could not be fetched.
+  Future<Result<_PluginImportRequest>> _downloadPluginRequest(
+    PluginListEntry entry,
+  ) async {
+    final uri = Uri.tryParse(entry.url);
+    if (uri == null) {
+      return Failure(
+        AppError(
+          code: 'plugin.url_invalid',
+          message: 'Skipped an invalid plugin URL in the list.',
+        ),
+      );
+    }
+    Response<Object?> response;
+    try {
+      response = await _dio.get<Object?>(
+        uri.toString(),
+        options: Options(
+          responseType: ResponseType.plain,
+          validateStatus: (_) => true,
+        ),
+      );
+    } catch (error) {
+      return Failure(
+        AppError(
+          code: 'plugin.download_failed',
+          message: 'Failed to download ${entry.url}.',
+          cause: error,
+        ),
+      );
+    }
+    final statusCode = response.statusCode ?? 0;
+    if (statusCode < 200 || statusCode >= 300) {
+      return Failure(
+        AppError(
+          code: 'plugin.download_failed',
+          message: 'Download of ${entry.url} failed with HTTP $statusCode.',
+        ),
+      );
+    }
+    final data = _asText(response.data);
+    if (data == null || data.trim().isEmpty) {
+      return Failure(
+        AppError(
+          code: 'plugin.download_failed',
+          message: '${entry.url} did not return a JavaScript text response.',
+        ),
+      );
+    }
+    if (utf8.encode(data).length > _maxManifestBytes) {
+      return Failure(
+        AppError(
+          code: 'plugin.download_too_large',
+          message: 'Plugin at ${entry.url} is too large.',
+        ),
+      );
+    }
+    return Ok(
+      _PluginImportRequest(
+        source: data,
+        fileName: _fileNameFromUri(uri),
+        importLabel: entry.label,
+      ),
+    );
+  }
+
+  Future<Result<String>> _downloadText(
+    Uri uri, {
+    int maxBytes = _maxManifestBytes,
+  }) async {
+    final response = await _dio.get<Object?>(
+      uri.toString(),
+      options: Options(
+        responseType: ResponseType.plain,
+        validateStatus: (_) => true,
+      ),
+    );
+    final statusCode = response.statusCode ?? 0;
+    if (statusCode < 200 || statusCode >= 300) {
+      return Failure(
+        AppError(
+          code: 'plugin.download_failed',
+          message: 'Plugin download failed with HTTP $statusCode.',
+        ),
+      );
+    }
+    final rawData = _asText(response.data);
+    if (rawData == null || rawData.trim().isEmpty) {
+      return const Failure(
+        AppError(
+          code: 'plugin.download_failed',
+          message: 'Plugin URL did not return a JavaScript text response.',
+        ),
+      );
+    }
+    if (utf8.encode(rawData).length > maxBytes) {
+      return const Failure(
+        AppError(
+          code: 'plugin.download_too_large',
+          message: 'Plugin file is too large.',
+        ),
+      );
+    }
+    return Ok(rawData);
   }
 
   @override
@@ -372,6 +556,36 @@ class LocalPluginRepository implements PluginRepository {
     }
   }
 
+  @override
+  Future<Result<List<PluginDefinition>>> reorderPlugins(
+    List<String> orderedIds,
+  ) async {
+    try {
+      await _legacyMigration?.ensureMigrated();
+      final installed = await _readDefinitions();
+      final reordered = applyPluginOrder(installed, orderedIds);
+      await _database.transaction(() async {
+        for (final definition in reordered) {
+          await _upsertDefinition(definition);
+        }
+      });
+      // Re-read rather than return `reordered`: the read applies the manual
+      // ordering the caller is about to see on screen, so a row the caller
+      // omitted lands where the app actually puts it instead of wherever the
+      // previous order happened to leave it.
+      return Ok(await _readDefinitions());
+    } catch (error, stackTrace) {
+      return Failure(
+        AppError(
+          code: 'storage.write_failed',
+          message: 'Failed to save the plugin order.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
   Future<Result<PluginDefinition>> _importSingleRequest(
     _PluginImportRequest request,
   ) async {
@@ -418,6 +632,154 @@ class LocalPluginRepository implements PluginRepository {
           message: 'Failed to import plugin from ${request.importLabel}.',
           cause: error,
           stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  /// Plans and commits every queued request, reporting progress as it goes.
+  ///
+  /// A `null` slot in [requests] is a request that could not even be read;
+  /// [loadFailures] supplies the reason for those slots. All other slots go
+  /// through the normal metadata-plan-dedupe pipeline.
+  Future<_ImportOutcome> _importRequests(
+    List<_PluginImportRequest?> requests, {
+    required List<String> labels,
+    List<AppError?>? loadFailures,
+    PluginImportProgressCallback? onProgress,
+  }) async {
+    final total = requests.length;
+    var importedCount = 0;
+    var updatedCount = 0;
+    var skippedCount = 0;
+    var skippedMessage = '';
+    final errors = <AppError>[];
+    final plannedImports = <_PlannedPluginImport>[];
+    String? importedLabel;
+    String? updatedLabel;
+    PluginDefinition? importedDefinition;
+
+    void emitProgress({required int completed, String? currentLabel}) {
+      onProgress?.call(
+        PluginImportProgressSnapshot(
+          total: total,
+          completed: completed,
+          importedCount: importedCount,
+          updatedCount: updatedCount,
+          skippedCount: skippedCount,
+          failedCount: errors.length,
+          currentLabel: currentLabel,
+        ),
+      );
+    }
+
+    _ImportOutcome batchFor(PluginImportBatchResult result) {
+      return _ImportOutcome(
+        batch: result,
+        skippedMessage: skippedMessage,
+        importedLabel: importedLabel,
+        updatedLabel: updatedLabel,
+        importedDefinition: importedDefinition,
+      );
+    }
+
+    emitProgress(completed: 0);
+    if (total == 0) {
+      return batchFor(
+        const PluginImportBatchResult(
+          importedCount: 0,
+          updatedCount: 0,
+          skippedCount: 0,
+          errors: <AppError>[],
+        ),
+      );
+    }
+
+    try {
+      await _legacyMigration?.ensureMigrated();
+      final installed = await _readDefinitions();
+      final currentByIdentity = <String, PluginDefinition>{
+        for (final definition in installed)
+          _identityKeyForDefinition(definition): definition,
+      };
+      final pluginDirectory = await _fileStore.pluginsDirectory();
+
+      for (var index = 0; index < total; index += 1) {
+        final label = index < labels.length ? labels[index] : null;
+        emitProgress(completed: index, currentLabel: label);
+
+        final request = requests[index];
+        if (request == null) {
+          final failure = loadFailures?[index];
+          if (failure != null) {
+            errors.add(failure);
+          }
+          emitProgress(completed: index + 1, currentLabel: label);
+          continue;
+        }
+
+        final planned = await _planImportRequest(
+          request: request,
+          pluginDirectory: pluginDirectory,
+          currentByIdentity: currentByIdentity,
+          sequence: index,
+        );
+
+        switch (planned.kind) {
+          case _PlannedImportKind.imported:
+            importedCount += 1;
+            importedLabel ??= request.importLabel;
+            importedDefinition ??= planned.definition;
+            plannedImports.add(planned);
+            currentByIdentity[_identityKeyForDefinition(planned.definition!)] =
+                planned.definition!;
+          case _PlannedImportKind.updated:
+            updatedCount += 1;
+            updatedLabel ??= request.importLabel;
+            importedDefinition ??= planned.definition;
+            plannedImports.add(planned);
+            currentByIdentity[_identityKeyForDefinition(planned.definition!)] =
+                planned.definition!;
+          case _PlannedImportKind.skipped:
+            skippedCount += 1;
+            skippedMessage = planned.skipMessage ?? skippedMessage;
+          case _PlannedImportKind.failed:
+            errors.add(planned.error!);
+        }
+
+        emitProgress(completed: index + 1, currentLabel: label);
+      }
+
+      final commitError = await _commitPlannedImports(plannedImports);
+      if (commitError != null) {
+        errors.add(commitError);
+        importedCount = 0;
+        updatedCount = 0;
+      }
+
+      return batchFor(
+        PluginImportBatchResult(
+          importedCount: importedCount,
+          updatedCount: updatedCount,
+          skippedCount: skippedCount,
+          errors: List<AppError>.unmodifiable(errors),
+        ),
+      );
+    } catch (error, stackTrace) {
+      errors.add(
+        AppError(
+          code: 'plugin.load_failed',
+          message: 'Failed to import plugin files.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+      return batchFor(
+        PluginImportBatchResult(
+          importedCount: 0,
+          updatedCount: 0,
+          skippedCount: skippedCount,
+          errors: List<AppError>.unmodifiable(errors),
         ),
       );
     }
@@ -625,6 +987,10 @@ class LocalPluginRepository implements PluginRepository {
     final rows =
         await (_database.select(_database.pluginDefinitionRows)
               ..orderBy(<OrderingTerm Function(db.$PluginDefinitionRowsTable)>[
+                // The user's arrangement first: explicit ranks ascend, and
+                // rows that were never dragged (rank 0) stay in install order
+                // ahead of anyplaced row. See `PluginSortOrder.manual`.
+                (row) => OrderingTerm.asc(row.sortIndex),
                 (row) => OrderingTerm.asc(row.installedAt),
               ]))
             .get();
@@ -715,6 +1081,7 @@ class LocalPluginRepository implements PluginRepository {
       enabled: row.enabled,
       installedAt: row.installedAt,
       updatedAt: row.updatedAt,
+      sortIndex: row.sortIndex,
       supportedSearchTypes: _stringList(row.supportedSearchTypesJson),
       userVariables: _mapList(row.userVariablesJson),
       userVariableValues: _stringMap(row.userVariableValuesJson),
@@ -734,6 +1101,7 @@ class LocalPluginRepository implements PluginRepository {
       enabled: Value(definition.enabled),
       installedAt: Value(definition.installedAt),
       updatedAt: Value(definition.updatedAt),
+      sortIndex: Value(definition.sortIndex),
       supportedSearchTypesJson: Value(
         jsonEncode(definition.supportedSearchTypes),
       ),
@@ -795,6 +1163,50 @@ class _PluginImportRequest {
   final String source;
   final String fileName;
   final String importLabel;
+}
+
+/// Per-entry download results for a plugin list, in manifest order.
+class _ManifestDownloads {
+  const _ManifestDownloads({required this.requests, required this.failures});
+
+  final List<_PluginImportRequest?> requests;
+  final List<AppError?> failures;
+}
+
+/// What importing a URL actually involves, once the body has been read.
+class _UrlImportPlan {
+  const _UrlImportPlan.requests({
+    required this.requests,
+    required this.loadFailures,
+    required this.labels,
+  }) : error = null;
+
+  const _UrlImportPlan.failure(AppError this.error)
+    : requests = null,
+      loadFailures = null,
+      labels = null;
+
+  final List<_PluginImportRequest?>? requests;
+  final List<AppError?>? loadFailures;
+  final List<String>? labels;
+  final AppError? error;
+}
+
+/// The batch result plus the context a single-plugin caller needs.
+class _ImportOutcome {
+  const _ImportOutcome({
+    required this.batch,
+    required this.skippedMessage,
+    this.importedLabel,
+    this.updatedLabel,
+    this.importedDefinition,
+  });
+
+  final PluginImportBatchResult batch;
+  final String skippedMessage;
+  final String? importedLabel;
+  final String? updatedLabel;
+  final PluginDefinition? importedDefinition;
 }
 
 enum _PlannedImportKind { imported, updated, skipped, failed }

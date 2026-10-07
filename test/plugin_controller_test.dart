@@ -8,6 +8,7 @@ import 'package:robyne/features/plugin/application/plugin_controller.dart';
 import 'package:robyne/features/plugin/application/plugin_providers.dart';
 import 'package:robyne/features/plugin/domain/plugin_definition.dart';
 import 'package:robyne/features/plugin/domain/plugin_repository.dart';
+import 'package:robyne/features/plugin/domain/plugin_sort.dart';
 
 void main() {
   test('failed URL import keeps existing plugin list visible', () async {
@@ -149,6 +150,38 @@ class _FakePluginRepository implements PluginRepository {
   }
 
   @override
+  Future<PluginImportBatchResult> importPluginBatchFromUrl(
+    String url, {
+    PluginImportProgressCallback? onProgress,
+  }) async {
+    final errors = <AppError>[];
+    var importedCount = 0;
+    if (importResult case Ok<PluginDefinition>(:final value)) {
+      plugins.add(value);
+      importedCount = 1;
+    } else if (importResult case Failure<PluginDefinition>(:final error)) {
+      errors.add(error);
+    }
+    onProgress?.call(
+      PluginImportProgressSnapshot(
+        total: 1,
+        completed: 0,
+        importedCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        failedCount: 0,
+        currentLabel: url,
+      ),
+    );
+    return PluginImportBatchResult(
+      importedCount: importedCount,
+      updatedCount: 0,
+      skippedCount: 0,
+      errors: errors,
+    );
+  }
+
+  @override
   Future<Result<PluginDefinition>> importPluginFromPath(String path) async {
     final result = await importPluginsFromPaths(<String>[path]);
     if (result.importedCount > 0 || result.updatedCount > 0) {
@@ -227,6 +260,13 @@ class _FakePluginRepository implements PluginRepository {
   @override
   Future<Result<void>> deletePlugin(String id) async {
     return const Ok(null);
+  }
+
+  @override
+  Future<Result<List<PluginDefinition>>> reorderPlugins(
+    List<String> orderedIds,
+  ) async {
+    return Ok(applyPluginOrder(List<PluginDefinition>.of(plugins), orderedIds));
   }
 
   @override
