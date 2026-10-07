@@ -35,21 +35,7 @@ jobs:
           cache: true
 
       - name: Install dependencies
-        # Teed to a file so a failure can be surfaced as an annotation.
-        # Without this the only signal is "exit code 1", which says nothing
-        # about what the runner lacked.
-        run: |
-          flutter pub get 2>&1 | Tee-Object -FilePath pub-get.log
-          exit $LASTEXITCODE
-
-      - name: Surface dependency errors
-        if: failure()
-        run: |
-          $log = Get-Content pub-get.log -Raw
-          if ($log) {
-            $flat = $log -replace "`r`n", '%0A' -replace "`n", '%0A'
-            Write-Host "::error::flutter pub get failed: $flat"
-          }
+        run: flutter pub get
 
       # The bundled vendor bundle is generated from tool/vendor_entry.js with
       # esbuild. It is committed, so tests do not need it rebuilt — but a

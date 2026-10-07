@@ -84,14 +84,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # Pinned to the version this tree is built with locally. The runner
-      # image ships a newer CMake, and the Windows runner's toolchain
-      # resolves differently enough that an unpinned build is a coin toss.
-      - name: Use CMake 3.25
-        uses: lukka/get-cmake@v3.31
-        with:
-          cmakeVersion: '3.25.1'
-
       - name: Build
         run: flutter build windows --release
 
