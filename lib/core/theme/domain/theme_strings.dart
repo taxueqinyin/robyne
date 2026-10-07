@@ -280,6 +280,15 @@ enum ThemeStringKey {
   searchPlay('search.play', 'Play'),
   searchDownload('search.download', 'Download'),
   searchMoreActions('search.moreActions', 'More'),
+  searchHistoryTitle('search.historyTitle', 'Recent searches'),
+  searchHistoryEmpty('search.historyEmpty', 'No recent searches'),
+  searchHistoryClearAll('search.historyClearAll', 'Clear all'),
+  searchHistoryRemove('search.historyRemove', 'Remove'),
+  searchHistoryClearAllTitle('search.historyClearAllTitle', 'Clear search history'),
+  searchHistoryClearAllMessage(
+    'search.historyClearAllMessage',
+    'Remove every remembered search keyword? This cannot be undone.',
+  ),
 
   // Playback mode names. The queue picker and the player bar read the same
   // slots, so a skin renames a mode once and it changes everywhere.
@@ -375,6 +384,22 @@ enum ThemeStringKey {
   pluginsEnable('plugins.enable', 'Enable'),
   pluginsDisable('plugins.disable', 'Disable'),
   pluginsDelete('plugins.delete', 'Delete'),
+  pluginsSortTooltip('plugins.sortTooltip', 'Sort plugins'),
+
+  /// The user's own dragged arrangement. First in the enum because it is the
+  /// only order that is stored: the other modes are views over it.
+  pluginsSortManual('plugins.sort.manual', 'My order'),
+  pluginsSortAdded('plugins.sort.added', 'Date added'),
+  pluginsSortName('plugins.sort.name', 'Name'),
+  pluginsSortEnabled('plugins.sort.enabled', 'Enabled first'),
+  pluginsSortUpdated('plugins.sort.updated', 'Recently updated'),
+
+  /// Tells the user the rows can be dragged, shown while [pluginsSortManual]
+  /// is the active order.
+  pluginsSortDragHint('plugins.sort.dragHint', 'Drag a row to reorder'),
+
+  /// Tooltip on the row's drag handle.
+  pluginsDragHandle('plugins.dragHandle', 'Drag to reorder'),
 
   // Shared dialog actions, used by several surfaces.
   actionCancel('action.cancel', 'Cancel'),
