@@ -5806,10 +5806,7 @@ final class $$PlaybackItemsTableReferences
   static MultiTypedResultKey<$PlayerStateRowsTable, List<PlayerStateRow>>
   _playerStateRowsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.playerStateRows,
-    aliasName: $_aliasNameGenerator(
-      db.playbackItems.id,
-      db.playerStateRows.currentItemId,
-    ),
+    aliasName: 'playback_items__id__player_state_rows__current_item_id',
   );
 
   $$PlayerStateRowsTableProcessedTableManager get playerStateRowsRefs {
@@ -5829,10 +5826,7 @@ final class $$PlaybackItemsTableReferences
   static MultiTypedResultKey<$QueueEntriesTable, List<QueueEntry>>
   _queueEntriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.queueEntries,
-    aliasName: $_aliasNameGenerator(
-      db.playbackItems.id,
-      db.queueEntries.itemId,
-    ),
+    aliasName: 'playback_items__id__queue_entries__item_id',
   );
 
   $$QueueEntriesTableProcessedTableManager get queueEntriesRefs {
@@ -5854,10 +5848,7 @@ final class $$PlaybackItemsTableReferences
   _playbackHistoryRowsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.playbackHistoryRows,
-        aliasName: $_aliasNameGenerator(
-          db.playbackItems.id,
-          db.playbackHistoryRows.itemId,
-        ),
+        aliasName: 'playback_items__id__playback_history_rows__item_id',
       );
 
   $$PlaybackHistoryRowsTableProcessedTableManager get playbackHistoryRowsRefs {
@@ -5878,10 +5869,7 @@ final class $$PlaybackItemsTableReferences
   _localLibraryTracksRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.localLibraryTracks,
-        aliasName: $_aliasNameGenerator(
-          db.playbackItems.id,
-          db.localLibraryTracks.itemId,
-        ),
+        aliasName: 'playback_items__id__local_library_tracks__item_id',
       );
 
   $$LocalLibraryTracksTableProcessedTableManager get localLibraryTracksRefs {
@@ -5902,10 +5890,7 @@ final class $$PlaybackItemsTableReferences
   _audioCacheEntriesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.audioCacheEntries,
-        aliasName: $_aliasNameGenerator(
-          db.playbackItems.id,
-          db.audioCacheEntries.itemId,
-        ),
+        aliasName: 'playback_items__id__audio_cache_entries__item_id',
       );
 
   $$AudioCacheEntriesTableProcessedTableManager get audioCacheEntriesRefs {
@@ -5925,10 +5910,7 @@ final class $$PlaybackItemsTableReferences
   static MultiTypedResultKey<$LyricPreferencesTable, List<LyricPreference>>
   _lyricPreferencesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.lyricPreferences,
-    aliasName: $_aliasNameGenerator(
-      db.playbackItems.id,
-      db.lyricPreferences.itemId,
-    ),
+    aliasName: 'playback_items__id__lyric_preferences__item_id',
   );
 
   $$LyricPreferencesTableProcessedTableManager get lyricPreferencesRefs {
@@ -5948,10 +5930,7 @@ final class $$PlaybackItemsTableReferences
   static MultiTypedResultKey<$PlaylistItemsTable, List<PlaylistItem>>
   _playlistItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.playlistItems,
-    aliasName: $_aliasNameGenerator(
-      db.playbackItems.id,
-      db.playlistItems.itemId,
-    ),
+    aliasName: 'playback_items__id__playlist_items__item_id',
   );
 
   $$PlaylistItemsTableProcessedTableManager get playlistItemsRefs {
@@ -5969,10 +5948,7 @@ final class $$PlaybackItemsTableReferences
   static MultiTypedResultKey<$DownloadTasksTable, List<DownloadTask>>
   _downloadTasksRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.downloadTasks,
-    aliasName: $_aliasNameGenerator(
-      db.playbackItems.id,
-      db.downloadTasks.itemId,
-    ),
+    aliasName: 'playback_items__id__download_tasks__item_id',
   );
 
   $$DownloadTasksTableProcessedTableManager get downloadTasksRefs {
@@ -6937,13 +6913,9 @@ final class $$PlayerStateRowsTableReferences
     super.$_typedResult,
   );
 
-  static $PlaybackItemsTable _currentItemIdTable(_$AppDatabase db) =>
-      db.playbackItems.createAlias(
-        $_aliasNameGenerator(
-          db.playerStateRows.currentItemId,
-          db.playbackItems.id,
-        ),
-      );
+  static $PlaybackItemsTable _currentItemIdTable(_$AppDatabase db) => db
+      .playbackItems
+      .createAlias('player_state_rows__current_item_id__playback_items__id');
 
   $$PlaybackItemsTableProcessedTableManager? get currentItemId {
     final $_column = $_itemColumn<String>('current_item_id');
@@ -7276,10 +7248,8 @@ final class $$QueueEntriesTableReferences
     extends BaseReferences<_$AppDatabase, $QueueEntriesTable, QueueEntry> {
   $$QueueEntriesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) =>
-      db.playbackItems.createAlias(
-        $_aliasNameGenerator(db.queueEntries.itemId, db.playbackItems.id),
-      );
+  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) => db.playbackItems
+      .createAlias('queue_entries__item_id__playback_items__id');
 
   $$PlaybackItemsTableProcessedTableManager get itemId {
     final $_column = $_itemColumn<String>('item_id')!;
@@ -7547,13 +7517,8 @@ final class $$PlaybackHistoryRowsTableReferences
     super.$_typedResult,
   );
 
-  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) =>
-      db.playbackItems.createAlias(
-        $_aliasNameGenerator(
-          db.playbackHistoryRows.itemId,
-          db.playbackItems.id,
-        ),
-      );
+  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) => db.playbackItems
+      .createAlias('playback_history_rows__item_id__playback_items__id');
 
   $$PlaybackItemsTableProcessedTableManager get itemId {
     final $_column = $_itemColumn<String>('item_id')!;
@@ -7844,10 +7809,8 @@ final class $$LocalLibraryTracksTableReferences
     super.$_typedResult,
   );
 
-  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) =>
-      db.playbackItems.createAlias(
-        $_aliasNameGenerator(db.localLibraryTracks.itemId, db.playbackItems.id),
-      );
+  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) => db.playbackItems
+      .createAlias('local_library_tracks__item_id__playback_items__id');
 
   $$PlaybackItemsTableProcessedTableManager get itemId {
     final $_column = $_itemColumn<String>('item_id')!;
@@ -8510,10 +8473,8 @@ final class $$AudioCacheEntriesTableReferences
     super.$_typedResult,
   );
 
-  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) =>
-      db.playbackItems.createAlias(
-        $_aliasNameGenerator(db.audioCacheEntries.itemId, db.playbackItems.id),
-      );
+  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) => db.playbackItems
+      .createAlias('audio_cache_entries__item_id__playback_items__id');
 
   $$PlaybackItemsTableProcessedTableManager get itemId {
     final $_column = $_itemColumn<String>('item_id')!;
@@ -8866,10 +8827,8 @@ final class $$LyricPreferencesTableReferences
     super.$_typedResult,
   );
 
-  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) =>
-      db.playbackItems.createAlias(
-        $_aliasNameGenerator(db.lyricPreferences.itemId, db.playbackItems.id),
-      );
+  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) => db.playbackItems
+      .createAlias('lyric_preferences__item_id__playback_items__id');
 
   $$PlaybackItemsTableProcessedTableManager get itemId {
     final $_column = $_itemColumn<String>('item_id')!;
@@ -9251,10 +9210,7 @@ final class $$PlaylistsTableReferences
   static MultiTypedResultKey<$PlaylistItemsTable, List<PlaylistItem>>
   _playlistItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.playlistItems,
-    aliasName: $_aliasNameGenerator(
-      db.playlists.id,
-      db.playlistItems.playlistId,
-    ),
+    aliasName: 'playlists__id__playlist_items__playlist_id',
   );
 
   $$PlaylistItemsTableProcessedTableManager get playlistItemsRefs {
@@ -9559,9 +9515,7 @@ final class $$PlaylistItemsTableReferences
   );
 
   static $PlaylistsTable _playlistIdTable(_$AppDatabase db) =>
-      db.playlists.createAlias(
-        $_aliasNameGenerator(db.playlistItems.playlistId, db.playlists.id),
-      );
+      db.playlists.createAlias('playlist_items__playlist_id__playlists__id');
 
   $$PlaylistsTableProcessedTableManager get playlistId {
     final $_column = $_itemColumn<String>('playlist_id')!;
@@ -9577,10 +9531,8 @@ final class $$PlaylistItemsTableReferences
     );
   }
 
-  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) =>
-      db.playbackItems.createAlias(
-        $_aliasNameGenerator(db.playlistItems.itemId, db.playbackItems.id),
-      );
+  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) => db.playbackItems
+      .createAlias('playlist_items__item_id__playback_items__id');
 
   $$PlaybackItemsTableProcessedTableManager get itemId {
     final $_column = $_itemColumn<String>('item_id')!;
@@ -9962,10 +9914,8 @@ final class $$DownloadTasksTableReferences
     super.$_typedResult,
   );
 
-  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) =>
-      db.playbackItems.createAlias(
-        $_aliasNameGenerator(db.downloadTasks.itemId, db.playbackItems.id),
-      );
+  static $PlaybackItemsTable _itemIdTable(_$AppDatabase db) => db.playbackItems
+      .createAlias('download_tasks__item_id__playback_items__id');
 
   $$PlaybackItemsTableProcessedTableManager get itemId {
     final $_column = $_itemColumn<String>('item_id')!;
