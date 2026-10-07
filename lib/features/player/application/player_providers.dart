@@ -8,7 +8,6 @@ import '../../../core/errors/app_error.dart';
 import '../../../core/result/result.dart';
 import '../../downloads/application/download_providers.dart';
 import '../../plugin/application/plugin_providers.dart';
-import '../../plugin/application/plugin_runtime_config.dart';
 import '../../search/domain/music_item.dart';
 import '../../settings/application/settings_providers.dart';
 import '../domain/audio_player_service.dart';
@@ -479,7 +478,6 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     PlaybackItem item,
     int requestId,
   ) async {
-    final runtimeFactory = ref.read(pluginRuntimeFactoryProvider);
     final repository = ref.read(pluginRepositoryProvider);
     final compat = ref.read(musicFreeCompatAdapterProvider);
 
@@ -518,44 +516,32 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
       );
     }
 
-    final runtime = await runtimeFactory.create();
-    try {
-      if (!_isCurrentPlayRequest(requestId)) {
-        return const Ok(MediaSource(url: ''));
-      }
-
-      final source = await File(plugin.sourcePath).readAsString();
-      if (!_isCurrentPlayRequest(requestId)) {
-        return const Ok(MediaSource(url: ''));
-      }
-
-      final loaded = await runtime.loadPlugin(
-        source,
-        userVariables: Map<String, String>.from(plugin.userVariableValues),
-      );
-      if (!_isCurrentPlayRequest(requestId)) {
-        return const Ok(MediaSource(url: ''));
-      }
-      if (loaded case Failure<Map<String, Object?>>(:final error)) {
-        return Failure(error);
-      }
-
-      final mediaResult = await runtime.callMethod('getMediaSource', <Object?>[
-        item.raw,
-        'standard',
-      ], timeout: pluginMethodTimeout);
-
-      if (!_isCurrentPlayRequest(requestId)) {
-        return const Ok(MediaSource(url: ''));
-      }
-
-      return switch (mediaResult) {
-        Ok<Object?>(:final value) => compat.mediaSourceFromPluginValue(value),
-        Failure<Object?>(:final error) => Failure(error),
-      };
-    } finally {
-      await runtime.dispose();
+    final source = await File(plugin.sourcePath).readAsString();
+    if (!_isCurrentPlayRequest(requestId)) {
+      return const Ok(MediaSource(url: ''));
     }
+
+    // Runs on a worker isolate, never the main one: a native JS engine built
+    // on the UI isolate shares Flutter's thread and address space, so a
+    // plugin that blows the stack or the heap aborts the whole process with
+    // no Dart error to catch. `getMediaSource` is reached from every search
+    // result, which made it the most likely way to kill the app.
+    final runner = ref.read(pluginMethodRunnerProvider);
+    final mediaResult = await runner.call(
+      plugin: plugin,
+      source: source,
+      method: 'getMediaSource',
+      arguments: <Object?>[item.raw, 'standard'],
+    );
+
+    if (!_isCurrentPlayRequest(requestId)) {
+      return const Ok(MediaSource(url: ''));
+    }
+
+    return switch (mediaResult) {
+      Ok<Object?>(:final value) => compat.mediaSourceFromPluginValue(value),
+      Failure<Object?>(:final error) => Failure(error),
+    };
   }
 
   Future<void> _playResolvedItem(

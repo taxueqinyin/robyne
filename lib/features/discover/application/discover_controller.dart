@@ -1097,7 +1097,15 @@ class DiscoverController extends Notifier<DiscoverState> {
     required String label,
   }) {
     final message = error.message.toLowerCase();
-    if (message.contains('plugin method not found')) {
+    // Codes come from the runtime's failure envelope, so matching on them is
+    // stable across languages; the message check stays for older surfaces
+    // that only carried text.
+    final unsupported =
+        error.code == 'plugin.method_not_found' ||
+        error.code == 'plugin.method_unsupported' ||
+        message.contains('plugin method not found') ||
+        message.contains('method not found');
+    if (unsupported) {
       return AppError(
         code: 'plugin.method_unsupported',
         message:

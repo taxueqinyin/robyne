@@ -10,9 +10,7 @@ import '../../../core/result/result.dart';
 import '../../player/domain/media_source.dart';
 import '../../player/domain/playback_item.dart';
 import '../../plugin/application/plugin_providers.dart';
-import '../../plugin/application/plugin_runtime_config.dart';
 import '../../plugin/domain/plugin_definition.dart';
-import '../../plugin/domain/plugin_runtime.dart';
 import '../../settings/application/settings_providers.dart';
 import '../domain/download_audio_format.dart';
 import '../domain/download_task.dart';
@@ -228,7 +226,6 @@ class DownloadController extends AsyncNotifier<List<DownloadTask>> {
   Future<Result<MediaSource>> _mediaSourceFromPluginItem(
     PlaybackItem item,
   ) async {
-    final runtimeFactory = ref.read(pluginRuntimeFactoryProvider);
     final repository = ref.read(pluginRepositoryProvider);
     final compat = ref.read(musicFreeCompatAdapterProvider);
 
@@ -253,27 +250,21 @@ class DownloadController extends AsyncNotifier<List<DownloadTask>> {
       );
     }
 
-    PluginRuntime? runtime;
-    try {
-      runtime = await runtimeFactory.create();
-      final loaded = await runtime.loadPlugin(
-        await File(plugin.sourcePath).readAsString(),
-        userVariables: Map<String, String>.from(plugin.userVariableValues),
-      );
-      if (loaded case Failure<Map<String, Object?>>(:final error)) {
-        return Failure(error);
-      }
-      final mediaResult = await runtime.callMethod('getMediaSource', <Object?>[
-        item.raw,
-        'standard',
-      ], timeout: pluginMethodTimeout);
-      return switch (mediaResult) {
-        Ok<Object?>(:final value) => compat.mediaSourceFromPluginValue(value),
-        Failure<Object?>(:final error) => Failure(error),
-      };
-    } finally {
-      await runtime?.dispose();
-    }
+    final source = await File(plugin.sourcePath).readAsString();
+    // Off the main isolate: see QuickJsIsolateMethodRunner — a native engine
+    // on the UI isolate shares Flutter's thread, so a plugin that faults
+    // aborts the process rather than returning an error.
+    final runner = ref.read(pluginMethodRunnerProvider);
+    final mediaResult = await runner.call(
+      plugin: plugin,
+      source: source,
+      method: 'getMediaSource',
+      arguments: <Object?>[item.raw, 'standard'],
+    );
+    return switch (mediaResult) {
+      Ok<Object?>(:final value) => compat.mediaSourceFromPluginValue(value),
+      Failure<Object?>(:final error) => Failure(error),
+    };
   }
 
   Future<String> _downloadPath(

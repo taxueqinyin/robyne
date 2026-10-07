@@ -41,14 +41,22 @@ class QuickJsPluginRuntimeFactory implements PluginRuntimeFactory {
   }) async {
     try {
       final vendorSource = await _loadVendorSource();
-      final response = await Isolate.run<Map<String, Object?>>(
-        () => _runQuickJsLoadInIsolate(<String, Object?>{
+      final response = await QuickJsIsolatePluginSearchExecutor._runGuarded(
+        debugName: 'robyne-plugin-load',
+        body: () => _runQuickJsLoadInIsolate(<String, Object?>{
           'source': source,
           'userVariables': userVariables,
           'vendorSource': vendorSource,
         }),
-        debugName: 'robyne-plugin-load',
       );
+      if (response == null) {
+        return Failure(
+          AppError(
+            code: 'plugin.load_failed',
+            message: 'Failed to load JavaScript plugin.',
+          ),
+        );
+      }
       if (response['ok'] == true) {
         return Ok(_objectMapValue(response['value']));
       }
@@ -106,8 +114,9 @@ class QuickJsIsolatePluginSearchExecutor implements PluginSearchExecutor {
   }) async {
     try {
       final vendorSource = await _loadVendorSource();
-      final response = await Isolate.run<Map<String, Object?>>(
-        () => _runQuickJsSearchInIsolate(<String, Object?>{
+      final response = await _runGuarded(
+        debugName: 'robyne-plugin-search-${plugin.platform}',
+        body: () => _runQuickJsSearchInIsolate(<String, Object?>{
           'source': source,
           'userVariables': plugin.userVariableValues,
           'keyword': keyword,
@@ -116,8 +125,15 @@ class QuickJsIsolatePluginSearchExecutor implements PluginSearchExecutor {
           'timeoutMs': pluginMethodTimeout.inMilliseconds,
           'vendorSource': vendorSource,
         }),
-        debugName: 'robyne-plugin-search-${plugin.platform}',
       );
+      if (response == null) {
+        return Failure(
+          AppError(
+            code: 'plugin.search_isolate_failed',
+            message: 'Plugin ${plugin.platform} search did not finish in time.',
+          ),
+        );
+      }
       if (response['ok'] == true) {
         return Ok(response['value']);
       }
@@ -140,6 +156,43 @@ class QuickJsIsolatePluginSearchExecutor implements PluginSearchExecutor {
       );
     }
   }
+
+  /// Runs [body] on a worker isolate with a hard wall-clock ceiling.
+  ///
+  /// `Isolate.run` waits forever on the worker. A plugin that hangs — a
+  /// request that never settles, a loop that never yields — therefore holds a
+  /// Dart isolate open indefinitely, and the app appears frozen while those
+  /// pile up. Bounding the wait means a wedged plugin costs one failed search
+  /// instead of the session.
+  ///
+  /// Returns `null` when the ceiling is hit, since the isolate itself cannot
+  /// be cancelled once started.
+  static Future<Map<String, Object?>?> _runGuarded({
+    required String debugName,
+    required Future<Map<String, Object?>> Function() body,
+  }) {
+    return Isolate.run<Map<String, Object?>>(
+      body,
+      debugName: debugName,
+    ).timeout(
+      _isolateBudget,
+      onTimeout: () => _runFailedResponse,
+    ).then<Map<String, Object?>?>(
+      (response) => identical(response, _runFailedResponse) ? null : response,
+    );
+  }
+
+  /// Sentinel for "the isolate never answered", distinct from a real result.
+  static const Map<String, Object?> _runFailedResponse = <String, Object?>{
+    '_robyneRunFailed': true,
+  };
+
+  /// Generous but finite ceiling for one plugin call.
+  ///
+  /// Longer than [pluginMethodTimeout] because the isolate also has to boot
+  /// QuickJS and evaluate the vendor bundle; if a plugin has not answered by
+  /// now, it is not going to.
+  static const Duration _isolateBudget = Duration(seconds: 100);
 
   Future<String?> _loadVendorSource() {
     return _vendorSourceFuture ??= _loadVendorSourceUncached();
@@ -247,8 +300,9 @@ class QuickJsIsolatePluginDiscoveryExecutor implements PluginDiscoveryExecutor {
   }) async {
     try {
       final vendorSource = await _loadVendorSource();
-      final response = await Isolate.run<Map<String, Object?>>(
-        () => _runQuickJsMethodInIsolate(<String, Object?>{
+      final response = await QuickJsIsolatePluginSearchExecutor._runGuarded(
+        debugName: 'robyne-plugin-discovery-$method-${plugin.platform}',
+        body: () => _runQuickJsMethodInIsolate(<String, Object?>{
           'source': source,
           'userVariables': plugin.userVariableValues,
           'method': method,
@@ -256,8 +310,16 @@ class QuickJsIsolatePluginDiscoveryExecutor implements PluginDiscoveryExecutor {
           'timeoutMs': pluginMethodTimeout.inMilliseconds,
           'vendorSource': vendorSource,
         }),
-        debugName: 'robyne-plugin-discovery-$method-${plugin.platform}',
       );
+      if (response == null) {
+        return Failure(
+          AppError(
+            code: 'plugin.discovery_isolate_failed',
+            message:
+                'Plugin ${plugin.platform} $method did not finish in time.',
+          ),
+        );
+      }
       if (response['ok'] == true) {
         return Ok(response['value']);
       }
@@ -275,6 +337,108 @@ class QuickJsIsolatePluginDiscoveryExecutor implements PluginDiscoveryExecutor {
           code: 'plugin.discovery_isolate_failed',
           message:
               'Plugin ${plugin.platform} $method failed off the UI thread.',
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  Future<String?> _loadVendorSource() {
+    return _vendorSourceFuture ??= _loadVendorSourceUncached();
+  }
+
+  Future<String?> _loadVendorSourceUncached() async {
+    final loader = _vendorSourceLoader;
+    if (loader != null) {
+      return loader();
+    }
+    try {
+      return await rootBundle.loadString(_vendorAssetPath);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+/// Runs one plugin method on a worker isolate, for callers that need a method
+/// the discovery executor does not name.
+///
+/// Playback (`getMediaSource`), lyrics and downloads each used to build a
+/// `QuickJsPluginRuntime` directly, which put a native JS engine on the *main*
+/// isolate: a plugin that blows the stack or the heap takes the whole process
+/// down with no Dart error, because a native abort is not a Dart exception.
+/// Search and discovery already ran off-thread; this is the same guarantee
+/// for any other method, so every plugin call shares one boundary.
+/// The contract playback, lyrics and downloads depend on.
+///
+/// An interface rather than a concrete class so tests can inject a fake: the
+/// real one spawns isolates, which a unit test must not have to do.
+abstract interface class PluginMethodRunner {
+  Future<Result<Object?>> call({
+    required PluginDefinition plugin,
+    required String source,
+    required String method,
+    required List<Object?> arguments,
+  });
+}
+
+class QuickJsIsolateMethodRunner implements PluginMethodRunner {
+  QuickJsIsolateMethodRunner({
+    String vendorAssetPath = 'assets/js/musicfree_vendor.js',
+    Future<String?> Function()? vendorSourceLoader,
+  }) : _vendorAssetPath = vendorAssetPath,
+       _vendorSourceLoader = vendorSourceLoader;
+
+  final String _vendorAssetPath;
+  final Future<String?> Function()? _vendorSourceLoader;
+  Future<String?>? _vendorSourceFuture;
+
+  @override
+  Future<Result<Object?>> call({
+    required PluginDefinition plugin,
+    required String source,
+    required String method,
+    required List<Object?> arguments,
+  }) async {
+    try {
+      final vendorSource = await _loadVendorSource();
+      final response = await QuickJsIsolatePluginSearchExecutor._runGuarded(
+        debugName: 'robyne-plugin-$method-${plugin.platform}',
+        body: () => _runQuickJsMethodInIsolate(<String, Object?>{
+          'source': source,
+          'userVariables': plugin.userVariableValues,
+          'method': method,
+          'arguments': arguments,
+          'timeoutMs': pluginMethodTimeout.inMilliseconds,
+          'vendorSource': vendorSource,
+        }),
+      );
+      if (response == null) {
+        return Failure(
+          AppError(
+            code: 'plugin.method_isolate_failed',
+            message:
+                'Plugin ${plugin.platform} $method did not finish in time.',
+          ),
+        );
+      }
+      if (response['ok'] == true) {
+        return Ok(response['value']);
+      }
+      return Failure(
+        AppError(
+          code: response['code']?.toString() ?? 'plugin.method_failed',
+          message:
+              response['message']?.toString() ??
+              'Plugin ${plugin.platform} $method failed.',
+        ),
+      );
+    } catch (error, stackTrace) {
+      return Failure(
+        AppError(
+          code: 'plugin.method_isolate_failed',
+          message: 'Plugin ${plugin.platform} $method failed off the UI thread.',
           cause: error,
           stackTrace: stackTrace,
         ),
@@ -449,7 +613,19 @@ class QuickJsPluginRuntime implements PluginRuntime {
     required PluginHttpClient httpClient,
     String? vendorSource,
   }) : _httpClient = httpClient {
-    _runtime = getJavascriptRuntime(xhr: false);
+    // A wider QuickJS recursion guard than the 1MB default: deep-but-legitimate
+    // plugin recursion needs headroom, while a runaway should trip this (a
+    // catchable JS RangeError) before it reaches the real thread stack and
+    // aborts the process.
+    //
+    // `memoryLimit` is deliberately NOT set: this build's native bridge does
+    // not export `jsSetMemoryLimit`, and asking for it throws a symbol
+    // lookup failure inside the isolate. Setting it here would break every
+    // plugin call, so the heap stays bounded only by the isolate's own death.
+    _runtime = getJavascriptRuntime(
+      xhr: false,
+      extraArgs: <String, Object?>{'stackSize': _stackLimitBytes},
+    );
     _runtime.onMessage('robyneHttp', _trackHttpRequest);
     _runtime.onMessage('robyneSetTimeout', _scheduleTimeout);
     _runtime.onMessage('robyneClearTimeout', _clearTimeout);
@@ -458,6 +634,27 @@ class QuickJsPluginRuntime implements PluginRuntime {
       _runtime.evaluate(vendorSource);
     }
   }
+
+  /// QuickJS's own recursion guard: 768KB, deliberately under the host
+  /// thread's real stack.
+  ///
+  /// This guard is only meaningful if it trips *first*. Windows gives a
+  /// thread a 1MB stack by default, and the Dart VM's worker-isolate threads
+  /// are of the same order, so a guard at or above 1MB never fires — runaway
+  /// plugin recursion walks straight past QuickJS's check and smashes the
+  /// real thread stack. That is exactly the "Run-Time Check Failure #2 -
+  /// Stack around the variable was corrupted" abort from
+  /// quickjs_c_bridge_plugin.dll, and why an earlier 4MB value made the
+  /// crash worse.
+  ///
+  /// The value is a compromise, measured against the bundled fixtures rather
+  /// than guessed: 256KB and 512KB were both too tight — real plugins
+  /// (快手's request serialisation, 网易云's MiniSearch index build) tripped
+  /// the guard during ordinary work. At 768KB every fixture searches
+  /// successfully, while unbounded recursion is still caught as a JS
+  /// RangeError instead of a dead process. The margin to 1MB is what keeps
+  /// the guard ahead of the OS stack.
+  static const int _stackLimitBytes = 768 * 1024;
 
   final PluginHttpClient _httpClient;
   late final JavascriptRuntime _runtime;
@@ -558,14 +755,39 @@ class QuickJsPluginRuntime implements PluginRuntime {
     try {
       final encodedMethod = jsonEncode(method);
       final encodedArgs = jsonEncode(arguments);
+      // The wrapper resolves to a *result envelope* instead of throwing.
+      //
+      // An `async` function that throws hands back a rejected Promise, which
+      // this bridge can only unwrap by rethrowing the JS error into Dart —
+      // and an unhandled rejection there aborts the whole isolate, which is
+      // how one plugin missing `getTopLists` took the app down. Catching
+      // inside JS and returning a discriminated envelope means every failure
+      // path comes back as a normal rejected *Dart* value instead.
       final result = _runtime.evaluate('''
         (async () => {
-          const method = globalThis.__robynePlugin[$encodedMethod];
-          if (typeof method !== 'function') {
-            throw new Error('Plugin method not found: ' + $encodedMethod);
+          try {
+            const method = globalThis.__robynePlugin[$encodedMethod];
+            if (typeof method !== 'function') {
+              return JSON.stringify({
+                __robyneError: true,
+                code: 'plugin.method_not_found',
+                message: 'Plugin method not found: ' + $encodedMethod
+              });
+            }
+            const value = await method(...$encodedArgs);
+            return JSON.stringify({
+              __robyneOk: true,
+              value: value === undefined ? null : value
+            });
+          } catch (error) {
+            return JSON.stringify({
+              __robyneError: true,
+              code: 'plugin.runtime_error',
+              message: (error && error.message)
+                ? String(error.message)
+                : String(error)
+            });
           }
-          const value = await method(...$encodedArgs);
-          return JSON.stringify(value === undefined ? null : value);
         })()
       ''');
 
@@ -591,7 +813,11 @@ class QuickJsPluginRuntime implements PluginRuntime {
           ),
         );
       }
-      return Ok(jsonDecode(resolved.stringResult) as Object?);
+      final envelope = _decodeEnvelope(resolved.stringResult);
+      if (envelope case Failure<Object?>(:final error)) {
+        return Failure(error);
+      }
+      return Ok((envelope as Ok<Object?>).value);
     } on TimeoutException catch (error, stackTrace) {
       return Failure(
         AppError(
@@ -611,6 +837,36 @@ class QuickJsPluginRuntime implements PluginRuntime {
         ),
       );
     }
+  }
+
+  /// Reads the envelope [callMethod]'s wrapper produces.
+  ///
+  /// A plugin may legitimately return bare JSON that is not an envelope —
+  /// only the marker fields are trusted, so an object that happens to carry
+  /// `__robyneError` is the sole signal of failure.
+  Result<Object?> _decodeEnvelope(String raw) {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } catch (_) {
+      // A plugin that returns a bare string (not JSON-encoded) still has a
+      // usable value; treat it as-is rather than failing the whole call.
+      return Ok(raw as Object?);
+    }
+    if (decoded is Map && decoded['__robyneError'] == true) {
+      return Failure(
+        AppError(
+          code: decoded['code']?.toString() ?? 'plugin.runtime_error',
+          message:
+              decoded['message']?.toString() ??
+              'Plugin method call failed without a message.',
+        ),
+      );
+    }
+    if (decoded is Map && decoded['__robyneOk'] == true) {
+      return Ok(decoded['value'] as Object?);
+    }
+    return Ok(decoded);
   }
 
   @override
