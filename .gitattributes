@@ -1,6 +1,32 @@
-# Flutter 自动生成的 Windows 构建文件：统一用 LF，避免 autocrlf
-# 在不同机器上反复产生无意义的 diff。
+# One line ending for the whole repository: LF, everywhere, for every text
+# file. Pinned rather than left to each contributor's `core.autocrlf`,
+# because that setting is per-machine and invisible in a diff — a file's
+# committed bytes used to depend on who last touched it and from which OS.
+# The symptom was a rewrite that edited 15 lines showing up as a 97-line
+# diff, because the new lines arrived with a different ending than the
+# file's existing ones.
+#
+# LF specifically because it is what `dart format` emits. The formatter
+# writes most lines in this repository, so matching it means a formatted
+# file and a committed file agree, and `dart format` never produces a
+# phantom diff of its own.
+#
+# This also matters for CI: drift's generated file is committed and checked
+# against a regeneration. Without a pinned ending, a Linux runner and a
+# Windows checkout disagree byte-for-byte on a file whose content is
+# identical, and that check fails for no real reason.
+* text=auto eol=lf
+
+# Flutter regenerates these from a template on every Windows build. The
+# generator emits LF; pinning them here stops the generator and a CRLF
+# checkout from fighting over the file on each build.
 windows/flutter/generated_* text eol=lf
 
-# 常规源码交给 git 处理。
-* text=auto
+# Binary assets. `text=auto` already detects these, but naming them means a
+# corrupt or truncated file is refused rather than silently normalised.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.jks binary
+*.keystore binary

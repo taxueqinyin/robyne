@@ -38,9 +38,13 @@ jobs:
       # commit that changed the entry point without rebuilding would silently
       # ship a stale bundle. Verifying the output is byte-identical catches
       # that.
+      #
+      # `npm ci`, not `npm install`: the bundle's bytes depend on the esbuild
+      # version, and an unpinned install picks up whatever is newest. That
+      # made this check fail on a tree whose source was unchanged.
       - name: Verify the vendor bundle matches its source
         run: |
-          npm install --no-save esbuild
+          npm ci
           node tool/build_vendor.mjs
           git diff --exit-code -- assets/js/musicfree_vendor.js
 
@@ -83,7 +87,10 @@ jobs:
         run: flutter pub get
 
       - name: Regenerate
-        run: dart run build_runner build --delete-conflicting-outputs
+        run: dart run build_runner build
 
       - name: Fail if generated files changed
+        # `git diff --exit-code` compares content, so a regeneration that
+        # only touched a file's timestamp is not a failure. `git status
+        # --porcelain` would report that as a change.
         run: git diff --exit-code
