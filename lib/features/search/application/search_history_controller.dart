@@ -14,8 +14,7 @@ final searchHistoryControllerProvider =
       SearchHistoryController.new,
     );
 
-class SearchHistoryController
-    extends AsyncNotifier<List<SearchHistoryEntry>> {
+class SearchHistoryController extends AsyncNotifier<List<SearchHistoryEntry>> {
   @override
   Future<List<SearchHistoryEntry>> build() async {
     return ref.watch(searchHistoryRepositoryProvider).load();

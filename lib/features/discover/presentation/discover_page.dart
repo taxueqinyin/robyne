@@ -122,7 +122,6 @@ class DiscoverPage extends ConsumerWidget {
       ),
     );
   }
-
 }
 
 /// The design's compact header button: a bordered pill, not a raised button.

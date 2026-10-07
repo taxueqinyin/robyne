@@ -106,12 +106,18 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         pluginRepositoryProvider.overrideWithValue(_FakePluginRepository()),
-        pluginControllerProvider.overrideWith(() => _FakePluginController(plugins)),
+        pluginControllerProvider.overrideWith(
+          () => _FakePluginController(plugins),
+        ),
         search_state.searchControllerProvider.overrideWith(
           () => _SeededMultiSearchController(
             // Deliberately handed in completion order, not the user's order.
             <search_state.PluginSearchState>[
-              for (final plugin in <PluginDefinition>[plugins[1], plugins[2], plugins[0]])
+              for (final plugin in <PluginDefinition>[
+                plugins[1],
+                plugins[2],
+                plugins[0],
+              ])
                 search_state.PluginSearchState(
                   pluginId: plugin.id,
                   platform: plugin.platform,
@@ -138,10 +144,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     final tabs = tester
-        .widgetList<Text>(find.descendant(
-          of: find.byType(ListView),
-          matching: find.byType(Text),
-        ))
+        .widgetList<Text>(
+          find.descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Text),
+          ),
+        )
         .map((text) => text.data ?? '')
         .where((value) => value.startsWith('Source'))
         .toList(growable: false);

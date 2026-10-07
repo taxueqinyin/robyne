@@ -14,7 +14,9 @@ import 'package:robyne/shared/widgets/search_field_with_history.dart';
 /// no width, and a hover destroyed the row under the cursor because every
 /// update tore the overlay down and rebuilt it.
 void main() {
-  testWidgets('the dropdown carries the field width it is given', (tester) async {
+  testWidgets('the dropdown carries the field width it is given', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1280, 900) * 3;
     addTearDown(tester.view.resetPhysicalSize);
 
@@ -127,7 +129,9 @@ void main() {
     expect(controller.text, 'moonhalo');
   });
 
-  testWidgets('tapping the field again leaves the dropdown open', (tester) async {
+  testWidgets('tapping the field again leaves the dropdown open', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1280, 900) * 3;
     addTearDown(tester.view.resetPhysicalSize);
 
@@ -243,6 +247,7 @@ void main() {
     expect(find.text('Recent searches'), findsNothing);
   });
 }
+
 class _SeededHistory extends SearchHistoryController {
   @override
   Future<List<SearchHistoryEntry>> build() async => <SearchHistoryEntry>[

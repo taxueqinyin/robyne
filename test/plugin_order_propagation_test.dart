@@ -32,9 +32,9 @@ void main() {
       <String>['a', 'b', 'c'],
     );
 
-    await container
-        .read(pluginControllerProvider.notifier)
-        .reorderPlugins(<String>['c', 'a', 'b']);
+    await container.read(pluginControllerProvider.notifier).reorderPlugins(
+      <String>['c', 'a', 'b'],
+    );
 
     // The arrangement is what the sources inherit, and it is what the
     // repository stored — so it survives a restart rather than living only in
@@ -45,39 +45,39 @@ void main() {
     );
     expect(repository.idsInStoredOrder, <String>['c', 'a', 'b']);
     expect(
-      container
-          .read(orderedEnabledPluginsProvider)
-          .map((e) => e.id)
-          .toList(),
+      container.read(orderedEnabledPluginsProvider).map((e) => e.id).toList(),
       <String>['c', 'a', 'b'],
     );
   });
 
-  test('disabled plugins drop out of the source list but keep their rank', () async {
-    final repository = _FakePluginRepository(
-      plugins: <PluginDefinition>[
-        _plugin(id: 'a', platform: 'A', installedAt: 100),
-        _plugin(id: 'b', platform: 'B', enabled: false, installedAt: 200),
-      ],
-    );
-    final container = ProviderContainer(
-      overrides: [pluginRepositoryProvider.overrideWithValue(repository)],
-    );
-    addTearDown(container.dispose);
+  test(
+    'disabled plugins drop out of the source list but keep their rank',
+    () async {
+      final repository = _FakePluginRepository(
+        plugins: <PluginDefinition>[
+          _plugin(id: 'a', platform: 'A', installedAt: 100),
+          _plugin(id: 'b', platform: 'B', enabled: false, installedAt: 200),
+        ],
+      );
+      final container = ProviderContainer(
+        overrides: [pluginRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
 
-    await container.read(pluginControllerProvider.future);
+      await container.read(pluginControllerProvider.future);
 
-    expect(
-      container.read(orderedPluginsProvider).map((e) => e.id).toList(),
-      <String>['a', 'b'],
-    );
-    // Search starts from every installed plugin, but the discover source row
-    // only offers the ones that can actually serve content.
-    expect(
-      container.read(orderedEnabledPluginsProvider).map((e) => e.id).toList(),
-      <String>['a'],
-    );
-  });
+      expect(
+        container.read(orderedPluginsProvider).map((e) => e.id).toList(),
+        <String>['a', 'b'],
+      );
+      // Search starts from every installed plugin, but the discover source row
+      // only offers the ones that can actually serve content.
+      expect(
+        container.read(orderedEnabledPluginsProvider).map((e) => e.id).toList(),
+        <String>['a'],
+      );
+    },
+  );
 
   test('a failed reorder restores the previous order', () async {
     final repository = _FakePluginRepository(
@@ -93,9 +93,9 @@ void main() {
     addTearDown(container.dispose);
 
     await container.read(pluginControllerProvider.future);
-    await container
-        .read(pluginControllerProvider.notifier)
-        .reorderPlugins(<String>['b', 'a']);
+    await container.read(pluginControllerProvider.notifier).reorderPlugins(
+      <String>['b', 'a'],
+    );
 
     expect(
       container.read(orderedPluginsProvider).map((e) => e.id).toList(),
@@ -167,13 +167,12 @@ class _FakePluginRepository implements PluginRepository {
   Future<PluginImportBatchResult> importPluginsFromPaths(
     List<String> paths, {
     PluginImportProgressCallback? onProgress,
-  }) async =>
-      const PluginImportBatchResult(
-        importedCount: 0,
-        updatedCount: 0,
-        skippedCount: 0,
-        errors: <AppError>[],
-      );
+  }) async => const PluginImportBatchResult(
+    importedCount: 0,
+    updatedCount: 0,
+    skippedCount: 0,
+    errors: <AppError>[],
+  );
 
   @override
   Future<Result<PluginDefinition>> importPluginFromUrl(String url) async =>
@@ -183,13 +182,12 @@ class _FakePluginRepository implements PluginRepository {
   Future<PluginImportBatchResult> importPluginBatchFromUrl(
     String url, {
     PluginImportProgressCallback? onProgress,
-  }) async =>
-      const PluginImportBatchResult(
-        importedCount: 0,
-        updatedCount: 0,
-        skippedCount: 0,
-        errors: <AppError>[],
-      );
+  }) async => const PluginImportBatchResult(
+    importedCount: 0,
+    updatedCount: 0,
+    skippedCount: 0,
+    errors: <AppError>[],
+  );
 
   @override
   Future<Result<void>> deletePlugin(String id) async => const Ok(null);
@@ -202,6 +200,5 @@ class _FakePluginRepository implements PluginRepository {
   Future<Result<PluginDefinition>> updateUserVariableValues(
     String id,
     Map<String, String> values,
-  ) async =>
-      Ok(plugins.first);
+  ) async => Ok(plugins.first);
 }

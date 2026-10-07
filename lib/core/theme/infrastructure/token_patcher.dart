@@ -55,11 +55,7 @@ class TokenPatcher {
   /// Only numbers are patchable here. Colour and gradient already have homes
   /// in `components`, and exposing structured paint recipes on a slider would
   /// let a knob smuggle arbitrary data into the renderer.
-  ThemeTokens _materials(
-    ThemeTokens tokens,
-    List<String> parts,
-    Object value,
-  ) {
+  ThemeTokens _materials(ThemeTokens tokens, List<String> parts, Object value) {
     if (parts.length < 3) {
       return tokens;
     }
@@ -87,7 +83,9 @@ class TokenPatcher {
       'radius' => current.copyWith(radius: number.clamp(0, 4096).toDouble()),
       _ => current,
     };
-    return tokens.copyWith(materials: _replaceSurface(tokens.materials, surface, updated));
+    return tokens.copyWith(
+      materials: _replaceSurface(tokens.materials, surface, updated),
+    );
   }
 
   static ThemeMaterials _replaceSurface(

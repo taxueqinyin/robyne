@@ -132,16 +132,16 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ),
               ),
               const SizedBox(width: 12),
-            SearchActionButton(
-              isSearching: state.isSearching,
-              onSearch: () => _search(plugins),
-              onCancel: () => ref
-                  .read(search_state.searchControllerProvider.notifier)
-                  .cancel(),
-            ),
-          ],
-        ),
-        if (state.error != null) ...<Widget>[
+              SearchActionButton(
+                isSearching: state.isSearching,
+                onSearch: () => _search(plugins),
+                onCancel: () => ref
+                    .read(search_state.searchControllerProvider.notifier)
+                    .cancel(),
+              ),
+            ],
+          ),
+          if (state.error != null) ...<Widget>[
             const SizedBox(height: 12),
             Text(
               '${state.error!.code}: ${state.error!.message}',

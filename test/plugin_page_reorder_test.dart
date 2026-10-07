@@ -25,9 +25,7 @@ void main() {
         _plugin(id: 'b', platform: 'B', installedAt: 200),
       ],
     );
-    await tester.pumpWidget(
-      _host(repository: repository),
-    );
+    await tester.pumpWidget(_host(repository: repository));
     await tester.pumpAndSettle();
 
     // The bundled skin names the manual order; the neutral default does not.
@@ -43,7 +41,9 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('dragging a row reorders the list and persists it', (tester) async {
+  testWidgets('dragging a row reorders the list and persists it', (
+    tester,
+  ) async {
     final repository = _FakePluginRepository(
       plugins: <PluginDefinition>[
         _plugin(id: 'a', platform: 'Alpha', installedAt: 100),
@@ -112,10 +112,7 @@ void main() {
 List<String> _rowOrder(WidgetTester tester) {
   return tester
       .widgetList<Text>(
-        find.descendant(
-          of: find.byType(ListTile),
-          matching: find.byType(Text),
-        ),
+        find.descendant(of: find.byType(ListTile), matching: find.byType(Text)),
       )
       .map((text) => text.data ?? '')
       .where((value) => <String>['Alpha', 'Beta', 'Gamma'].contains(value))
@@ -194,13 +191,12 @@ class _FakePluginRepository implements PluginRepository {
   Future<PluginImportBatchResult> importPluginsFromPaths(
     List<String> paths, {
     PluginImportProgressCallback? onProgress,
-  }) async =>
-      const PluginImportBatchResult(
-        importedCount: 0,
-        updatedCount: 0,
-        skippedCount: 0,
-        errors: <AppError>[],
-      );
+  }) async => const PluginImportBatchResult(
+    importedCount: 0,
+    updatedCount: 0,
+    skippedCount: 0,
+    errors: <AppError>[],
+  );
 
   @override
   Future<Result<PluginDefinition>> importPluginFromUrl(String url) async =>
@@ -210,13 +206,12 @@ class _FakePluginRepository implements PluginRepository {
   Future<PluginImportBatchResult> importPluginBatchFromUrl(
     String url, {
     PluginImportProgressCallback? onProgress,
-  }) async =>
-      const PluginImportBatchResult(
-        importedCount: 0,
-        updatedCount: 0,
-        skippedCount: 0,
-        errors: <AppError>[],
-      );
+  }) async => const PluginImportBatchResult(
+    importedCount: 0,
+    updatedCount: 0,
+    skippedCount: 0,
+    errors: <AppError>[],
+  );
 
   @override
   Future<Result<void>> deletePlugin(String id) async => const Ok(null);
@@ -229,6 +224,5 @@ class _FakePluginRepository implements PluginRepository {
   Future<Result<PluginDefinition>> updateUserVariableValues(
     String id,
     Map<String, String> values,
-  ) async =>
-      Ok(plugins.first);
+  ) async => Ok(plugins.first);
 }

@@ -23,9 +23,7 @@ class SearchHistoryEntry {
     if (keyword.isEmpty) {
       return null;
     }
-    final searchedAt = DateTime.tryParse(
-      value['searchedAt']?.toString() ?? '',
-    );
+    final searchedAt = DateTime.tryParse(value['searchedAt']?.toString() ?? '');
     return SearchHistoryEntry(
       keyword: keyword,
       searchedAt: searchedAt ?? DateTime.fromMillisecondsSinceEpoch(0),

@@ -74,8 +74,7 @@ class ThemeBackdrop extends ConsumerWidget {
   }
 
   static bool _hasOverlay(ThemeBackground background) {
-    final hasFlat =
-        background.overlay != null && background.overlayOpacity > 0;
+    final hasFlat = background.overlay != null && background.overlayOpacity > 0;
     return hasFlat || !background.overlayGradient.isEmpty;
   }
 

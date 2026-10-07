@@ -175,10 +175,11 @@ void main() {
     }
 
     final installed = (await repository.listPlugins() as Ok).value;
-    expect(
-      installed.map((plugin) => plugin.platform).toList(),
-      <String>['Source 0', 'Source 1', 'Source 2'],
-    );
+    expect(installed.map((plugin) => plugin.platform).toList(), <String>[
+      'Source 0',
+      'Source 1',
+      'Source 2',
+    ]);
 
     final reordered = await repository.reorderPlugins(<String>[
       installed[2].id,
@@ -190,10 +191,11 @@ void main() {
     // Read back through the repository rather than trusting the returned list:
     // the ranking has to be in storage, not only in the caller's memory.
     final reloaded = (await repository.listPlugins() as Ok).value;
-    expect(
-      reloaded.map((plugin) => plugin.platform).toList(),
-      <String>['Source 2', 'Source 0', 'Source 1'],
-    );
+    expect(reloaded.map((plugin) => plugin.platform).toList(), <String>[
+      'Source 2',
+      'Source 0',
+      'Source 1',
+    ]);
   });
 
   test('allows same platform with different authors to coexist', () async {

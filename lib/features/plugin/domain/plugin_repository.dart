@@ -80,7 +80,9 @@ abstract interface class PluginRepository {
   /// Ids absent from [orderedIds] keep the rank they already hold, so moving
   /// one row cannot flatten an arrangement built up over several drags. The
   /// returned list is the new plugin list in the app's default order.
-  Future<Result<List<PluginDefinition>>> reorderPlugins(List<String> orderedIds);
+  Future<Result<List<PluginDefinition>>> reorderPlugins(
+    List<String> orderedIds,
+  );
 
   Future<Result<void>> deletePlugin(String id);
 }

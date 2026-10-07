@@ -78,6 +78,7 @@ class PluginDefinitionRows extends Table {
       text().withDefault(const Constant('[]'))();
   TextColumn get userVariableValuesJson =>
       text().withDefault(const Constant('{}'))();
+
   /// The user's manual order within the plugin page.
   ///
   /// Not a sort preference: dragging a row rewrites this column, which is why
@@ -174,12 +175,14 @@ class FavoriteCollections extends Table {
   TextColumn get collectionKey => text()();
   TextColumn get pluginId => text()();
   TextColumn get platform => text()();
+
   /// `OnlineCollectionKind.name`, so a ranking and a sheet never collide.
   TextColumn get kind => text()();
   TextColumn get collectionId => text()();
   TextColumn get title => text()();
   TextColumn get description => text().nullable()();
   TextColumn get artworkUrl => text().nullable()();
+
   /// The plugin payload, kept verbatim so the detail can be re-fetched.
   TextColumn get rawJson => text()();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
@@ -234,10 +237,7 @@ class AppDatabase extends _$AppDatabase {
       // the default, which means "install order" — a user's list is not
       // silently reshuffled by upgrading.
       if (from < 3) {
-        await m.addColumn(
-          pluginDefinitionRows,
-          pluginDefinitionRows.sortIndex,
-        );
+        await m.addColumn(pluginDefinitionRows, pluginDefinitionRows.sortIndex);
       }
     },
   );

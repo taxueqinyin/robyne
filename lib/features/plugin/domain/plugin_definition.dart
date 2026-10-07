@@ -24,6 +24,7 @@ class PluginDefinition {
   final bool enabled;
   final DateTime installedAt;
   final DateTime updatedAt;
+
   /// The user's manual row order; see `PluginDefinitionRows.sortIndex`.
   ///
   /// `0` means "never dragged", which sorts before every explicit placement

@@ -81,6 +81,10 @@ flutter test
 
 约 475 个用例，覆盖 UI、业务需求、皮肤解析和安全边界。
 
+## TODO
+- [ ] 头尾跳过一段时间功能
+- [ ] 导入其他平台歌单
+
 ## 状态
 
 能日常使用，但仍在开发中。有些社区插件因为用了未支持的 API 会跑不起来，详见 [docs/plugin_compatibility_matrix.md](./docs/plugin_compatibility_matrix.md)。

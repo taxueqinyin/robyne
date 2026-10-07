@@ -284,7 +284,10 @@ enum ThemeStringKey {
   searchHistoryEmpty('search.historyEmpty', 'No recent searches'),
   searchHistoryClearAll('search.historyClearAll', 'Clear all'),
   searchHistoryRemove('search.historyRemove', 'Remove'),
-  searchHistoryClearAllTitle('search.historyClearAllTitle', 'Clear search history'),
+  searchHistoryClearAllTitle(
+    'search.historyClearAllTitle',
+    'Clear search history',
+  ),
   searchHistoryClearAllMessage(
     'search.historyClearAllMessage',
     'Remove every remembered search keyword? This cannot be undone.',

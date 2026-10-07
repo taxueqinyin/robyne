@@ -30,27 +30,27 @@ void main() {
       });
       final slowPath = await _writePluginFile(tempDirectory, 'slow.js');
       final fastPath = await _writePluginFile(tempDirectory, 'fast.js');
-        final slowCompleter = Completer<void>();
-        final runner = _BlockingMethodRunner(slowCompleter);
-        final audio = _FakeAudioPlayerService();
+      final slowCompleter = Completer<void>();
+      final runner = _BlockingMethodRunner(slowCompleter);
+      final audio = _FakeAudioPlayerService();
 
-        final container = ProviderContainer(
-          overrides: [
-            pluginRepositoryProvider.overrideWithValue(
-              _FakePluginRepository(<PluginDefinition>[
-                _plugin('slow', 'Slow', slowPath),
-                _plugin('fast', 'Fast', fastPath),
-              ]),
-            ),
-            pluginMethodRunnerProvider.overrideWithValue(runner),
-            audioPlayerServiceProvider.overrideWithValue(audio),
-          ],
-        );
-        addTearDown(container.dispose);
+      final container = ProviderContainer(
+        overrides: [
+          pluginRepositoryProvider.overrideWithValue(
+            _FakePluginRepository(<PluginDefinition>[
+              _plugin('slow', 'Slow', slowPath),
+              _plugin('fast', 'Fast', fastPath),
+            ]),
+          ),
+          pluginMethodRunnerProvider.overrideWithValue(runner),
+          audioPlayerServiceProvider.overrideWithValue(audio),
+        ],
+      );
+      addTearDown(container.dispose);
 
-        final controller = container.read(playerControllerProvider.notifier);
-        final slowPlay = controller.playFromPlugin(_musicItem('Slow'));
-        await runner.waitForSlowCallStarted();
+      final controller = container.read(playerControllerProvider.notifier);
+      final slowPlay = controller.playFromPlugin(_musicItem('Slow'));
+      await runner.waitForSlowCallStarted();
 
       await controller.playFromPlugin(_musicItem('Fast'));
       expect(audio.playedUrls, <String>['https://example.com/Fast.mp3']);
@@ -1059,7 +1059,9 @@ class _BlockingMethodRunner implements PluginMethodRunner {
       await _slowCompleter.future;
       return Ok(<String, Object?>{'url': 'https://example.com/Slow.mp3'});
     }
-    return Ok(<String, Object?>{'url': 'https://example.com/${plugin.platform}.mp3'});
+    return Ok(<String, Object?>{
+      'url': 'https://example.com/${plugin.platform}.mp3',
+    });
   }
 }
 

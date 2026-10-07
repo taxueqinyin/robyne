@@ -171,15 +171,12 @@ class QuickJsIsolatePluginSearchExecutor implements PluginSearchExecutor {
     required String debugName,
     required Future<Map<String, Object?>> Function() body,
   }) {
-    return Isolate.run<Map<String, Object?>>(
-      body,
-      debugName: debugName,
-    ).timeout(
-      _isolateBudget,
-      onTimeout: () => _runFailedResponse,
-    ).then<Map<String, Object?>?>(
-      (response) => identical(response, _runFailedResponse) ? null : response,
-    );
+    return Isolate.run<Map<String, Object?>>(body, debugName: debugName)
+        .timeout(_isolateBudget, onTimeout: () => _runFailedResponse)
+        .then<Map<String, Object?>?>(
+          (response) =>
+              identical(response, _runFailedResponse) ? null : response,
+        );
   }
 
   /// Sentinel for "the isolate never answered", distinct from a real result.
@@ -438,7 +435,8 @@ class QuickJsIsolateMethodRunner implements PluginMethodRunner {
       return Failure(
         AppError(
           code: 'plugin.method_isolate_failed',
-          message: 'Plugin ${plugin.platform} $method failed off the UI thread.',
+          message:
+              'Plugin ${plugin.platform} $method failed off the UI thread.',
           cause: error,
           stackTrace: stackTrace,
         ),

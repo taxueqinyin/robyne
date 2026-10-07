@@ -257,10 +257,7 @@ void main() {
       }
       await Future<void>.delayed(Duration.zero);
     }
-    expect(
-      container.read(searchControllerProvider).value?.isSearching,
-      isTrue,
-    );
+    expect(container.read(searchControllerProvider).value?.isSearching, isTrue);
 
     holdFirstRun = false;
     notifier.updateKeyword('邓紫棋');

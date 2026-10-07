@@ -48,7 +48,8 @@ class SearchHistoryRepository {
     }
     final entries = <SearchHistoryEntry>[
       for (final value in decoded)
-        if (SearchHistoryEntry.fromJson(value) case final SearchHistoryEntry entry)
+        if (SearchHistoryEntry.fromJson(value)
+            case final SearchHistoryEntry entry)
           entry,
     ];
     return _normalize(entries);
@@ -92,13 +93,15 @@ class SearchHistoryRepository {
     final capped = entries.length <= maxEntries
         ? entries
         : entries.sublist(0, maxEntries);
-    await _database.into(_database.appSettings).insert(
-      db.AppSettingsCompanion(
-        key: Value(_key),
-        value: Value(jsonEncode(capped.map((e) => e.toJson()).toList())),
-      ),
-      mode: InsertMode.insertOrReplace,
-    );
+    await _database
+        .into(_database.appSettings)
+        .insert(
+          db.AppSettingsCompanion(
+            key: Value(_key),
+            value: Value(jsonEncode(capped.map((e) => e.toJson()).toList())),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
     return capped;
   }
 
@@ -112,9 +115,7 @@ class SearchHistoryRepository {
     ];
     unique.sort((left, right) {
       final recent = right.searchedAt.compareTo(left.searchedAt);
-      return recent != 0
-          ? recent
-          : left.keyword.compareTo(right.keyword);
+      return recent != 0 ? recent : left.keyword.compareTo(right.keyword);
     });
     return unique;
   }

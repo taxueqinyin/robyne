@@ -141,14 +141,8 @@ void main() {
   test('the capsule window is smaller than the shell minimum', () {
     // The shell's normal minimum is 400×360; the capsule deliberately goes
     // below it, which is why the minimum has to be relaxed on entry.
-    expect(
-      CapsuleWindow.windowWidth,
-      lessThan(400),
-    );
-    expect(
-      CapsuleWindow.windowHeight(playlistOpen: false),
-      lessThan(200),
-    );
+    expect(CapsuleWindow.windowWidth, lessThan(400));
+    expect(CapsuleWindow.windowHeight(playlistOpen: false), lessThan(200));
   });
 
   test('the playlist grows the window downward, not upward', () {
@@ -173,72 +167,73 @@ void main() {
     expect(content, lessThanOrEqualTo(CapsuleWindow.barWidth));
   });
 
-  testWidgets('the title bar enters capsule mode and close restores the shell', (
-    tester,
-  ) async {
-    final item = PlaybackItem.plugin(
-      platform: 'Test',
-      musicId: 'A',
-      title: 'Capsule Track',
-      raw: const <String, Object?>{'id': 'A'},
-    );
-    await _pumpShell(
-      tester,
-      overrides: <Object>[
-        playerControllerProvider.overrideWith(
-          () => _SeededPlayerController(
-            PlayerControllerState(
-              queue: <PlaybackItem>[item],
-              currentItem: item,
+  testWidgets(
+    'the title bar enters capsule mode and close restores the shell',
+    (tester) async {
+      final item = PlaybackItem.plugin(
+        platform: 'Test',
+        musicId: 'A',
+        title: 'Capsule Track',
+        raw: const <String, Object?>{'id': 'A'},
+      );
+      await _pumpShell(
+        tester,
+        overrides: <Object>[
+          playerControllerProvider.overrideWith(
+            () => _SeededPlayerController(
+              PlayerControllerState(
+                queue: <PlaybackItem>[item],
+                currentItem: item,
+              ),
             ),
           ),
-        ),
-      ],
-    );
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(RobyneShell)),
-    );
+        ],
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RobyneShell)),
+      );
 
-    expect(find.byKey(const Key('capsule-close')), findsNothing);
+      expect(find.byKey(const Key('capsule-close')), findsNothing);
 
-    // The frameless window's controls are hidden under FLUTTER_TEST, so the
-    // test drives the same state the button's callback writes.
-    container.read(capsuleModeProvider.notifier).enter();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      // The frameless window's controls are hidden under FLUTTER_TEST, so the
+      // test drives the same state the button's callback writes.
+      container.read(capsuleModeProvider.notifier).enter();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    expect(container.read(capsuleModeProvider), isTrue);
-    expect(find.byKey(const Key('shell-content')), findsNothing);
-    // At rest the capsule shows the song, not the transport controls.
-    expect(find.byKey(const Key('capsule-info')), findsOneWidget);
-    expect(find.byKey(const Key('capsule-controls')), findsNothing);
-    expect(find.byKey(const Key('capsule-drag-region')), findsOneWidget);
-    expect(find.byKey(const Key('capsule-artwork')), findsOneWidget);
-    // The cover overlaps the surface, so it needs its own drag layer —
-    // without it the cover was the one part of the bar you could not move
-    // the window by.
-    expect(find.byKey(const Key('capsule-artwork-drag')), findsOneWidget);
+      expect(container.read(capsuleModeProvider), isTrue);
+      expect(find.byKey(const Key('shell-content')), findsNothing);
+      // At rest the capsule shows the song, not the transport controls.
+      expect(find.byKey(const Key('capsule-info')), findsOneWidget);
+      expect(find.byKey(const Key('capsule-controls')), findsNothing);
+      expect(find.byKey(const Key('capsule-drag-region')), findsOneWidget);
+      expect(find.byKey(const Key('capsule-artwork')), findsOneWidget);
+      // The cover overlaps the surface, so it needs its own drag layer —
+      // without it the cover was the one part of the bar you could not move
+      // the window by.
+      expect(find.byKey(const Key('capsule-artwork-drag')), findsOneWidget);
 
-    // Hovering the bar swaps in the transport controls.
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: Offset.zero);
-    addTearDown(mouse.removePointer);
-    await mouse.moveTo(
-      tester.getCenter(find.byKey(const Key('capsule-drag-region'))),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byKey(const Key('capsule-controls')), findsOneWidget);
-    expect(find.byKey(const Key('capsule-info')), findsNothing);
+      // Hovering the bar swaps in the transport controls.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(
+        tester.getCenter(find.byKey(const Key('capsule-drag-region'))),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('capsule-controls')), findsOneWidget);
+      expect(find.byKey(const Key('capsule-info')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('capsule-close')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('capsule-close')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    expect(container.read(capsuleModeProvider), isFalse);
-    expect(find.byKey(const Key('shell-content')), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      expect(container.read(capsuleModeProvider), isFalse);
+      expect(find.byKey(const Key('shell-content')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('leaving the capsule twice lands the shell once', (tester) async {
     // The capsule can be left from several paths at once — its own close
@@ -332,7 +327,9 @@ void main() {
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
-    await mouse.moveTo(tester.getCenter(find.byKey(const Key('capsule-drag-region'))));
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(const Key('capsule-drag-region'))),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const Key('capsule-queue-toggle')));
@@ -354,73 +351,67 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'opening the playlist does not flash an overflow',
-    (tester) async {
-      // Regression: the OS resize trails the toggle, so for a frame or two
-      // the panel was laid out inside the *old* short window and the column
-      // overflowed — a visible flash of the striped warning on every open.
-      final errors = <String>[];
-      final original = FlutterError.onError;
-      FlutterError.onError =
-          (details) => errors.add(details.exceptionAsString());
-      addTearDown(() => FlutterError.onError = original);
+  testWidgets('opening the playlist does not flash an overflow', (
+    tester,
+  ) async {
+    // Regression: the OS resize trails the toggle, so for a frame or two
+    // the panel was laid out inside the *old* short window and the column
+    // overflowed — a visible flash of the striped warning on every open.
+    final errors = <String>[];
+    final original = FlutterError.onError;
+    FlutterError.onError = (details) => errors.add(details.exceptionAsString());
+    addTearDown(() => FlutterError.onError = original);
 
-      final item = PlaybackItem.plugin(
-        platform: 'Test',
-        musicId: 'A',
-        title: 'Capsule Track',
-        raw: const <String, Object?>{'id': 'A'},
-      );
-      // The real capsule window size, so the panel faces the same cramped
-      // constraints it does in the app.
-      tester.view.physicalSize =
-          Size(
-            CapsuleWindow.windowWidth,
-            CapsuleWindow.windowHeight(playlistOpen: false),
-          ) *
-          tester.view.devicePixelRatio;
-      addTearDown(tester.view.resetPhysicalSize);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: <Object>[
-            baseThemePackageProvider.overrideWithValue(xuanFixture()),
-            playerControllerProvider.overrideWith(
-              () => _SeededPlayerController(
-                PlayerControllerState(
-                  queue: <PlaybackItem>[item],
-                  currentItem: item,
-                ),
+    final item = PlaybackItem.plugin(
+      platform: 'Test',
+      musicId: 'A',
+      title: 'Capsule Track',
+      raw: const <String, Object?>{'id': 'A'},
+    );
+    // The real capsule window size, so the panel faces the same cramped
+    // constraints it does in the app.
+    tester.view.physicalSize =
+        Size(
+          CapsuleWindow.windowWidth,
+          CapsuleWindow.windowHeight(playlistOpen: false),
+        ) *
+        tester.view.devicePixelRatio;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Object>[
+          baseThemePackageProvider.overrideWithValue(xuanFixture()),
+          playerControllerProvider.overrideWith(
+            () => _SeededPlayerController(
+              PlayerControllerState(
+                queue: <PlaybackItem>[item],
+                currentItem: item,
               ),
             ),
-          ].cast(),
-          child: const MaterialApp(home: RobyneShell()),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+          ),
+        ].cast(),
+        child: const MaterialApp(home: RobyneShell()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(RobyneShell)),
-      );
-      container.read(capsuleModeProvider.notifier).enter();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      errors.clear();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(RobyneShell)),
+    );
+    container.read(capsuleModeProvider.notifier).enter();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    errors.clear();
 
-      container.read(capsuleQueueOpenProvider.notifier).toggle();
-      // Step the resize transient frame by frame.
-      for (var i = 0; i < 30; i++) {
-        await tester.pump(const Duration(milliseconds: 16));
-      }
+    container.read(capsuleQueueOpenProvider.notifier).toggle();
+    // Step the resize transient frame by frame.
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
 
-      expect(
-        errors,
-        isEmpty,
-        reason: 'opening the playlist must not overflow',
-      );
-    },
-  );
+    expect(errors, isEmpty, reason: 'opening the playlist must not overflow');
+  });
 }
 
 Future<void> _pumpShell(

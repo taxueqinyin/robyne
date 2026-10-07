@@ -2658,123 +2658,131 @@ class _QueuePanelState extends ConsumerState<_QueuePanel> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 18, 10, 10),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            strings.resolve(ThemeStringKey.queueTitle),
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: colors.textPrimary,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 10, 10),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              strings.resolve(ThemeStringKey.queueTitle),
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: colors.textPrimary,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            strings
-                                .resolve(ThemeStringKey.queueCount)
-                                .replaceAll('{count}', '${state.queue.length}'),
+                            const SizedBox(height: 2),
+                            Text(
+                              strings
+                                  .resolve(ThemeStringKey.queueCount)
+                                  .replaceAll(
+                                    '{count}',
+                                    '${state.queue.length}',
+                                  ),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: colors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        key: const Key('player-queue-close'),
+                        tooltip: strings.resolve(ThemeStringKey.queueCollapse),
+                        icon: const Icon(Icons.close, size: 18),
+                        color: colors.textMuted,
+                        onPressed: () => ref
+                            .read(queuePanelVisibleProvider.notifier)
+                            .setVisible(false),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: <Widget>[
+                      _QueueTab(
+                        label: strings.resolve(ThemeStringKey.queueTabQueue),
+                        selected: !_showLiked,
+                        onTap: () => setState(() => _showLiked = false),
+                      ),
+                      const SizedBox(width: 6),
+                      _QueueTab(
+                        label: strings.resolve(ThemeStringKey.queueTabLiked),
+                        selected: _showLiked,
+                        onTap: () => setState(() => _showLiked = true),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: items.isEmpty
+                      ? Center(
+                          child: Text(
+                            _showLiked
+                                ? strings.resolve(
+                                    ThemeStringKey.queueLikedEmpty,
+                                  )
+                                : strings.resolve(ThemeStringKey.queueEmpty),
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 12,
                               color: colors.textMuted,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      key: const Key('player-queue-close'),
-                      tooltip: strings.resolve(ThemeStringKey.queueCollapse),
-                      icon: const Icon(Icons.close, size: 18),
-                      color: colors.textMuted,
-                      onPressed: () => ref
-                          .read(queuePanelVisibleProvider.notifier)
-                          .setVisible(false),
-                    ),
-                  ],
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          itemCount: items.length,
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            final active = item.id == current?.id;
+                            return _QueueRow(
+                              item: item,
+                              active: active,
+                              onTap: () => ref
+                                  .read(playerControllerProvider.notifier)
+                                  .playItem(item),
+                            );
+                          },
+                        ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Row(
-                  children: <Widget>[
-                    _QueueTab(
-                      label: strings.resolve(ThemeStringKey.queueTabQueue),
-                      selected: !_showLiked,
-                      onTap: () => setState(() => _showLiked = false),
+                Divider(height: 1, color: colors.borderSubtle),
+                InkWell(
+                  onTap: state.queue.isEmpty
+                      ? null
+                      : () => ref
+                            .read(playerControllerProvider.notifier)
+                            .clearQueue(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 12,
                     ),
-                    const SizedBox(width: 6),
-                    _QueueTab(
-                      label: strings.resolve(ThemeStringKey.queueTabLiked),
-                      selected: _showLiked,
-                      onTap: () => setState(() => _showLiked = true),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: items.isEmpty
-                    ? Center(
-                        child: Text(
-                          _showLiked
-                              ? strings.resolve(ThemeStringKey.queueLikedEmpty)
-                              : strings.resolve(ThemeStringKey.queueEmpty),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.delete_sweep_outlined,
+                          size: 16,
+                          color: colors.textMuted,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          strings.resolve(ThemeStringKey.queueClear),
                           style: TextStyle(
                             fontSize: 12,
                             color: colors.textMuted,
                           ),
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        itemCount: items.length,
-                        itemBuilder: (context, index) {
-                          final item = items[index];
-                          final active = item.id == current?.id;
-                          return _QueueRow(
-                            item: item,
-                            active: active,
-                            onTap: () => ref
-                                .read(playerControllerProvider.notifier)
-                                .playItem(item),
-                          );
-                        },
-                      ),
-              ),
-              Divider(height: 1, color: colors.borderSubtle),
-              InkWell(
-                onTap: state.queue.isEmpty
-                    ? null
-                    : () => ref
-                          .read(playerControllerProvider.notifier)
-                          .clearQueue(),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: <Widget>[
-                      Icon(
-                        Icons.delete_sweep_outlined,
-                        size: 16,
-                        color: colors.textMuted,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        strings.resolve(ThemeStringKey.queueClear),
-                        style: TextStyle(fontSize: 12, color: colors.textMuted),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
               ],
             ),
           ),

@@ -71,15 +71,17 @@ void main() {
     expect(panelRect.width, closeTo(360, 1));
     // And it hangs under the field, which is where a suggestion list belongs.
     final fieldRect =
-        tester.renderObject<RenderBox>(
-          find.byType(TextField).first,
-        ).localToGlobal(Offset.zero) &
+        tester
+            .renderObject<RenderBox>(find.byType(TextField).first)
+            .localToGlobal(Offset.zero) &
         tester.renderObject<RenderBox>(find.byType(TextField).first).size;
     expect(panelRect.left, closeTo(fieldRect.left, 1));
     expect(panelRect.top, greaterThanOrEqualTo(fieldRect.bottom - 1));
   });
 
-  testWidgets('the panel follows the field on a phone-width window', (tester) async {
+  testWidgets('the panel follows the field on a phone-width window', (
+    tester,
+  ) async {
     // 400dp: the compact inset applies, and the field is only 200dp wide
     // because it shares the row with a `Spacer`.
     tester.view.physicalSize = const Size(400, 800) * 3;
@@ -131,8 +133,7 @@ void main() {
       find.byType(TextField).first,
     );
     final panelRect = panelBox.localToGlobal(Offset.zero) & panelBox.size;
-    final fieldRect =
-        fieldBox.localToGlobal(Offset.zero) & fieldBox.size;
+    final fieldRect = fieldBox.localToGlobal(Offset.zero) & fieldBox.size;
 
     // Sized to the field, inset by the compact gutter, and below it.
     expect(panelRect.width, closeTo(fieldRect.width, 1));
@@ -140,7 +141,9 @@ void main() {
     expect(panelRect.top, greaterThanOrEqualTo(fieldRect.bottom - 1));
   });
 
-  testWidgets('a press on the page below the panel is outside it', (tester) async {
+  testWidgets('a press on the page below the panel is outside it', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1280, 900) * 3;
     addTearDown(tester.view.resetPhysicalSize);
 

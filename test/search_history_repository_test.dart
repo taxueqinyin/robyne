@@ -23,21 +23,21 @@ void main() {
     expect(afterFirst.map((e) => e.keyword), <String>['moonhalo']);
 
     final afterSecond = await repository.remember('jay chou');
-    expect(
-      afterSecond.map((e) => e.keyword),
-      <String>['jay chou', 'moonhalo'],
-    );
+    expect(afterSecond.map((e) => e.keyword), <String>['jay chou', 'moonhalo']);
   });
 
-  test('re-searching a keyword moves it to the top without duplicating', () async {
-    await repository.remember('moonhalo');
-    await repository.remember('jay chou');
+  test(
+    're-searching a keyword moves it to the top without duplicating',
+    () async {
+      await repository.remember('moonhalo');
+      await repository.remember('jay chou');
 
-    final result = await repository.remember('moonhalo');
+      final result = await repository.remember('moonhalo');
 
-    expect(result.length, 2);
-    expect(result.first.keyword, 'moonhalo');
-  });
+      expect(result.length, 2);
+      expect(result.first.keyword, 'moonhalo');
+    },
+  );
 
   test('blank keywords are ignored', () async {
     final result = await repository.remember('   ');
@@ -70,7 +70,10 @@ void main() {
     final result = await repository.load();
     expect(result.length, SearchHistoryRepository.maxEntries);
     // The newest survives; the oldest is dropped.
-    expect(result.first.keyword, 'keyword-${SearchHistoryRepository.maxEntries + 4}');
+    expect(
+      result.first.keyword,
+      'keyword-${SearchHistoryRepository.maxEntries + 4}',
+    );
   });
 
   test('history round-trips through a fresh repository instance', () async {
@@ -86,7 +89,10 @@ void main() {
     await database
         .into(database.appSettings)
         .insert(
-          AppSettingsCompanion(key: const Value('search.history'), value: const Value('{not json')),
+          AppSettingsCompanion(
+            key: const Value('search.history'),
+            value: const Value('{not json'),
+          ),
         );
 
     expect(await repository.load(), isEmpty);
@@ -101,7 +107,10 @@ void main() {
       entry.searchedAt.isBefore(before.add(const Duration(seconds: 5))),
       isTrue,
     );
-    expect(entry.searchedAt.isAfter(before.subtract(const Duration(seconds: 5))), isTrue);
+    expect(
+      entry.searchedAt.isAfter(before.subtract(const Duration(seconds: 5))),
+      isTrue,
+    );
   });
 
   test('entry equality is by keyword and time', () {

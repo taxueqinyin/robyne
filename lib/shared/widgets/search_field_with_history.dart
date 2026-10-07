@@ -79,15 +79,19 @@ class _SearchFieldWithHistoryState
 
   /// The field's measured width, used to size the dropdown.
   double _fieldWidth = 0;
+
   /// Keyed on the inner field, so its own box can be measured.
   final GlobalKey _fieldKey = GlobalKey();
+
   /// Keyed on the panel body, so a press inside it is not read as "outside".
   ///
   /// Resolved by lookup rather than held as a `GlobalKey`, because the panel is
   /// rebuilt on every refresh and a key passed down would be recreated with it.
   static const Key _panelKey = Key('search-history-panel');
+
   /// Whether the outside-dismiss pointer route is currently registered.
   bool _pointerRouteAdded = false;
+
   /// Whether the press currently in flight landed on the field or the panel.
   ///
   /// Read when the field reports a blur: a press inside the panel takes focus
@@ -301,7 +305,8 @@ class _SearchFieldWithHistoryState
   /// Clears every remembered keyword, behind a confirmation.
   Future<void> _clearHistory(BuildContext context) async {
     final strings = ref.read(activeThemeStringsProvider);
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: Text(
@@ -370,7 +375,8 @@ class _SearchFieldWithHistoryState
     final tokens = RobyneTheme.of(context).tokens;
     final colors = tokens.color;
     final strings = ref.watch(activeThemeStringsProvider);
-    final radius = widget.borderRadius ??
+    final radius =
+        widget.borderRadius ??
         BorderRadius.all(Radius.circular(tokens.radius.full));
 
     final field = CompositedTransformTarget(
@@ -378,42 +384,42 @@ class _SearchFieldWithHistoryState
       child: SizedBox(
         key: _fieldKey,
         child: _KeyIntents(
-        onArrowDown: () => _moveSelection(1),
-        onArrowUp: () => _moveSelection(-1),
-        onEscape: _closeOverlay,
-        child: TextField(
-          controller: widget.controller,
-          focusNode: widget.focusNode,
-          style: widget.textStyle ?? TextStyle(color: colors.textPrimary),
-          decoration: InputDecoration(
-            isDense: widget.dense,
-            filled: true,
-            fillColor: widget.fillColor ?? colors.surfaceBase,
-            contentPadding: widget.contentPadding,
-            prefixIcon: widget.prefix,
-            hintText:
-                widget.hintText ?? strings.resolve(ThemeStringKey.searchHint),
-            hintStyle:
-                widget.hintStyle ??
-                TextStyle(fontSize: 13, color: colors.textMuted),
-            suffixIcon: widget.suffix,
-            suffixIconConstraints: widget.suffixConstraints,
-            border: OutlineInputBorder(
-              borderRadius: radius,
-              borderSide: BorderSide(color: colors.borderSubtle),
+          onArrowDown: () => _moveSelection(1),
+          onArrowUp: () => _moveSelection(-1),
+          onEscape: _closeOverlay,
+          child: TextField(
+            controller: widget.controller,
+            focusNode: widget.focusNode,
+            style: widget.textStyle ?? TextStyle(color: colors.textPrimary),
+            decoration: InputDecoration(
+              isDense: widget.dense,
+              filled: true,
+              fillColor: widget.fillColor ?? colors.surfaceBase,
+              contentPadding: widget.contentPadding,
+              prefixIcon: widget.prefix,
+              hintText:
+                  widget.hintText ?? strings.resolve(ThemeStringKey.searchHint),
+              hintStyle:
+                  widget.hintStyle ??
+                  TextStyle(fontSize: 13, color: colors.textMuted),
+              suffixIcon: widget.suffix,
+              suffixIconConstraints: widget.suffixConstraints,
+              border: OutlineInputBorder(
+                borderRadius: radius,
+                borderSide: BorderSide(color: colors.borderSubtle),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: radius,
+                borderSide: BorderSide(color: colors.borderSubtle),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: radius,
+                borderSide: BorderSide(color: colors.borderFocus, width: 2),
+              ),
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: radius,
-              borderSide: BorderSide(color: colors.borderSubtle),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: radius,
-              borderSide: BorderSide(color: colors.borderFocus, width: 2),
-            ),
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _submit(),
           ),
-          textInputAction: TextInputAction.search,
-          onSubmitted: (_) => _submit(),
-        ),
         ),
       ),
     );
@@ -478,7 +484,8 @@ class _SearchFieldWithHistoryState
       return;
     }
 
-    _pressInside = _contains(_fieldKey.currentContext, event.position) ||
+    _pressInside =
+        _contains(_fieldKey.currentContext, event.position) ||
         _contains(_panelContext(), event.position);
     if (_pressInside) {
       return;
@@ -503,6 +510,7 @@ class _SearchFieldWithHistoryState
       }
       element.visitChildren(visit);
     }
+
     overlay.context.visitChildElements(visit);
 
     return found;
@@ -631,8 +639,9 @@ class _HistoryPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final metrics = WindowSizeClass.of(context);
-    final horizontalInset =
-        metrics.width == WindowWidthClass.expanded ? 0.0 : 12.0;
+    final horizontalInset = metrics.width == WindowWidthClass.expanded
+        ? 0.0
+        : 12.0;
     // `CompositedTransformFollower` is a `RenderProxyBox`: it lays its child out
     // with the constraints it was handed and reports no box of its own. The
     // root overlay hands the theater's children

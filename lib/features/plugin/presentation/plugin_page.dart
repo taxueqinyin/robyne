@@ -220,9 +220,9 @@ class _PluginList extends ConsumerWidget {
                       ref
                           .read(pluginControllerProvider.notifier)
                           .reorderPlugins(
-                            next.map((plugin) => plugin.id).toList(
-                              growable: false,
-                            ),
+                            next
+                                .map((plugin) => plugin.id)
+                                .toList(growable: false),
                           ),
                     );
                   }
@@ -288,13 +288,10 @@ class _PluginRow extends ConsumerWidget {
         title: Text(plugin.platform),
         subtitle: Text(
           <String?>[
-                plugin.version,
-                plugin.author,
-                plugin.supportedSearchTypes.join(', '),
-              ]
-              .whereType<String>()
-              .where((value) => value.isNotEmpty)
-              .join(' - '),
+            plugin.version,
+            plugin.author,
+            plugin.supportedSearchTypes.join(', '),
+          ].whereType<String>().where((value) => value.isNotEmpty).join(' - '),
         ),
         trailing: Wrap(
           spacing: 8,
@@ -307,7 +304,10 @@ class _PluginRow extends ConsumerWidget {
                 ),
                 icon: const Icon(Icons.tune),
                 onPressed: () async {
-                  final values = await _showUserVariablesDialog(context, plugin);
+                  final values = await _showUserVariablesDialog(
+                    context,
+                    plugin,
+                  );
                   if (values == null || !context.mounted) {
                     return;
                   }

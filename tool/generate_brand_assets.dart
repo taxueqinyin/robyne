@@ -37,16 +37,12 @@ Future<void> main() async {
     );
   }
 
-  final iconResult = await Process.run(
-    'magick',
-    <String>[
-      sourcePath,
-      '-define',
-      'icon:auto-resize=256,128,64,48,32,16',
-      'windows/runner/resources/app_icon.ico',
-    ],
-    runInShell: true,
-  );
+  final iconResult = await Process.run('magick', <String>[
+    sourcePath,
+    '-define',
+    'icon:auto-resize=256,128,64,48,32,16',
+    'windows/runner/resources/app_icon.ico',
+  ], runInShell: true);
   if (iconResult.exitCode != 0) {
     stderr.writeln(iconResult.stderr);
     exitCode = iconResult.exitCode;

@@ -82,9 +82,9 @@ int _byManual(PluginDefinition left, PluginDefinition right) {
 }
 
 int _byName(PluginDefinition left, PluginDefinition right) {
-  final comparison = _collated(left.platform).compareTo(
-    _collated(right.platform),
-  );
+  final comparison = _collated(
+    left.platform,
+  ).compareTo(_collated(right.platform));
   return comparison != 0 ? comparison : left.id.compareTo(right.id);
 }
 

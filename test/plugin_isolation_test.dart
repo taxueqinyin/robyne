@@ -60,35 +60,37 @@ void main() {
     expect(source.contains('memoryLimit:'), isFalse);
   });
 
-  test('isolated method runner reports a plugin failure, not a crash', () async {
-    final runner = QuickJsIsolateMethodRunner(
-      vendorSourceLoader: () async => null,
-    );
-    final plugin = PluginDefinition(
-      id: 'p1',
-      platform: 'P1',
-      sourcePath: 'p1.js',
-      enabled: true,
-      installedAt: DateTime(2026),
-      updatedAt: DateTime(2026),
-    );
+  test(
+    'isolated method runner reports a plugin failure, not a crash',
+    () async {
+      final runner = QuickJsIsolateMethodRunner(
+        vendorSourceLoader: () async => null,
+      );
+      final plugin = PluginDefinition(
+        id: 'p1',
+        platform: 'P1',
+        sourcePath: 'p1.js',
+        enabled: true,
+        installedAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+      );
 
-    final result = await runner.call(
-      plugin: plugin,
-      source: 'module.exports = { platform: "P1" };',
-      method: 'getMediaSource',
-      arguments: const <Object?>[],
-    );
+      final result = await runner.call(
+        plugin: plugin,
+        source: 'module.exports = { platform: "P1" };',
+        method: 'getMediaSource',
+        arguments: const <Object?>[],
+      );
 
-    // A missing method must come back as a failure the UI can render.
-    expect(result.isFailure, isTrue);
-    result.fold<void>(
-      (_) => fail('expected a failure for a missing method'),
-      // The precise code matters: it is what the UI renders, and a generic
-      // isolate error would mean the failure was swallowed on the way out.
-      (error) => expect(error.code, 'plugin.method_not_found'),
-    );
-  },
+      // A missing method must come back as a failure the UI can render.
+      expect(result.isFailure, isTrue);
+      result.fold<void>(
+        (_) => fail('expected a failure for a missing method'),
+        // The precise code matters: it is what the UI renders, and a generic
+        // isolate error would mean the failure was swallowed on the way out.
+        (error) => expect(error.code, 'plugin.method_not_found'),
+      );
+    },
     skip: Platform.environment['RUN_PLUGIN_SPIKE'] != 'true',
     timeout: const Timeout(Duration(minutes: 2)),
   );

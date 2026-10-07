@@ -62,7 +62,9 @@ void main() {
     expect(find.text('jay chou'), findsOneWidget);
   });
 
-  testWidgets('typing filters the dropdown to matching entries', (tester) async {
+  testWidgets('typing filters the dropdown to matching entries', (
+    tester,
+  ) async {
     final container = ProviderContainer(
       overrides: [
         pluginRepositoryProvider.overrideWithValue(_EmptyPluginRepository()),
@@ -369,13 +371,12 @@ class _EmptyPluginRepository implements PluginRepository {
   Future<PluginImportBatchResult> importPluginsFromPaths(
     List<String> paths, {
     PluginImportProgressCallback? onProgress,
-  }) async =>
-      const PluginImportBatchResult(
-        importedCount: 0,
-        updatedCount: 0,
-        skippedCount: 0,
-        errors: <AppError>[],
-      );
+  }) async => const PluginImportBatchResult(
+    importedCount: 0,
+    updatedCount: 0,
+    skippedCount: 0,
+    errors: <AppError>[],
+  );
 
   @override
   Future<Result<PluginDefinition>> importPluginFromUrl(String url) async =>
@@ -385,13 +386,12 @@ class _EmptyPluginRepository implements PluginRepository {
   Future<PluginImportBatchResult> importPluginBatchFromUrl(
     String url, {
     PluginImportProgressCallback? onProgress,
-  }) async =>
-      const PluginImportBatchResult(
-        importedCount: 0,
-        updatedCount: 0,
-        skippedCount: 0,
-        errors: <AppError>[],
-      );
+  }) async => const PluginImportBatchResult(
+    importedCount: 0,
+    updatedCount: 0,
+    skippedCount: 0,
+    errors: <AppError>[],
+  );
 
   @override
   Future<Result<PluginDefinition>> setEnabled(String id, bool enabled) async =>
@@ -401,6 +401,5 @@ class _EmptyPluginRepository implements PluginRepository {
   Future<Result<PluginDefinition>> updateUserVariableValues(
     String id,
     Map<String, String> values,
-  ) async =>
-      const Failure(AppError(code: 'unused', message: 'unused'));
+  ) async => const Failure(AppError(code: 'unused', message: 'unused'));
 }

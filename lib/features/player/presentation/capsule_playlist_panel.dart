@@ -81,10 +81,7 @@ class CapsulePlaylistPanel extends ConsumerWidget {
                           Text(
                             strings
                                 .resolve(ThemeStringKey.queueCount)
-                                .replaceAll(
-                                  '{count}',
-                                  '${state.queue.length}',
-                                ),
+                                .replaceAll('{count}', '${state.queue.length}'),
                             style: TextStyle(
                               fontSize: 10.5,
                               color: colors.textMuted,

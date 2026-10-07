@@ -7,9 +7,27 @@ void main() {
   // rows the user never dragged, so a fixture where every row was installed
   // at the same instant exercises the name tiebreak instead of the real path.
   final plugins = <PluginDefinition>[
-    _plugin(id: 'a', platform: 'Zeta', enabled: false, updatedAt: 300, installedAt: 100),
-    _plugin(id: 'b', platform: 'alpha', enabled: true, updatedAt: 100, installedAt: 200),
-    _plugin(id: 'c', platform: 'Mu', enabled: true, updatedAt: 500, installedAt: 300),
+    _plugin(
+      id: 'a',
+      platform: 'Zeta',
+      enabled: false,
+      updatedAt: 300,
+      installedAt: 100,
+    ),
+    _plugin(
+      id: 'b',
+      platform: 'alpha',
+      enabled: true,
+      updatedAt: 100,
+      installedAt: 200,
+    ),
+    _plugin(
+      id: 'c',
+      platform: 'Mu',
+      enabled: true,
+      updatedAt: 500,
+      installedAt: 300,
+    ),
   ];
 
   test('added order leaves the repository order untouched', () {
@@ -78,9 +96,10 @@ void main() {
 
   test('recently updated order is newest first', () {
     expect(
-      sortPlugins(plugins, PluginSortOrder.recentlyUpdated)
-          .map((e) => e.id)
-          .toList(),
+      sortPlugins(
+        plugins,
+        PluginSortOrder.recentlyUpdated,
+      ).map((e) => e.id).toList(),
       <String>['c', 'a', 'b'],
     );
   });
@@ -91,21 +110,29 @@ void main() {
     expect(source.map((e) => e.id).toList(), <String>['a', 'b', 'c']);
   });
 
-  test('applyPluginOrder ranks the given ids 1..n and returns them in order', () {
-    final reordered = applyPluginOrder(plugins, <String>['c', 'b', 'a']);
-    expect(reordered.map((e) => e.id).toList(), <String>['c', 'b', 'a']);
-    expect(
-      <String, int>{
-        for (final plugin in reordered) plugin.id: plugin.sortIndex,
-      },
-      <String, int>{'c': 1, 'b': 2, 'a': 3},
-    );
-  });
+  test(
+    'applyPluginOrder ranks the given ids 1..n and returns them in order',
+    () {
+      final reordered = applyPluginOrder(plugins, <String>['c', 'b', 'a']);
+      expect(reordered.map((e) => e.id).toList(), <String>['c', 'b', 'a']);
+      expect(
+        <String, int>{
+          for (final plugin in reordered) plugin.id: plugin.sortIndex,
+        },
+        <String, int>{'c': 1, 'b': 2, 'a': 3},
+      );
+    },
+  );
 
   test('applyPluginOrder drops ids that are not installed', () {
     // A stale id (deleted plugin, or a reorder racing a delete) cannot invent
     // a rank, or the remaining rows would be renumbered around a ghost.
-    final reordered = applyPluginOrder(plugins, <String>['c', 'gone', 'a', 'b']);
+    final reordered = applyPluginOrder(plugins, <String>[
+      'c',
+      'gone',
+      'a',
+      'b',
+    ]);
     expect(reordered.map((e) => e.id).toList(), <String>['c', 'a', 'b']);
     expect(
       <String, int>{
@@ -120,10 +147,7 @@ void main() {
     // Only 'b' is named, so it takes rank 1 and the rest keep theirs — an
     // arrangement built over several drags is not flattened by the next one.
     final moved = applyPluginOrder(arranged, <String>['b']);
-    expect(
-      moved.firstWhere((e) => e.id == 'b').sortIndex,
-      1,
-    );
+    expect(moved.firstWhere((e) => e.id == 'b').sortIndex, 1);
     expect(
       moved.firstWhere((e) => e.id == 'a').sortIndex,
       arranged.firstWhere((e) => e.id == 'a').sortIndex,

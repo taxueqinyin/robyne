@@ -246,9 +246,7 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
                 child: ThemeAssetImage(
                   asset: assets.logo,
                   fallback: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: colors.brandBase,
-                    ),
+                    decoration: BoxDecoration(color: colors.brandBase),
                     child: Icon(
                       Icons.graphic_eq,
                       size: 15,
@@ -298,9 +296,7 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
                     child: ThemeAssetImage(
                       asset: assets.logo,
                       fallback: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: colors.brandBase,
-                        ),
+                        decoration: BoxDecoration(color: colors.brandBase),
                         child: Icon(
                           Icons.graphic_eq,
                           size: 18,
@@ -341,9 +337,7 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
     unawaited(
       ref
           .read(search_state.searchControllerProvider.notifier)
-          .search(
-            ref.read(orderedPluginsProvider),
-          ),
+          .search(ref.read(orderedPluginsProvider)),
     );
   }
 }
@@ -693,7 +687,9 @@ class _HeroBanner extends ConsumerWidget {
             ),
             radius: tokens.radius.lg,
           )
-        : heroMaterial.copyWith(radius: heroMaterial.radius ?? tokens.radius.lg);
+        : heroMaterial.copyWith(
+            radius: heroMaterial.radius ?? tokens.radius.lg,
+          );
     return Padding(
       padding: const EdgeInsets.fromLTRB(28, 20, 28, 0),
       child: Column(
@@ -801,9 +797,7 @@ class _HeroBanner extends ConsumerWidget {
               onPressed: onOpen,
               style: OutlinedButton.styleFrom(
                 foregroundColor: colors.onBrand,
-                side: BorderSide(
-                  color: colors.onBrand.withValues(alpha: 0.55),
-                ),
+                side: BorderSide(color: colors.onBrand.withValues(alpha: 0.55)),
                 minimumSize: const Size(0, 36),
                 padding: const EdgeInsets.symmetric(horizontal: 14),
               ),

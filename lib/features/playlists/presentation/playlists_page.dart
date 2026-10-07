@@ -428,52 +428,49 @@ class _PlaylistCard extends StatelessWidget {
       radius: tokens.radius.md,
       onTap: onTap,
       child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: <Widget>[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(tokens.radius.sm),
-                child: SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: coverUrl == null
-                      ? ColoredBox(
-                          color: colors.surfaceBase,
-                          child: Icon(
-                            Icons.queue_music,
-                            color: colors.textMuted,
-                          ),
-                        )
-                      : ArtworkView(artworkUrl: coverUrl),
-                ),
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: <Widget>[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(tokens.radius.sm),
+              child: SizedBox(
+                width: 56,
+                height: 56,
+                child: coverUrl == null
+                    ? ColoredBox(
+                        color: colors.surfaceBase,
+                        child: Icon(Icons.queue_music, color: colors.textMuted),
+                      )
+                    : ArtworkView(artworkUrl: coverUrl),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      playlist.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: tokens.typography.resolvedListPrimarySize,
-                        fontWeight: FontWeight.w600,
-                        color: colors.textPrimary,
-                      ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    playlist.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: tokens.typography.resolvedListPrimarySize,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${playlist.items.length} 首',
-                      style: TextStyle(fontSize: 11, color: colors.textMuted),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${playlist.items.length} 首',
+                    style: TextStyle(fontSize: 11, color: colors.textMuted),
+                  ),
+                ],
               ),
-              Icon(Icons.chevron_right, size: 18, color: colors.textMuted),
-            ],
-          ),
+            ),
+            Icon(Icons.chevron_right, size: 18, color: colors.textMuted),
+          ],
         ),
+      ),
     );
   }
 }
