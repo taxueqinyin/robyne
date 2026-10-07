@@ -65,6 +65,7 @@ import '../features/settings/domain/shortcut_action.dart';
 import '../features/settings/domain/shortcut_settings.dart';
 import '../features/settings/presentation/settings_page.dart';
 import '../shared/widgets/window_control_button.dart';
+import '../shared/widgets/search_field_with_history.dart';
 import 'desktop_tray_controller.dart';
 import 'navigation.dart';
 
@@ -1144,6 +1145,7 @@ class _TopBar extends ConsumerStatefulWidget {
 
 class _TopBarState extends ConsumerState<_TopBar> {
   late final TextEditingController _keyword;
+  late final FocusNode _keywordFocus;
 
   @override
   void initState() {
@@ -1152,11 +1154,13 @@ class _TopBarState extends ConsumerState<_TopBar> {
       text:
           ref.read(search_state.searchControllerProvider).value?.keyword ?? '',
     );
+    _keywordFocus = FocusNode();
     attachImeTextControllerTrace(_keyword, 'topbar.keyword');
   }
 
   @override
   void dispose() {
+    _keywordFocus.dispose();
     _keyword.dispose();
     super.dispose();
   }
@@ -1231,76 +1235,45 @@ class _TopBarState extends ConsumerState<_TopBar> {
                       constraints: BoxConstraints(
                         maxWidth: compactSearch ? 280 : 360,
                       ),
-                      child: TextField(
+                      // The remembered searches now live in a dropdown on the
+                      // field itself: the suggestion has to appear while the
+                      // user is typing, which a section further down the
+                      // results page never managed to do.
+                      child: SearchFieldWithHistory(
                         controller: _keyword,
-                        style: TextStyle(color: colors.textPrimary),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          filled: true,
-                          // The design's field is a translucent pill on the bar,
-                          // not an opaque card: it reads as chrome rather than as a
-                          // field floating over the page.
-                          fillColor: colors.textPrimary.withValues(
-                            alpha: 0.055,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          prefixIcon: IconButton(
-                            key: const Key('topbar-search-submit'),
-                            tooltip: ref
-                                .watch(activeThemeStringsProvider)
-                                .resolve(ThemeStringKey.searchAction),
-                            onPressed: () => _search(plugins),
-                            padding: EdgeInsets.zero,
-                            iconSize: 18,
-                            icon: ThemeIconView(
-                              slot: ThemeIconKey.search,
-                              fallback: Icons.search,
-                              size: 18,
-                              color: colors.textMuted,
-                            ),
-                          ),
-                          hintText: ref
+                        focusNode: _keywordFocus,
+                        onSubmit: (keyword) => _search(plugins),
+                        // The design's field is a translucent pill on the bar,
+                        // not an opaque card: it reads as chrome rather than as a
+                        // field floating over the page.
+                        fillColor: colors.textPrimary.withValues(alpha: 0.055),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        prefix: IconButton(
+                          key: const Key('topbar-search-submit'),
+                          tooltip: ref
                               .watch(activeThemeStringsProvider)
-                              .resolve(ThemeStringKey.searchHint),
-                          hintStyle: TextStyle(
-                            fontSize: 13,
+                              .resolve(ThemeStringKey.searchAction),
+                          onPressed: () => _search(plugins),
+                          padding: EdgeInsets.zero,
+                          iconSize: 18,
+                          icon: ThemeIconView(
+                            slot: ThemeIconKey.search,
+                            fallback: Icons.search,
+                            size: 18,
                             color: colors.textMuted,
                           ),
-                          suffixIcon: Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: _CtrlKHint(colors: colors, tokens: tokens),
-                          ),
-                          suffixIconConstraints: const BoxConstraints(
-                            minHeight: 0,
-                            minWidth: 0,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(
-                              Radius.circular(tokens.radius.full),
-                            ),
-                            borderSide: BorderSide(color: colors.borderSubtle),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(
-                              Radius.circular(tokens.radius.full),
-                            ),
-                            borderSide: BorderSide(color: colors.borderSubtle),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(
-                              Radius.circular(tokens.radius.full),
-                            ),
-                            borderSide: BorderSide(
-                              color: colors.borderFocus,
-                              width: 2,
-                            ),
-                          ),
                         ),
-                        textInputAction: TextInputAction.search,
-                        onSubmitted: (_) => _search(plugins),
+                        suffix: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: _CtrlKHint(colors: colors, tokens: tokens),
+                        ),
+                        suffixConstraints: const BoxConstraints(
+                          minHeight: 0,
+                          minWidth: 0,
+                        ),
                       ),
                     ),
                   ),

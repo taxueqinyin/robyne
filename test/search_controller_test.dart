@@ -210,6 +210,81 @@ void main() {
       expect(after.pluginResults.last.error?.code, 'search.cancelled');
     },
   );
+
+  test('searching again interrupts the search still in flight', () async {
+    // Enter runs the same search the button does, and a search in progress
+    // used to swallow it: the only way to look for something else was to stop
+    // the running one first.
+    final tempDirectory = await Directory.systemTemp.createTemp(
+      'robyne_search_supersede_test_',
+    );
+    addTearDown(() async {
+      await tempDirectory.delete(recursive: true);
+    });
+    final pluginAPath = await _writePluginFile(tempDirectory, 'plugin-a.js');
+    final pluginBPath = await _writePluginFile(tempDirectory, 'plugin-b.js');
+    final firstRunHold = Completer<void>();
+    final pluginBStarted = Completer<void>();
+    var holdFirstRun = true;
+    final executor = _FakePluginSearchExecutor(
+      beforeComplete: (plugin) async {
+        if (plugin.id == 'plugin-b' && holdFirstRun) {
+          if (!pluginBStarted.isCompleted) {
+            pluginBStarted.complete();
+          }
+          await firstRunHold.future;
+        }
+      },
+    );
+    final container = ProviderContainer(
+      overrides: [pluginSearchExecutorProvider.overrideWithValue(executor)],
+    );
+    addTearDown(container.dispose);
+
+    final plugins = <PluginDefinition>[
+      _plugin('plugin-a', 'Source A', pluginAPath),
+      _plugin('plugin-b', 'Source B', pluginBPath),
+    ];
+    final notifier = container.read(searchControllerProvider.notifier);
+    notifier.updateKeyword('周杰伦');
+    final firstSearch = notifier.search(plugins);
+
+    await pluginBStarted.future;
+    for (var attempt = 0; attempt < 20; attempt += 1) {
+      final mid = container.read(searchControllerProvider).value;
+      if (mid?.pluginResults.first.result != null) {
+        break;
+      }
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(
+      container.read(searchControllerProvider).value?.isSearching,
+      isTrue,
+    );
+
+    holdFirstRun = false;
+    notifier.updateKeyword('邓紫棋');
+    await notifier.search(plugins);
+
+    final after = container.read(searchControllerProvider).value!;
+    expect(after.isSearching, isFalse);
+    expect(after.keyword, '邓紫棋');
+    expect(
+      after.pluginResults.map((result) => result.result?.items.single.title),
+      <String>['Source A 邓紫棋 page 1', 'Source B 邓紫棋 page 1'],
+    );
+
+    // The superseded run is still wedged in its plugin call; letting it finish
+    // must not push its keyword back over the current results.
+    firstRunHold.complete();
+    await firstSearch;
+    final settled = container.read(searchControllerProvider).value!;
+    expect(settled.isSearching, isFalse);
+    expect(
+      settled.pluginResults.map((result) => result.result?.items.single.title),
+      <String>['Source A 邓紫棋 page 1', 'Source B 邓紫棋 page 1'],
+    );
+  });
 }
 
 Future<String> _writePluginFile(Directory directory, String name) async {

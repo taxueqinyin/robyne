@@ -20,8 +20,8 @@ import '../../player/presentation/artwork_view.dart';
 import '../../library/application/library_providers.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/domain/playback_item.dart';
+import '../../../../shared/widgets/search_field_with_history.dart';
 import '../../plugin/application/plugin_controller.dart';
-import '../../plugin/domain/plugin_definition.dart';
 import '../../playlists/application/playlist_providers.dart';
 import '../../playlists/infrastructure/playlist_repository.dart';
 import '../../search/application/search_controller.dart' as search_state;
@@ -46,8 +46,7 @@ class XuanHomePage extends ConsumerWidget {
         ? RobyneFormFactor.desktop
         : RobyneFormFactor.mobile;
     final blocks = home.resolve(formFactor);
-    final plugins =
-        ref.watch(pluginControllerProvider).value ?? const <PluginDefinition>[];
+    final plugins = ref.watch(orderedPluginsProvider);
     final discover = ref.watch(discoverControllerProvider);
     final library = ref.watch(localMusicLibraryProvider).value;
 
@@ -163,6 +162,7 @@ class _HomeHeader extends ConsumerStatefulWidget {
 
 class _HomeHeaderState extends ConsumerState<_HomeHeader> {
   late final TextEditingController _keyword;
+  late final FocusNode _keywordFocus;
 
   @override
   void initState() {
@@ -171,10 +171,12 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
       text:
           ref.read(search_state.searchControllerProvider).value?.keyword ?? '',
     );
+    _keywordFocus = FocusNode();
   }
 
   @override
   void dispose() {
+    _keywordFocus.dispose();
     _keyword.dispose();
     super.dispose();
   }
@@ -186,11 +188,10 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
     // data on the first visit instead of waiting for the user to find the
     // 插件榜单 entry — the TTL cache in [DiscoverController] makes the follow-up
     // browser open free.
-    final pluginsValue = ref.watch(pluginControllerProvider);
     final discoverState = ref.watch(discoverControllerProvider);
-    final enabledPlugins = (pluginsValue.value ?? const <PluginDefinition>[])
-        .where((plugin) => plugin.enabled)
-        .toList(growable: false);
+    // The user's own source order, so the home shelf starts from whichever
+    // plugin they put first rather than whichever was installed first.
+    final enabledPlugins = ref.watch(orderedEnabledPluginsProvider);
     final pluginSignature = discoverPluginSignature(enabledPlugins);
     if (discoverState.pluginSignature != pluginSignature) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -232,6 +233,7 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
               child: _HomeSearchField(
                 compact: true,
                 controller: _keyword,
+                focusNode: _keywordFocus,
                 onSubmit: _search,
               ),
             ),
@@ -316,7 +318,11 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
           ),
           if (isPhone) ...<Widget>[
             const SizedBox(height: 14),
-            _HomeSearchField(controller: _keyword, onSubmit: _search),
+            _HomeSearchField(
+              controller: _keyword,
+              focusNode: _keywordFocus,
+              onSubmit: _search,
+            ),
           ],
         ],
       ),
@@ -336,59 +342,52 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
       ref
           .read(search_state.searchControllerProvider.notifier)
           .search(
-            ref.read(pluginControllerProvider).value ??
-                const <PluginDefinition>[],
+            ref.read(orderedPluginsProvider),
           ),
     );
   }
 }
 
-class _HomeSearchField extends StatelessWidget {
+class _HomeSearchField extends ConsumerWidget {
   const _HomeSearchField({
     required this.controller,
+    required this.focusNode,
     required this.onSubmit,
     this.compact = false,
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final VoidCallback onSubmit;
 
   /// True inside the landscape strip, where the field shares a 44dp row.
   final bool compact;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(activeThemeStringsProvider);
     final tokens = RobyneTheme.of(context).tokens;
     final colors = tokens.color;
-    return TextField(
+    // The same dropdown the desktop top bar gets: the phone layout hides the
+    // top bar's field, so this one is the only search box on screen and it has
+    // to carry the remembered keywords too.
+    return SearchFieldWithHistory(
       controller: controller,
-      style: TextStyle(fontSize: 13, color: colors.textPrimary),
-      textInputAction: TextInputAction.search,
-      onSubmitted: (_) => onSubmit(),
-      decoration: InputDecoration(
-        isDense: true,
-        filled: true,
-        fillColor: colors.surfaceBase,
-        contentPadding: EdgeInsets.symmetric(vertical: compact ? 8 : 11),
-        prefixIcon: ThemeIconView(
+      focusNode: focusNode,
+      onSubmit: (_) => onSubmit(),
+      textStyle: TextStyle(fontSize: 13, color: colors.textPrimary),
+      fillColor: colors.surfaceBase,
+      borderRadius: BorderRadius.all(Radius.circular(tokens.radius.md)),
+      contentPadding: EdgeInsets.symmetric(vertical: compact ? 8 : 11),
+      hintText: strings.resolve(ThemeStringKey.searchHint),
+      hintStyle: TextStyle(fontSize: 12.5, color: colors.textMuted),
+      prefix: Padding(
+        padding: const EdgeInsets.only(left: 12, right: 8),
+        child: ThemeIconView(
           slot: ThemeIconKey.search,
           fallback: Icons.search,
           size: compact ? 16 : 18,
           color: colors.textMuted,
-        ),
-        hintText: '搜索歌曲、歌手、专辑',
-        hintStyle: TextStyle(fontSize: 12.5, color: colors.textMuted),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(tokens.radius.md)),
-          borderSide: BorderSide(color: colors.borderSubtle),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(tokens.radius.md)),
-          borderSide: BorderSide(color: colors.borderSubtle),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(tokens.radius.md)),
-          borderSide: BorderSide(color: colors.borderFocus, width: 2),
         ),
       ),
     );

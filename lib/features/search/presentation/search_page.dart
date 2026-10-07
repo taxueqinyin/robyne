@@ -9,6 +9,7 @@ import '../../../core/theme/application/theme_providers.dart';
 import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
 import '../../../shared/widgets/search_action_button.dart';
+import '../../../shared/widgets/horizontal_wheel_scroll.dart';
 import '../../downloads/application/download_providers.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/domain/playback_item.dart';
@@ -46,9 +47,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pluginsValue = ref.watch(pluginControllerProvider);
     final searchValue = ref.watch(search_state.searchControllerProvider);
-    final plugins = pluginsValue.value ?? const <PluginDefinition>[];
+    // Searched in the order the plugin page arranged, so the first result tab
+    // and the first source searched are the ones the user put first.
+    final plugins = ref.watch(orderedPluginsProvider);
     final state = searchValue.value ?? const search_state.SearchState();
     final strings = ref.watch(activeThemeStringsProvider);
     final tokens = RobyneTheme.of(context).tokens;
@@ -130,16 +132,16 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              SearchActionButton(
-                isSearching: state.isSearching,
-                onSearch: () => _search(plugins),
-                onCancel: () => ref
-                    .read(search_state.searchControllerProvider.notifier)
-                    .cancel(),
-              ),
-            ],
-          ),
-          if (state.error != null) ...<Widget>[
+            SearchActionButton(
+              isSearching: state.isSearching,
+              onSearch: () => _search(plugins),
+              onCancel: () => ref
+                  .read(search_state.searchControllerProvider.notifier)
+                  .cancel(),
+            ),
+          ],
+        ),
+        if (state.error != null) ...<Widget>[
             const SizedBox(height: 12),
             Text(
               '${state.error!.code}: ${state.error!.message}',
@@ -194,48 +196,82 @@ class _PluginTabs extends ConsumerWidget {
   final search_state.SearchState state;
   final void Function(String pluginId) onSelected;
 
+  /// Result tabs in the plugin page's order, not in completion order.
+  ///
+  /// Searches finish whenever each plugin answers, so a fast-but-unimportant
+  /// plugin would otherwise jump to the front of the strip mid-search. The
+  /// user's own arrangement is the stable answer, and it is the same order the
+  /// discover source row uses.
+  List<search_state.PluginSearchState> _orderedResults(WidgetRef ref) {
+    final results = state.pluginResults;
+    final rank = <String, int>{
+      for (var index = 0; index < results.length; index += 1)
+        results[index].pluginId: index,
+    };
+    final ordered = ref
+        .watch(orderedPluginsProvider)
+        .map((plugin) => rank[plugin.id])
+        .whereType<int>()
+        .map((index) => results[index])
+        .toList(growable: false);
+    // A result whose plugin has since been removed still belongs on screen:
+    // the user asked for it, and dropping it would hide its error.
+    final seen = <String>{for (final result in ordered) result.pluginId};
+    return <search_state.PluginSearchState>[
+      ...ordered,
+      ...results.where((result) => !seen.contains(result.pluginId)),
+    ];
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = ref.watch(activeThemeStringsProvider);
+    final results = _orderedResults(ref);
     return SizedBox(
       height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: state.pluginResults.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final result = state.pluginResults[index];
-          final selected =
-              result.pluginId ==
-              (state.selectedPluginId ?? state.pluginResults.first.pluginId);
-          final loading = result.isSearching || result.isLoadingMore;
-          final label = loading
-              ? strings
-                    .resolve(ThemeStringKey.searchResultLoadingSuffix)
-                    .replaceAll('{platform}', result.platform)
-              : result.error != null
-              ? strings
-                    .resolve(ThemeStringKey.searchResultErrorSuffix)
-                    .replaceAll('{platform}', result.platform)
-              : '${result.platform} ${result.resultCount}';
-          return _SourcePill(
-            label: label,
-            selected: selected,
-            trailing: loading
-                ? const SizedBox.square(
-                    dimension: 13,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+      // With many plugins the strip overflows, and a bare wheel reported
+      // nothing until the user discovered shift+wheel — which is why the
+      // row looked truncated rather than scrollable.
+      child: HorizontalWheelScroll(
+        builder: (context, controller) => ListView.separated(
+          controller: controller,
+          scrollDirection: Axis.horizontal,
+          itemCount: results.length,
+          separatorBuilder: (context, index) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final result = results[index];
+            final selected =
+                result.pluginId ==
+                (state.selectedPluginId ?? results.first.pluginId);
+            final loading = result.isSearching || result.isLoadingMore;
+            final label = loading
+                ? strings
+                      .resolve(ThemeStringKey.searchResultLoadingSuffix)
+                      .replaceAll('{platform}', result.platform)
                 : result.error != null
-                ? Icon(
-                    Icons.error_outline,
-                    size: 15,
-                    color: RobyneTheme.of(context).tokens.color.danger,
-                  )
-                : null,
-            onTap: () => onSelected(result.pluginId),
-          );
-        },
+                ? strings
+                      .resolve(ThemeStringKey.searchResultErrorSuffix)
+                      .replaceAll('{platform}', result.platform)
+                : '${result.platform} ${result.resultCount}';
+            return _SourcePill(
+              label: label,
+              selected: selected,
+              trailing: loading
+                  ? const SizedBox.square(
+                      dimension: 13,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : result.error != null
+                  ? Icon(
+                      Icons.error_outline,
+                      size: 15,
+                      color: RobyneTheme.of(context).tokens.color.danger,
+                    )
+                  : null,
+              onTap: () => onSelected(result.pluginId),
+            );
+          },
+        ),
       ),
     );
   }

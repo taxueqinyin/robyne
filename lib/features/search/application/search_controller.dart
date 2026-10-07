@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import '../../plugin/application/plugin_providers.dart';
 import '../../plugin/domain/plugin_definition.dart';
 import '../domain/music_item.dart';
 import '../domain/search_result.dart';
+import 'search_history_controller.dart';
 
 final searchControllerProvider =
     AsyncNotifierProvider<SearchController, SearchState>(SearchController.new);
@@ -152,10 +154,6 @@ class SearchController extends AsyncNotifier<SearchState> {
 
   Future<void> search(List<PluginDefinition> plugins) async {
     final current = state.value ?? const SearchState();
-    if (current.isSearching) {
-      return;
-    }
-
     final keyword = current.keyword.trim();
     if (keyword.isEmpty) {
       state = AsyncData(
@@ -182,8 +180,23 @@ class SearchController extends AsyncNotifier<SearchState> {
       return;
     }
 
+    if (current.isSearching) {
+      // Searching again while sources are still answering has to start over,
+      // not wait: Enter and the search button both run this, and a search in
+      // progress used to swallow them silently — the only way to look for
+      // something else was to stop the running one first. The generation bump
+      // is the interrupt: the old run's workers stop handing out plugins and
+      // stop writing results back, wherever they are.
+      _searchGeneration += 1;
+    }
+
     final generation = _searchGeneration + 1;
     _searchGeneration = generation;
+    // Remembered once the search is actually under way, so a keyword that
+    // never ran (empty, no plugins) never enters the history.
+    unawaited(
+      ref.read(searchHistoryControllerProvider.notifier).remember(keyword),
+    );
     final selectedPluginId =
         enabledPlugins.any((plugin) => plugin.id == current.selectedPluginId)
         ? current.selectedPluginId
