@@ -43,7 +43,7 @@ dependencies:
   # library itself is resolved per-platform by the hooks below.
   sqlite3: ^3.3.2
   path_provider: ^2.1.5
-  quickjs_engine: ^0.1.1
+  quickjs_engine: ^0.1.6
   shared_preferences: ^2.5.5
   file_picker: ^11.0.2
   drift: ^2.33.0
