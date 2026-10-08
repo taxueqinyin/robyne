@@ -110,30 +110,18 @@ So macOS ships no release artifact. If you have a Mac, please try it and
 open an issue describing what works and what does not; that is the first
 step toward making macOS a supported platform.
 
-Distributing on macOS properly also needs a paid Apple Developer Program
+Supporting it properly also needs a paid Apple Developer Program
 membership for signing and notarization — otherwise Gatekeeper blocks the
-app on first open. That is not set up either.
+app on first open. See [docs/RELEASING.md](./docs/RELEASING.md).
 
 ### Android signing
 
-Releases are signed with a self-generated upload key. Android signing needs
-no application to any platform and costs nothing — generate a key yourself:
+Releases are signed by CI with the project's own key, so the APK installs
+as-is.
 
-```bash
-keytool -genkeypair -v -keystore robyne.jks -storetype PKCS12 \
-  -keyalg RSA -keysize 2048 -validity 10000 -alias robyne
-```
-
-**Losing this key means never being able to ship an update again.** Android
-only lets an APK replace an installed one when both carry the same
-signature; lose the key and every existing user has to uninstall, losing
-their local data. Keep an offline backup and never commit it (`.gitignore`
-excludes `*.jks`).
-
-CI reads the key from repository secrets; see
-`.github/workflows/release.yml`. Without them the build falls back to the
-debug key and warns loudly — the APK installs, but it is not a
-distributable release.
+If you fork this and cut your own release, CI has no key to use and falls
+back to the debug key with a loud warning — that APK installs, but is not
+meant for distribution. See [docs/RELEASING.md](./docs/RELEASING.md).
 
 ## Status
 
