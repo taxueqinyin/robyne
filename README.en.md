@@ -86,6 +86,7 @@ Around 550 cases covering UI, business rules, skin parsing, and security boundar
 ```bash
 flutter build windows --release   # build/windows/x64/runner/Release/
 flutter build apk --release       # build/app/outputs/flutter-apk/app-release.apk
+flutter build macos --release     # build/macos/Build/Products/Release/
 ```
 
 The Windows output is a directory (exe + DLLs + `data/`) and only runs as a
@@ -98,13 +99,41 @@ Releases:
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
+### macOS is untested
+
+The repository has a `macos/` platform folder and CI compiles it on every
+push, but **nobody has actually run Robyne on a Mac**. A successful build
+only proves the platform folders and dependencies line up — not that
+playback, the tray, or plugins work.
+
+So macOS ships no release artifact. If you have a Mac, please try it and
+open an issue describing what works and what does not; that is the first
+step toward making macOS a supported platform.
+
+Distributing on macOS properly also needs a paid Apple Developer Program
+membership for signing and notarization — otherwise Gatekeeper blocks the
+app on first open. That is not set up either.
+
 ### Android signing
 
-Without a keystore the APK is signed with the debug key — installable, but
-not a distributable release. To sign properly, set the repo variable
-`SIGN_ANDROID=true` and these secrets: `ANDROID_KEYSTORE_BASE64`
-(`base64 -i keystore.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
-`ANDROID_KEY_PASSWORD`. Never commit the keystore itself.
+Releases are signed with a self-generated upload key. Android signing needs
+no application to any platform and costs nothing — generate a key yourself:
+
+```bash
+keytool -genkeypair -v -keystore robyne.jks -storetype PKCS12 \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias robyne
+```
+
+**Losing this key means never being able to ship an update again.** Android
+only lets an APK replace an installed one when both carry the same
+signature; lose the key and every existing user has to uninstall, losing
+their local data. Keep an offline backup and never commit it (`.gitignore`
+excludes `*.jks`).
+
+CI reads the key from repository secrets; see
+`.github/workflows/release.yml`. Without them the build falls back to the
+debug key and warns loudly — the APK installs, but it is not a
+distributable release.
 
 ## Status
 
@@ -113,4 +142,3 @@ Usable day to day, still in development. Some community plugins fail because the
 ## License
 
 See [LICENSE](./LICENSE). Third-party dependencies keep their own licenses; vendored parts in this repo (SQLite, QuickJS, the JS vendor bundle) follow their original licenses.
-

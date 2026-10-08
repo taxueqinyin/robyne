@@ -111,3 +111,38 @@ jobs:
         # only touched a file's timestamp is not a failure. `git status
         # --porcelain` would report that as a change.
         run: git diff --exit-code
+
+  # Compile-only, and deliberately not part of the release. Nobody has run
+  # Robyne on macOS: the build proves the platform folders and dependencies
+  # line up, which is worth knowing continuously, but it says nothing about
+  # whether playback, the tray, or plugins actually work. Shipping a build
+  # nobody has opened would be a guess dressed up as a release.
+  macos:
+    name: macOS compiles
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.3'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # No signing identity is configured, so this produces an unsigned
+      # .app. Enough to prove it compiles; not enough to hand to anyone —
+      # Gatekeeper would block it on first open.
+      - name: Build
+        run: flutter build macos --release
+
+      # Kept only so a failure can be inspected. Not a release artifact.
+      - name: Upload the app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: robyne-macos-unverified
+          path: build/macos/Build/Products/Release/*.app
+          if-no-files-found: error

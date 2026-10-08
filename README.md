@@ -86,6 +86,7 @@ flutter test
 ```bash
 flutter build windows --release   # build/windows/x64/runner/Release/
 flutter build apk --release       # build/app/outputs/flutter-apk/app-release.apk
+flutter build macos --release     # build/macos/Build/Products/Release/
 ```
 
 Windows 的产物是一个目录（exe + DLL + `data/`），必须整个目录才能运行，
@@ -97,13 +98,35 @@ Windows 的产物是一个目录（exe + DLL + `data/`），必须整个目录�
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
+### macOS 未经测试
+
+仓库里有 `macos/` 平台目录，CI 每次都会编译它，但**目前没有人在 Mac 上真
+正运行过 Robyne**。编译通过只能说明平台目录和依赖对得上，不能说明播放、
+托盘、插件这些真的能用。
+
+因此 macOS 不发布构建产物。如果你有 Mac，欢迎试一下并提 issue 说明哪些功能
+能用、哪些不能——那是把 macOS 变成正式支持平台的第一步。
+
+另外，macOS 上正常分发需要 Apple Developer Program（年费）做签名和公证，
+否则用户首次打开会被 Gatekeeper 拦住。这个也还没做。
+
 ### Android 签名
 
-没有 keystore 时构建出的 APK 用 debug key 签名，能装但不能作为正式发布。
-要签正式版，配置仓库变量 `SIGN_ANDROID=true` 和这些 secrets：
-`ANDROID_KEYSTORE_BASE64`（`base64 -i keystore.jks`）、
-`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。
-keystore 本身不要提交进仓库。
+发布版用一把自签名的上传密钥签名。Android 的签名不需要向任何平台申请，
+也不用付费——自己生成一把密钥即可：
+
+```bash
+keytool -genkeypair -v -keystore robyne.jks -storetype PKCS12 \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias robyne
+```
+
+**这把密钥丢了就再也发不了更新。** Android 只允许用同一把密钥签名的 APK
+覆盖安装，所以密钥一旦丢失，所有已安装的用户都得卸载重装，本地数据全没。
+务必离线备份，不要提交进仓库（`.gitignore` 已排除 `*.jks`）。
+
+CI 从仓库 secrets 读取密钥，配置方式见
+`.github/workflows/release.yml`。没有配置时构建会回退到 debug key 并告警，
+那样打出的 APK 能装，但不能作为正式发布。
 
 ## TODO
 - [ ] 头尾跳过一段时间功能

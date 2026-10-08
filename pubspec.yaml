@@ -39,6 +39,9 @@ dependencies:
   media_kit: ^1.2.6
   media_kit_libs_android_audio: ^1.3.8
   media_kit_libs_windows_audio: ^1.0.9
+  # Playback backend is per-platform: each of these ships the native audio
+  # libraries for one platform only, so macOS needs its own.
+  media_kit_libs_macos_audio: ^1.1.4
   # Provides the FFI entry points used by drift's NativeDatabase. The native
   # library itself is resolved per-platform by the hooks below.
   sqlite3: ^3.3.2
