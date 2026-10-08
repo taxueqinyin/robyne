@@ -156,7 +156,31 @@ class _ImmersivePlayerChromeState extends State<_ImmersivePlayerChrome> {
   @override
   Widget build(BuildContext context) {
     if (!widget.showWindowControls) {
-      return widget.child;
+      // Touch has no hover state, so the phone's close control is a
+      // persistent part of the layout rather than part of the auto-hiding
+      // desktop chrome: hiding it is what stranded the user in this surface.
+      return Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          widget.child,
+          Positioned(
+            top: 0,
+            left: 0,
+            child: SafeArea(
+              bottom: false,
+              child: SizedBox(
+                height: 40,
+                child: IconButton(
+                  key: const Key('now-playing-close'),
+                  tooltip: '返回',
+                  onPressed: widget.onClose,
+                  icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
     }
     final tokens = RobyneTheme.of(context).tokens;
     final colors = tokens.color;

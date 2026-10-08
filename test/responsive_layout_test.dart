@@ -223,6 +223,10 @@ void main() {
 
     expect(find.byKey(const Key('now-playing-window-controls')), findsNothing);
     expect(find.byKey(const Key('now-playing-drag-region')), findsNothing);
+    // The close affordance is the phone's only visible way out of the
+    // immersive surface: the auto-hiding desktop chrome never renders here,
+    // so the button must be part of the static layout.
+    expect(find.byKey(const Key('now-playing-close')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

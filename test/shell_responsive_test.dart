@@ -242,6 +242,94 @@ void main() {
   });
 
   group('immersive now playing', () {
+    testWidgets('phone immersive surface closes on the visible back button', (
+      tester,
+    ) async {
+      final item = PlaybackItem.plugin(
+        platform: 'Test',
+        musicId: 'A',
+        title: 'Immersive Track',
+        raw: const <String, Object?>{'id': 'A'},
+      );
+      await _pumpShell(
+        tester,
+        _phonePortrait,
+        _xuan(),
+        overrides: <Object>[
+          playerControllerProvider.overrideWith(
+            () => _SeededPlayerController(
+              PlayerControllerState(
+                queue: <PlaybackItem>[item],
+                currentItem: item,
+              ),
+            ),
+          ),
+        ],
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RobyneShell)),
+      );
+
+      container.read(nowPlayingImmersiveProvider.notifier).open();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('now-playing-immersive')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('now-playing-close')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(container.read(nowPlayingImmersiveProvider), isFalse);
+      expect(find.byKey(const Key('now-playing-immersive')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('phone immersive surface consumes system back instead of the app', (
+      tester,
+    ) async {
+      final item = PlaybackItem.plugin(
+        platform: 'Test',
+        musicId: 'A',
+        title: 'Immersive Track',
+        raw: const <String, Object?>{'id': 'A'},
+      );
+      await _pumpShell(
+        tester,
+        _phonePortrait,
+        _xuan(),
+        overrides: <Object>[
+          playerControllerProvider.overrideWith(
+            () => _SeededPlayerController(
+              PlayerControllerState(
+                queue: <PlaybackItem>[item],
+                currentItem: item,
+              ),
+            ),
+          ),
+        ],
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RobyneShell)),
+      );
+
+      container.read(nowPlayingImmersiveProvider.notifier).open();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final navigatorState = tester.state<NavigatorState>(
+        find.byType(Navigator).first,
+      );
+      final maybePopped = navigatorState.maybePop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // PopScope intercepts the pop: the shell stays and the player closes
+      // rather than the route being removed (which on Android means "leave
+      // the app").
+      expect(maybePopped, completes);
+      expect(container.read(nowPlayingImmersiveProvider), isFalse);
+      expect(find.byType(RobyneShell), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
     testWidgets('opens over the shell and closes without changing tabs', (
       tester,
     ) async {

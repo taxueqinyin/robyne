@@ -5,6 +5,8 @@ import 'package:robyne/app/router.dart';
 import 'package:robyne/core/theme/application/theme_providers.dart';
 import 'package:robyne/core/theme/domain/theme_strings.dart';
 import 'package:robyne/features/discover/presentation/discover_page.dart';
+import 'package:robyne/features/player/application/player_providers.dart';
+import 'package:robyne/features/player/presentation/queue_page.dart';
 
 import 'support/xuan_fixture.dart';
 
@@ -83,6 +85,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byType(DiscoverPage), findsOneWidget);
+  });
+
+  testWidgets('the queue toggle opens the queue drawer on a phone', (
+    tester,
+  ) async {
+    await _pumpPhoneShell(tester);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(const Key('shell-nav-more'))),
+    );
+
+    await tester.tap(find.byKey(const Key('player-queue-toggle')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // The phone has no docked queue column, so the toggle must still open
+    // the real queue page as a drawer rather than writing unreachable state.
+    expect(find.byType(QueuePage), findsOneWidget);
+    expect(container.read(queuePanelVisibleProvider), isTrue);
+    expect(tester.takeException(), isNull);
   });
 }
 
