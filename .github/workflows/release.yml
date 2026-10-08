@@ -158,6 +158,14 @@ jobs:
         with:
           path: artifacts
 
+      # Needed only for the changelog below, which reads `git log` between the
+      # previous tag and this one. The default checkout is a shallow single
+      # commit, which cannot see either.
+      - name: Check out history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
@@ -165,14 +173,15 @@ jobs:
             artifacts/**/*.apk
             artifacts/**/*.zip
           generate_release_notes: true
-      # The generated notes list what changed but not what each artifact is
-      # worth. The macOS bundle is neither tested nor signed, and a user who
-      # downloads it unawares gets a Gatekeeper warning that reads like the
-      # app is broken.
+      # The generated changelog lists what changed but not what each artifact
+      # is worth. The macOS bundle is neither tested nor signed, and a user
+      # who downloads it unawares gets a Gatekeeper warning that reads like
+      # the app is broken.
       #
-      # Appended rather than passed to the create step above: `gh release
-      # edit --notes` replaces the body, which would throw away the
-      # changelog `generate_release_notes` just produced.
+      # The changelog is rewritten from scratch instead of appended to,
+      # because `generate_release_notes` itself appends to an existing body:
+      # re-running a tag leaves the previous run's copy of the changelog in
+      # place and stacks a second one under it.
       - name: Warn about the macOS artifact
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -180,6 +189,17 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ github.event.inputs.tag || github.ref_name }}"
+          # The changelog for every release in the tag's range. `gh release
+          # view` cannot produce it, so it is assembled the same way
+          # `generate_release_notes` does: the commits since the previous tag.
+          previous_tag=$(git describe --tags --abbrev=0 "$tag^" 2>/dev/null || echo '')
+          changelog=$(
+            if [ -n "$previous_tag" ]; then
+              git log --reverse --pretty='* %s (%h)' "$previous_tag..$tag"
+            else
+              git log --reverse --pretty='* %s (%h)' "$tag"
+            fi
+          )
           warning=$(cat <<'NOTES'
           ## 下载说明 / Download notes
 
@@ -201,12 +221,5 @@ jobs:
           [docs/RELEASING.md](./docs/RELEASING.md)。
           NOTES
           )
-          existing=$(gh release view "$tag" --json body --jq .body)
-          # Generated notes grow with each merged PR, and GitHub caps a release
-          # body at 128KiB. Refusing to edit would be worse than shipping the
-          # warning alone, so fall back to replacing the body when it is full.
-          if [ "${#existing}" -gt 120000 ]; then
-            existing='Release notes omitted: see the changelog below.'
-          fi
-          printf '%s\n\n%s\n' "$existing" "$warning" \
+          printf '## What'"'"'s Changed\n\n%s\n\n%s\n' "$changelog" "$warning" \
             | gh release edit "$tag" --notes-file -
