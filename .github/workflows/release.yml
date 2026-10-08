@@ -145,7 +145,13 @@ jobs:
     name: Publish release
     needs: [android, windows, macos]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    # A tag push sets `github.ref` to the tag itself; a manual dispatch asked
+    # to rebuild an existing tag instead arrives with `github.ref` set to the
+    # branch it was dispatched from. Without the fallback, redoing a release
+    # from the Actions tab uploads artifacts that nothing publishes.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      startsWith(github.event.inputs.tag, 'v')
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
