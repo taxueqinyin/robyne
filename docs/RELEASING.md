@@ -10,15 +10,24 @@ git tag v1.0.0 && git push origin v1.0.0
 ```
 
 The release workflow builds Windows and Android and publishes both to
-GitHub Releases. macOS compiles in CI but ships no artifact: nobody has
-run it on a Mac yet.
+GitHub Releases, and also publishes a macOS build — but see the macOS
+section below: that one is untested and unsigned.
 
 ## macOS
 
 `macos/` exists and CI compiles it on every push, but no one has actually
 run Robyne on a Mac. A green build proves the platform folders and
-dependencies line up — not that playback, the tray, or plugins work. So
-no macOS artifact is published.
+dependencies line up — not that playback, the tray, or plugins work.
+
+The release workflow nevertheless publishes a `robyne-macos-unsigned-*.zip`.
+It is there so someone with a Mac can try it without building from source,
+and the release notes say plainly that it is untested and unsigned. Opening
+it trips Gatekeeper: right-click and choose Open to get past the warning.
+
+It is packaged with `ditto`, not `zip`: a `.app` bundle relies on symlinks
+in its `Frameworks/Versions` layout, and a plain zip dereferences them into
+duplicated files, after which the bundle cannot load its embedded Flutter
+framework.
 
 Turning it into a supported platform takes two things:
 
