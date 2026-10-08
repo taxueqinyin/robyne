@@ -119,14 +119,30 @@ git tag v1.0.0 && git push origin v1.0.0
 托盘、插件这些真的能用。
 
 macOS 的产物（`robyne-macos-unsigned-*.zip`）**照常发布**，为的是让有 Mac
-的人不必从源码构建就能试跑，但它是**未签名**的：首次打开会被 Gatekeeper
-拦住，需要在访达里右键选择「打开」。release notes 里也写明了这一点。
+的人不必从源码构建就能试跑，但它是**未签名、未公证**的，打开会遇到系统拦
+截。release notes 里写明了解除拦截的步骤。
+
+#### 怎么绕过 macOS 的拦截
+
+因为这个包既没签名也没公证，macOS 会拒绝它启动。按下面顺序试：
+
+1. 打开「系统设置 → 隐私与安全性」，滚到「安全性」一栏，出现提示后点
+   **「仍要打开」**。（macOS 13 Ventura 及以后是这里；旧版本可以试试右键
+   应用图标选「打开」，但新系统上这个入口不一定还在。）
+2. 如果系统提示**「已损坏，无法打开，您应该将它移到废纸篓」**且不给任何打开
+   选项 —— 那是 quarantine 属性导致的，跟包本身没损坏无关。在终端执行：
+
+   ```bash
+   xattr -cr /Applications/robyne.app
+   ```
+
+   注意把路径换成你实际放置 `robyne.app` 的位置。
 
 如果你试了，欢迎提 issue 说明哪些功能能用、哪些不能——那是把 macOS 变成正式
 支持平台的第一步。
 
 正式支持还需要 Apple Developer Program（年费）做签名和公证，否则用户首次
-打开会被 Gatekeeper 拦住。详见
+打开就要走上面这些旁路步骤。详见
 [docs/RELEASING.md](./docs/RELEASING.md)。
 
 ### Android 签名

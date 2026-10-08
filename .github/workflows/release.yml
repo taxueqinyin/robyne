@@ -205,16 +205,29 @@ jobs:
 
           - `robyne-windows-x64-*.zip`：Windows 版，解压后整个目录一起运行。
           - `app-release.apk`：Android 版，已签名，可直接安装。
-          - `robyne-macos-unsigned-*.zip`：**未经测试、未签名**，务必先看下方说明。
+          - `robyne-macos-unsigned-*.zip`：**未经测试、未签名、未公证**，务必先看下方说明。
 
           ### macOS 版本免责声明 / macOS artifact disclaimer
 
           这个 macOS 构建**从未在真实的 Mac 上运行过**，CI 只证明它能够编译通过：
 
           - 播放、托盘、插件、桌面歌词等功能能否正常工作**完全未知**
-          - **未签名、未公证**：macOS Gatekeeper 会在首次打开时拦截，需要在访达中
-            右键选择「打开」才能运行
+          - **未签名、未公证**：macOS 会拒绝启动它，**解除拦截的步骤见下**
           - 请勿用于处理重要数据或生产环境
+
+          ### macOS 解除拦截 / Getting past Gatekeeper
+
+          按顺序尝试：
+
+          1. 打开「系统设置 → 隐私与安全性」，滚到「安全性」一栏，出现提示后点
+             **「仍要打开」**。（macOS 13 Ventura 及以后请走这里。）
+          2. 如果系统提示**「已损坏，无法打开，您应该将它移到废纸篓」**且不给任
+             何打开选项 —— 那是 quarantine 属性造成的，**并不是包真的损坏**。在终
+             端执行，路径换成你放 `robyne.app` 的实际位置：
+
+             ```bash
+             xattr -cr /Applications/robyne.app
+             ```
 
           如果你有 Mac 并愿意试跑，欢迎在 Issues 里反馈哪些功能可用、哪些不可用
           —— 那是把 macOS 变成正式支持平台的第一步。详见

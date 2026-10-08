@@ -121,16 +121,36 @@ only proves the platform folders and dependencies line up — not that
 playback, the tray, or plugins work.
 
 macOS does ship an artifact (`robyne-macos-unsigned-*.zip`) so anyone with a
-Mac can try it without building from source, but it is **unsigned**:
-Gatekeeper blocks it on first open, so you have to right-click and choose
-Open. The release notes say the same.
+Mac can try it without building from source, but it is **unsigned and
+unnotarized**, so macOS refuses to launch it. The release notes carry the
+steps to get past that.
+
+#### Getting past Gatekeeper
+
+Because the bundle carries neither a signature nor a notarization ticket,
+macOS blocks it. Try these in order:
+
+1. Open **System Settings → Privacy & Security**, scroll to the Security
+   section, and click **Open Anyway** once the prompt appears. On macOS 13
+   Ventura and later this is the reliable route; on older versions
+   right-clicking the app and choosing Open used to work, but that entry
+   point is no longer dependable.
+2. If macOS instead says the app **"is damaged and can't be opened. You
+   should move it to the Trash"** with no way to open it, that is the
+   quarantine attribute, not actual damage. Clear it in Terminal:
+
+   ```bash
+   xattr -cr /Applications/robyne.app
+   ```
+
+   Substitute the path wherever you actually put `robyne.app`.
 
 If you try it, please open an issue describing what works and what does not;
 that is the first step toward making macOS a supported platform.
 
 Supporting it properly also needs a paid Apple Developer Program
-membership for signing and notarization — otherwise Gatekeeper blocks the
-app on first open. See [docs/RELEASING.md](./docs/RELEASING.md).
+membership for signing and notarization; without it, every user has to work
+through the bypass above. See [docs/RELEASING.md](./docs/RELEASING.md).
 
 ### Android signing
 

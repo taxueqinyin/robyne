@@ -21,8 +21,27 @@ dependencies line up — not that playback, the tray, or plugins work.
 
 The release workflow nevertheless publishes a `robyne-macos-unsigned-*.zip`.
 It is there so someone with a Mac can try it without building from source,
-and the release notes say plainly that it is untested and unsigned. Opening
-it trips Gatekeeper: right-click and choose Open to get past the warning.
+and the release notes say plainly that it is untested and unsigned.
+
+### What users hit when they open it
+
+The bundle carries neither a signature nor a notarization ticket, so macOS
+refuses to launch it. Two distinct failures, in the order users hit them:
+
+1. **"Apple could not verify…"** — System Settings → Privacy & Security →
+   Security, then **Open Anyway**. On macOS 13 Ventura and later this is the
+   working route. Right-click → Open still exists on older versions but is
+   no longer dependable, so do not document it as the primary path.
+2. **"…is damaged and can't be opened. You should move it to the Trash."** —
+   this is the quarantine attribute, not damaged contents, and it offers no
+   Open Anyway button. The user has to clear it by hand:
+
+   ```bash
+   xattr -cr /Applications/robyne.app
+   ```
+
+   This is the one that makes an unsigned build feel broken, and it is the
+   strongest argument for notarization: notarized bundles never reach it.
 
 It is packaged with `ditto`, not `zip`: a `.app` bundle relies on symlinks
 in its `Frameworks/Versions` layout, and a plain zip dereferences them into
@@ -33,9 +52,9 @@ Turning it into a supported platform takes two things:
 
 1. Someone with a Mac actually using it and reporting what works.
 2. An Apple Developer Program membership (paid, yearly) for a Developer
-   ID certificate and notarization. Without it, Gatekeeper blocks the app
-   on first open and users have to right-click past the warning — which
-   is not something to hand to users.
+   ID certificate and notarization. Without it every user has to work
+   through the two steps above, including a Terminal command — which is
+   not something to hand to users.
 
 The Release entitlements already allow network access and user-selected
 file read/write, which the plugins and the local library import need.
