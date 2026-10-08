@@ -173,9 +173,48 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
     // in either shape.
     final queueOverride = ref.watch(queuePanelVisibleProvider);
     final queueRequested = queueOverride ?? isDesktopShell;
+    // A phone has no queue column, so the queue toggle hands its state to a
+    // drawer. The desktop keeps its own docked/overlay behaviour.
+    ref.listen<bool?>(queuePanelVisibleProvider, (previous, next) {
+      // `context` is the State's own BuildContext, non-null for the life of
+      // the listener registration.
+      final shellContext = context;
+      if (isDesktopShell) {
+        return;
+      }
+      if (next == true && previous != true) {
+        showModalBottomSheet<void>(
+          context: shellContext,
+          showDragHandle: true,
+          isScrollControlled: true,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(shellContext).height * 0.75,
+          ),
+          builder: (sheetContext) => SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(sheetContext).height * 0.7,
+              child: QueuePage(),
+            ),
+          ),
+        ).whenComplete(() {
+          if (ref.read(queuePanelVisibleProvider) == true) {
+            ref.read(queuePanelVisibleProvider.notifier).setVisible(false);
+          }
+        });
+      }
+    });
     final immersive = ref.watch(nowPlayingImmersiveProvider);
     final capsule = ref.watch(capsuleModeProvider);
     final capsuleQueueOpen = ref.watch(capsuleQueueOpenProvider);
+    // The immersive player overlays the whole shell, so the shell mutes its
+    // own chrome while it is up. Only the chrome that *draws* a close or a
+    // back affordance mutes itself; the player bar stays live, because it is
+    // also the phone's only visible way to leave the immersive surface when
+    // the system back gesture is unavailable.
+    void immersiveClose() {
+      ref.read(nowPlayingImmersiveProvider.notifier).close();
+    }
+
     // Window resizing is a side effect, so it hangs off provider changes
     // rather than off `build`: entering the capsule shrinks the OS window,
     // leaving restores it, and toggling the playlist grows it downward.
@@ -275,8 +314,17 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
         child: content,
       );
     }
+    // The phone arrangement has no queue slot, so a requested queue must
+    // float. The desktop plan's overlay only covers side slots, which left
+    // the phone's queue toggle writing state that nothing rendered. A
+    // bottom-sheet drawer reuses the full queue page: it is the same content
+    // the desktop panel shows, sized to the phone.
+    final mobileQueueDrawer = queueRequested && !isDesktopShell;
     final dockedQueue =
-        queueRequested && !plan.queueOverlay && plan.queueSideExtent > 0;
+        queueRequested &&
+        !plan.queueOverlay &&
+        !mobileQueueDrawer &&
+        plan.queueSideExtent > 0;
     // The mockups compose the content column as `content | queue`, with the
     // player bar spanning both. Keeping the queue outside this column is how
     // the transport row lost the width it needs: a 1280dp window minus a
@@ -405,23 +453,34 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
         body = contentColumn;
     }
 
-    return Scaffold(
-      body: ThemeBackdrop(
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            body,
-            if (immersive)
-              Material(
-                key: const Key('now-playing-immersive'),
-                child: NowPlayingPage(
-                  immersive: true,
-                  showWindowControls: showWindowControls,
-                  onClose: () =>
-                      ref.read(nowPlayingImmersiveProvider.notifier).close(),
+    // The immersive player is not a Navigator route, so Android's predictive
+    // back gesture never sees it: from the system's point of view there is
+    // only the home route, and "back" means "leave the app". Intercepting the
+    // pop here closes the player instead of minimising the whole app.
+    return PopScope(
+      canPop: !immersive,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && immersive) {
+          immersiveClose();
+        }
+      },
+      child: Scaffold(
+        body: ThemeBackdrop(
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              body,
+              if (immersive)
+                Material(
+                  key: const Key('now-playing-immersive'),
+                  child: NowPlayingPage(
+                    immersive: true,
+                    showWindowControls: showWindowControls,
+                    onClose: immersiveClose,
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

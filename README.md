@@ -1,8 +1,22 @@
+<div align="center">
+
+<img src="./assets/themes/xuan/assets/logo.png" alt="Robyne" width="128" height="128">
+
 # Robyne
 
 一个用 Flutter 写的音乐播放器。Windows 和 Android 都能跑，插件化接音源。
 
 [English](./README.en.md)
+
+</div>
+
+## 免责声明
+
+本项目仅用于学习 AI coding 技术，不包含任何音乐音源插件，也不提供、存储或分发任何受版权保护的音频内容。音乐资源全部来自用户自行导入的第三方插件，与本项目无关。
+
+用户因使用本项目（包括导入任何插件、获取或播放任何内容）而产生的任何侵权或其他法律问题，由用户自行承担，项目作者不承担任何责任。请在你的所在地法律允许的范围内使用。
+
+欢迎在 [Issues](../../issues) 中提交 bug 反馈和功能优化建议，一起把项目做得更好。
 
 ## 它能干什么
 

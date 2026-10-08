@@ -1,8 +1,22 @@
+<div align="center">
+
+<img src="./assets/themes/xuan/assets/logo.png" alt="Robyne" width="128" height="128">
+
 # Robyne
 
 A music player built with Flutter. Runs on Windows and Android, with a plugin system for music sources.
 
 [中文](./README.md)
+
+</div>
+
+## Disclaimer
+
+This project exists to explore AI coding techniques. It ships with no music source plugins, and it does not provide, store, or distribute any copyrighted audio content. All music comes from third-party plugins that the user imports on their own.
+
+The user is solely responsible for any infringement or other legal issues arising from the use of this project, including any plugin they import or content they access. The project authors accept no liability. Use it only where your local law permits.
+
+Bug reports and feature suggestions are welcome in the [Issues](../../issues) section.
 
 ## What it does
 
