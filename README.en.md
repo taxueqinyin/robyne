@@ -106,8 +106,8 @@ flutter build macos --release     # build/macos/Build/Products/Release/
 The Windows output is a directory (exe + DLLs + `data/`) and only runs as a
 directory, so releases ship it as a zip.
 
-Pushing a tag builds Windows and Android and publishes them to GitHub
-Releases:
+Pushing a tag builds Windows, Android and macOS, and publishes them to
+GitHub Releases:
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0
@@ -120,9 +120,13 @@ push, but **nobody has actually run Robyne on a Mac**. A successful build
 only proves the platform folders and dependencies line up — not that
 playback, the tray, or plugins work.
 
-So macOS ships no release artifact. If you have a Mac, please try it and
-open an issue describing what works and what does not; that is the first
-step toward making macOS a supported platform.
+macOS does ship an artifact (`robyne-macos-unsigned-*.zip`) so anyone with a
+Mac can try it without building from source, but it is **unsigned**:
+Gatekeeper blocks it on first open, so you have to right-click and choose
+Open. The release notes say the same.
+
+If you try it, please open an issue describing what works and what does not;
+that is the first step toward making macOS a supported platform.
 
 Supporting it properly also needs a paid Apple Developer Program
 membership for signing and notarization — otherwise Gatekeeper blocks the

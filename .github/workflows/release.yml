@@ -103,9 +103,47 @@ jobs:
           name: robyne-windows
           path: robyne-windows-x64-*.zip
 
+  macos:
+    name: macOS (unsigned)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.3'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # No signing identity is configured, so this stays ad-hoc signed. See
+      # docs/RELEASING.md for what turning it into a supported platform takes.
+      - name: Build
+        run: flutter build macos --release
+
+      - name: Package
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          # `ditto`, not `zip`: a .app bundle relies on symlinks in its
+          # Frameworks/Versions layout, and a plain zip dereferences them into
+          # duplicated files. The bundle then fails to load its embedded
+          # Flutter framework.
+          ditto -c -k --keepParent \
+            build/macos/Build/Products/Release/robyne.app \
+            "robyne-macos-unsigned-$tag.zip"
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: robyne-macos
+          path: robyne-macos-unsigned-*.zip
+
   release:
     name: Publish release
-    needs: [android, windows]
+    needs: [android, windows, macos]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
@@ -121,3 +159,48 @@ jobs:
             artifacts/**/*.apk
             artifacts/**/*.zip
           generate_release_notes: true
+      # The generated notes list what changed but not what each artifact is
+      # worth. The macOS bundle is neither tested nor signed, and a user who
+      # downloads it unawares gets a Gatekeeper warning that reads like the
+      # app is broken.
+      #
+      # Appended rather than passed to the create step above: `gh release
+      # edit --notes` replaces the body, which would throw away the
+      # changelog `generate_release_notes` just produced.
+      - name: Warn about the macOS artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          warning=$(cat <<'NOTES'
+          ## 下载说明 / Download notes
+
+          - `robyne-windows-x64-*.zip`：Windows 版，解压后整个目录一起运行。
+          - `app-release.apk`：Android 版，已签名，可直接安装。
+          - `robyne-macos-unsigned-*.zip`：**未经测试、未签名**，务必先看下方说明。
+
+          ### macOS 版本免责声明 / macOS artifact disclaimer
+
+          这个 macOS 构建**从未在真实的 Mac 上运行过**，CI 只证明它能够编译通过：
+
+          - 播放、托盘、插件、桌面歌词等功能能否正常工作**完全未知**
+          - **未签名、未公证**：macOS Gatekeeper 会在首次打开时拦截，需要在访达中
+            右键选择「打开」才能运行
+          - 请勿用于处理重要数据或生产环境
+
+          如果你有 Mac 并愿意试跑，欢迎在 Issues 里反馈哪些功能可用、哪些不可用
+          —— 那是把 macOS 变成正式支持平台的第一步。详见
+          [docs/RELEASING.md](./docs/RELEASING.md)。
+          NOTES
+          )
+          existing=$(gh release view "$tag" --json body --jq .body)
+          # Generated notes grow with each merged PR, and GitHub caps a release
+          # body at 128KiB. Refusing to edit would be worse than shipping the
+          # warning alone, so fall back to replacing the body when it is full.
+          if [ "${#existing}" -gt 120000 ]; then
+            existing='Release notes omitted: see the changelog below.'
+          fi
+          printf '%s\n\n%s\n' "$existing" "$warning" \
+            | gh release edit "$tag" --notes-file -

@@ -106,7 +106,7 @@ flutter build macos --release     # build/macos/Build/Products/Release/
 Windows 的产物是一个目录（exe + DLL + `data/`），必须整个目录才能运行，
 所以发布时打包成 zip。
 
-打 tag 会自动构建 Windows 和 Android 并发布到 GitHub Releases：
+打 tag 会自动构建 Windows、Android 和 macOS 并发布到 GitHub Releases：
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0
@@ -118,8 +118,12 @@ git tag v1.0.0 && git push origin v1.0.0
 正运行过 Robyne**。编译通过只能说明平台目录和依赖对得上，不能说明播放、
 托盘、插件这些真的能用。
 
-因此 macOS 不发布构建产物。如果你有 Mac，欢迎试一下并提 issue 说明哪些功能
-能用、哪些不能——那是把 macOS 变成正式支持平台的第一步。
+macOS 的产物（`robyne-macos-unsigned-*.zip`）**照常发布**，为的是让有 Mac
+的人不必从源码构建就能试跑，但它是**未签名**的：首次打开会被 Gatekeeper
+拦住，需要在访达里右键选择「打开」。release notes 里也写明了这一点。
+
+如果你试了，欢迎提 issue 说明哪些功能能用、哪些不能——那是把 macOS 变成正式
+支持平台的第一步。
 
 正式支持还需要 Apple Developer Program（年费）做签名和公证，否则用户首次
 打开会被 Gatekeeper 拦住。详见
