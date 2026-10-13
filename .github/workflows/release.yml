@@ -161,10 +161,16 @@ jobs:
       # Needed only for the changelog below, which reads `git log` between the
       # previous tag and this one. The default checkout is a shallow single
       # commit, which cannot see either.
+      #
+      # `clean: false` is load-bearing. Checkout wipes untracked files by
+      # default, so running it after the download above deleted `artifacts/`
+      # outright: the release was then published with no builds attached to
+      # it. The workspace starts empty here, so there is nothing to clean.
       - name: Check out history
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          clean: false
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -173,6 +179,10 @@ jobs:
             artifacts/**/*.apk
             artifacts/**/*.zip
           generate_release_notes: true
+          # Fail loudly rather than publish an empty release. A tag with no
+          # builds looks like a successful release until someone tries to
+          # download it, and the pattern above can silently match nothing.
+          fail_on_unmatched_files: true
       # The generated changelog lists what changed but not what each artifact
       # is worth. The macOS bundle is neither tested nor signed, and a user
       # who downloads it unawares gets a Gatekeeper warning that reads like
