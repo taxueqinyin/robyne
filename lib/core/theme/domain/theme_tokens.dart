@@ -366,6 +366,12 @@ class ThemeSpacings {
 /// skin could only make *everything* bigger, which is not the same as
 /// choosing a typographic voice.
 class ThemeTypography {
+  /// Xiaomi's MiSans, bundled at `assets/fonts/MiSansVF.ttf`.
+  ///
+  /// The typeface is a variable font covering every weight the UI uses, so it
+  /// is declared once in `pubspec.yaml` and referenced by family name here.
+  static const String _defaultFontFamily = 'MiSans';
+
   const ThemeTypography({
     required this.fontFamily,
     required this.scale,
@@ -380,7 +386,7 @@ class ThemeTypography {
   });
 
   const ThemeTypography.baseline()
-    : fontFamily = null,
+    : fontFamily = _defaultFontFamily,
       scale = 1,
       bodyWeight = 400,
       titleWeight = 600,
@@ -391,7 +397,9 @@ class ThemeTypography {
       labelSize = null,
       labelWeight = null;
 
-  /// Null means "use the platform default font".
+  /// MiSans ships with the app, so a skin that does not ask for a typeface
+  /// gets a known CJK-capable one instead of whatever each desktop platform
+  /// happens to have. Null means "use the platform default font".
   final String? fontFamily;
 
   /// Multiplier applied to every text size. Enables skins that prefer a
