@@ -85,6 +85,43 @@ password manager that holds file attachments (1Password, Bitwarden,
 KeePass) covers both the lost-machine and the forgotten-password case at
 once. Never commit it; `.gitignore` excludes `*.jks`.
 
+### The release key's fingerprint
+
+Recorded so a future release can be checked against it without trusting
+that CI did the right thing:
+
+```
+DN:        CN=Robyne, OU=Open Source, O=taxueqinyin, C=CN
+SHA-256:   d1b79b9aa4566570539bce931e49f510e9cc40eabf35ea01a6b62ef4dfec0bf6
+```
+
+Check any APK against it with:
+
+```bash
+apksigner verify --print-certs app-release.apk
+```
+
+### Two ways the build silently signed with the wrong key
+
+Both happened, and neither shows up anywhere except on a user's phone.
+
+1. **The keystore was written to the wrong directory.** The workflow
+   decoded it to `android/keystore.jks`, but `build.gradle.kts` resolves
+   `file("keystore.jks")` against the Gradle *project* directory, which
+   is `android/app/`. The keystore was never found, so the build fell
+   through to the debug key — a freshly generated one on every runner, so
+   each release differed from the last and no version could upgrade
+   another.
+2. **`signingConfigs` was declared after the `buildTypes` block that reads
+   it**, so `getByName()` threw once a keystore was actually present.
+   Fixing only the path would have turned a bad signature into a build
+   failure.
+
+The release workflow now asserts on the certificate the APK carries and
+fails if it is `CN=Android Debug`. Keep that gate: this failure mode is
+invisible to every other check, because the APK builds, installs, and
+passes the workflow.
+
 ### Wiring it into CI
 
 The workflow reads the key from repository secrets, never from a file in

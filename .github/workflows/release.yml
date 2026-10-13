@@ -261,7 +261,7 @@ jobs:
           ## 下载说明 / Download notes
 
           - `robyne-windows-x64-*.zip`：Windows 版，解压后整个目录一起运行。
-          - `app-release.apk`：Android 版，已签名，可直接安装。
+          - `app-release.apk`：Android 版，用发布密钥签名。
           - `robyne-macos-unsigned-*.zip`：**未经测试、未签名、未公证**，务必先看下方说明。
 
           ### macOS 版本免责声明 / macOS artifact disclaimer
