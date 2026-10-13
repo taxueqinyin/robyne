@@ -433,39 +433,60 @@ class SongAddToPlaylistDialog extends ConsumerWidget {
     final strings = ref.watch(activeThemeStringsProvider);
     return AlertDialog(
       title: Text(strings.resolve(ThemeStringKey.playerAddToPlaylist)),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: playlists.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stackTrace) => Text(error.toString()),
-          data: (playlists) {
-            final normal = playlists
-                .where((playlist) => !playlist.isFavorites)
-                .toList(growable: false);
-            if (normal.isEmpty) {
-              return Text(strings.resolve(ThemeStringKey.playerPlaylistEmpty));
-            }
-            return ListView(
-              shrinkWrap: true,
-              children: <Widget>[
-                for (final playlist in normal)
-                  ListTile(
-                    leading: const Icon(Icons.queue_music),
-                    title: Text(playlist.name),
-                    onTap: () async {
-                      await ref
-                          .read(playlistControllerProvider.notifier)
-                          .addItem(playlist.id, item);
-                      if (context.mounted) {
-                        Navigator.of(context).pop();
-                      }
-                    },
-                  ),
-              ],
-            );
-          },
+      // The dialog sizes its content with `IntrinsicWidth`, which a lazy
+      // viewport cannot answer: a shrink-wrapping `ListView` here threw on
+      // every layout pass, so nothing painted, every frame logged a
+      // `RenderShrinkWrappingViewport` assertion, and the dialog's barrier
+      // stayed on top — the app looked frozen until it was restarted.
+      // A `SingleChildScrollView` around a plain `Column` answers intrinsic
+      // width, and still scrolls because the dialog clips it to the space it
+      // can spare.
+      content: SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: playlists.when(
+            loading: () => const SizedBox(
+              height: 64,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, stackTrace) => Text(error.toString()),
+            data: (playlists) {
+              final normal = playlists
+                  .where((playlist) => !playlist.isFavorites)
+                  .toList(growable: false);
+              if (normal.isEmpty) {
+                return Text(
+                  strings.resolve(ThemeStringKey.playerPlaylistEmpty),
+                );
+              }
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  for (final playlist in normal)
+                    ListTile(
+                      leading: const Icon(Icons.queue_music),
+                      title: Text(playlist.name),
+                      onTap: () async {
+                        await ref
+                            .read(playlistControllerProvider.notifier)
+                            .addItem(playlist.id, item);
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(strings.resolve(ThemeStringKey.actionCancel)),
+        ),
+      ],
     );
   }
 }
