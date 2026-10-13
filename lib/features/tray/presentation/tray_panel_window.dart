@@ -57,6 +57,18 @@ class _TrayPanelWindowAppState extends State<TrayPanelWindowApp>
         case TrayPanelController.hideMethod:
           await windowManager.hide();
           return true;
+        case TrayPanelController.destroyMethod:
+          // The main window is quitting, so close this window and let the
+          // engine that owns it go down with it.
+          //
+          // Closing must never use `windowManager.destroy()`: that is a bare
+          // `PostQuitMessage`, which is process-wide on Windows, and this
+          // engine shares the main isolate's single message loop. Firing it
+          // from here posts WM_QUIT while the main isolate still waits on
+          // this very reply, so the reply never arrives and the app freezes
+          // mid-exit. `close()` only posts SC_CLOSE at this window.
+          unawaited(windowManager.close());
+          return true;
         case TrayPanelController.setAnchorMethod:
           final arguments = call.arguments;
           if (arguments is Map) {
