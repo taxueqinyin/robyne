@@ -176,6 +176,12 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          # A tag push leaves `github.ref` pointing at the tag, which the
+          # action reads on its own. A dispatched rebuild arrives on the
+          # branch it was dispatched from, and then the action has no tag at
+          # all and aborts with "GitHub Releases requires a tag" — even
+          # though the step below resolves exactly this input.
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: |
             artifacts/**/*.apk
             artifacts/**/*.zip
