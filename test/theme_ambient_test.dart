@@ -19,6 +19,37 @@ import 'package:robyne/features/player/domain/playback_item.dart';
 /// tests while no widget read them: a skin could declare a motion rhythm or an
 /// atmosphere and see nothing change. These lock down that they are real.
 void main() {
+  test('a selected chip keeps readable ink on a dark fill', () {
+    // The flagship skin's `list.itemSelected` is a near-black, and the chip
+    // theme used to paint its selected label with body ink — dark on dark,
+    // which is the unreadable source chip the user hit in 搜索歌词.
+    final package = _parse(
+      jsonDecode(File('assets/themes/xuan/theme.json').readAsStringSync())
+          as Map<String, Object?>,
+    );
+    final theme = const TokenResolver().resolve(
+      package.tokens,
+      Brightness.light,
+      ThemeModePreference.auto,
+      package.strings,
+    );
+    final chipTheme = theme.chipTheme;
+    // `ChoiceChip` passes `secondaryLabelStyle` down as the widget's label
+    // style when selected, so that field — not `labelStyle` — is what the user
+    // reads on a selected chip.
+    final ink = chipTheme.secondaryLabelStyle?.color;
+    final fill = chipTheme.selectedColor;
+    expect(ink, isNotNull);
+    expect(fill, isNotNull);
+    expect(
+      // WCAG AA for normal text; the chip is 12dp UI copy, so it is held to
+      // the stricter end rather than the large-text allowance.
+      _contrastRatio(ink!, fill!),
+      greaterThanOrEqualTo(4.5),
+      reason: 'selected chip ink must be WCAG-legible on its fill',
+    );
+  });
+
   group('ambient (design spec §3.4 封面驱动氛围)', () {
     test('is off by default, so every pre-existing skin is unchanged', () {
       const ambient = ThemeAmbientComponents.baseline();
@@ -522,6 +553,14 @@ ThemePackage _parse(Map<String, Object?> raw) {
     'id': 'demo',
     ...raw,
   }, source: ThemeSource.builtIn)!;
+}
+
+double _contrastRatio(Color a, Color b) {
+  final l1 = a.computeLuminance();
+  final l2 = b.computeLuminance();
+  final lighter = l1 > l2 ? l1 : l2;
+  final darker = l1 > l2 ? l2 : l1;
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 /// A library with real rows, so a style branch is observable.

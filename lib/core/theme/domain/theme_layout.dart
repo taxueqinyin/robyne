@@ -1,5 +1,6 @@
 import 'theme_regions.dart';
 import 'theme_home.dart';
+import 'theme_now_playing.dart';
 
 /// Declarative layout knobs for a skin (Level 1).
 ///
@@ -13,6 +14,7 @@ class ThemeLayout {
     required this.mobile,
     required this.content,
     this.home = const ThemeHomeLayout.baseline(),
+    this.nowPlaying = const ThemeNowPlayingLayout.baseline(),
   });
 
   /// Official defaults: a persistent rail beside the content, player bar at
@@ -21,24 +23,30 @@ class ThemeLayout {
     : desktop = const ThemeDesktopLayout.baseline(),
       mobile = const ThemeMobileLayout.baseline(),
       content = const ThemeContentLayout.baseline(),
-      home = const ThemeHomeLayout.baseline();
+      home = const ThemeHomeLayout.baseline(),
+      nowPlaying = const ThemeNowPlayingLayout.baseline();
 
   final ThemeDesktopLayout desktop;
   final ThemeMobileLayout mobile;
   final ThemeContentLayout content;
   final ThemeHomeLayout home;
 
+  /// Full-window player composition.
+  final ThemeNowPlayingLayout nowPlaying;
+
   ThemeLayout copyWith({
     ThemeDesktopLayout? desktop,
     ThemeMobileLayout? mobile,
     ThemeContentLayout? content,
     ThemeHomeLayout? home,
+    ThemeNowPlayingLayout? nowPlaying,
   }) {
     return ThemeLayout(
       desktop: desktop ?? this.desktop,
       mobile: mobile ?? this.mobile,
       content: content ?? this.content,
       home: home ?? this.home,
+      nowPlaying: nowPlaying ?? this.nowPlaying,
     );
   }
 }

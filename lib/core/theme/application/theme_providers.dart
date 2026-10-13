@@ -5,6 +5,7 @@ import '../../../features/settings/domain/user_settings.dart';
 import '../../../features/settings/application/settings_providers.dart';
 import '../domain/theme_layout.dart';
 import '../domain/theme_components.dart';
+import '../domain/theme_now_playing.dart';
 import '../domain/theme_icons.dart';
 import '../domain/theme_package.dart';
 import '../domain/theme_navigation.dart';
@@ -71,6 +72,115 @@ final contentStyleForProvider =
 final activeThemeContentMetricsProvider = Provider<ThemeContentMetrics>((ref) {
   return ref.watch(activeThemeTokensProvider).components.content;
 });
+
+/// The full-window player's composition for the active skin.
+///
+/// Kept beside [activeThemeContentMetricsProvider] so the Now Playing page
+/// reads one declared shape rather than hard-coding its own axes.
+final activeThemeNowPlayingLayoutProvider = Provider<ThemeNowPlayingLayout>((
+  ref,
+) {
+  return ref.watch(activeThemePackageProvider).layout.nowPlaying;
+});
+
+/// The tokens the full-window player paints with.
+///
+/// The player is allowed to invert against its own skin — QQ Music's player is
+/// a light surface inside a dark app — so this is not simply
+/// [activeThemeTokensProvider]. When the skin says `followSkin` the two are
+/// identical and nothing about the existing skins changes.
+final nowPlayingTokensProvider = Provider<ThemeTokens>((ref) {
+  final tokens = ref.watch(activeThemeTokensProvider);
+  final layout = ref.watch(activeThemeNowPlayingLayoutProvider);
+  return switch (layout.surface) {
+    ThemeNowPlayingSurface.followSkin => tokens,
+    ThemeNowPlayingSurface.light => _playerSurface(tokens, layout, light: true),
+    ThemeNowPlayingSurface.dark => _playerSurface(tokens, layout, light: false),
+  };
+});
+
+/// A complete [ThemeData] for the full-window player subtree.
+///
+/// [nowPlayingTokensProvider] answers "which colours", but Material widgets
+/// (dialogs, menus, list tiles) read `ThemeData`, not the extension. Without
+/// this the light player would paint its own text with the dark scheme's
+/// defaults and the menus opened from it would come back dark.
+final nowPlayingThemeDataProvider = Provider<ThemeData>((ref) {
+  final tokens = ref.watch(nowPlayingTokensProvider);
+  final layout = ref.watch(activeThemeNowPlayingLayoutProvider);
+  final mode = ref.watch(themeModeProvider);
+  final brightness = switch (layout.surface) {
+    ThemeNowPlayingSurface.light => Brightness.light,
+    ThemeNowPlayingSurface.dark => Brightness.dark,
+    // `themeModeProvider` already folds in the user's override, the skin's
+    // preference and the platform, so following it is the only answer that
+    // agrees with the rest of the app.
+    ThemeNowPlayingSurface.followSkin =>
+      mode == ThemeMode.light
+          ? Brightness.light
+          : mode == ThemeMode.dark
+          ? Brightness.dark
+          : MediaQueryData.fromView(
+              WidgetsBinding.instance.platformDispatcher.views.first,
+            ).platformBrightness,
+  };
+  return const TokenResolver().resolve(
+    tokens,
+    brightness,
+    ThemeModePreference.auto,
+    ref.watch(activeThemeStringsProvider),
+  );
+});
+
+/// Re-bases [tokens] onto the opposite brightness, keeping the skin's identity.
+///
+/// Brand, accent and status keep their values so the inverted surface still
+/// reads as this skin; only the neutrals move, which is the same rule
+/// [ThemeColors.darkBaseline] already follows. A declared [palette] then wins
+/// over the derived neutrals, one role at a time.
+ThemeTokens _playerSurface(
+  ThemeTokens tokens,
+  ThemeNowPlayingLayout layout, {
+  required bool light,
+}) {
+  final base = light ? ThemeColors.baseline() : ThemeColors.darkBaseline();
+  final own = tokens.color;
+  final derived = base.copyWith(
+    brandBase: own.brandBase,
+    brandHover: own.brandHover,
+    brandMuted: own.brandMuted,
+    accentBase: own.accentBase,
+    accentMuted: own.accentMuted,
+    danger: own.danger,
+    warning: own.warning,
+    success: own.success,
+  );
+  final palette = layout.palette;
+  final color = palette == null
+      ? derived
+      : derived.copyWith(
+          backgroundBase: palette.backgroundBase,
+          backgroundElevated: palette.backgroundElevated,
+          surfaceBase: palette.surfaceBase,
+          textPrimary: palette.textPrimary,
+          textSecondary: palette.textSecondary,
+          textMuted: palette.textMuted,
+          borderSubtle: palette.borderSubtle,
+          brandBase: palette.brandBase,
+        );
+  // Lyric colours are the one component group the player paints directly, and
+  // the skin's dark-skin values would be unreadable on a light surface. The
+  // skin can still override them through the palette's brand.
+  final lyric = tokens.components.lyric.copyWith(
+    activeLine: palette?.brandBase ?? tokens.color.brandBase,
+    inactiveLine: color.textSecondary,
+    activeBackground: const Color(0x00000000),
+  );
+  return tokens.copyWith(
+    color: color,
+    components: tokens.components.copyWith(lyric: lyric),
+  );
+}
 
 /// Knob values in effect for the active skin, keyed by [ThemeSetting.key].
 ///
