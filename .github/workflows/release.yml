@@ -44,7 +44,13 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore.jks
+          # android/app/, not android/: build.gradle.kts resolves
+          # `file("keystore.jks")` against the Gradle project directory,
+          # which is the app module. Writing it one level up meant the
+          # keystore was never found and the build silently fell back to the
+          # debug key — a different one on every runner, so each release
+          # refused to upgrade the last.
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/keystore.jks
 
       - name: Build APK
         run: |
@@ -61,6 +67,36 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+
+      # An APK signed with the debug key is the one failure here that is
+      # invisible everywhere else: it builds, it installs, and the workflow
+      # goes green. It is only caught on a user's phone, as an install that
+      # refuses to upgrade — and by then the release is public.
+      #
+      # So assert on the certificate the APK actually carries. `apksigner`
+      # ships with the Android SDK, which the runner already has. A build
+      # configured to sign must not produce `CN=Android Debug`.
+      - name: Verify the APK is signed with the release key
+        if: ${{ vars.SIGN_ANDROID == 'true' }}
+        run: |
+          set -euo pipefail
+          apk="build/app/outputs/flutter-apk/app-release.apk"
+          dn=$("$ANDROID_HOME/build-tools/"*/apksigner verify --print-certs "$apk" \
+            | grep 'certificate DN:' | head -1)
+          echo "Signer: $dn"
+          if [ -z "$dn" ]; then
+            echo "::error::Could not read the APK's signing certificate."
+            exit 1
+          fi
+          case "$dn" in
+            *"Android Debug"*)
+              echo "::error::The release APK is signed with a DEBUG key. Users"
+              echo "::error::cannot upgrade to it, and each build gets a different"
+              echo "::error::one. Gradle did not find the keystore — check that"
+              echo "::error::the path written above matches android/app/."
+              exit 1
+              ;;
+          esac
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

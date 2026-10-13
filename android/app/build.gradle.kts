@@ -30,31 +30,47 @@ android {
         versionName = flutter.versionName
     }
 
+    // Declared before `buildTypes` because that block reads it: a
+    // `signingConfigs` block placed afterwards is not configured yet, and
+    // `getByName("release")` then throws "SigningConfig with name 'release'
+    // not found" on any build that has a keystore — which is to say, on
+    // every real release build. Credentials come from environment variables,
+    // never from a file in the repository — see
+    // .github/workflows/release.yml.
+    signingConfigs {
+        create("release") {
+            // `file()` resolves against this project's directory
+            // (`android/app/`), not the module root, so the path the release
+            // workflow writes to has to be spelled relative to here. Writing
+            // the keystore to `android/keystore.jks` and expecting this to
+            // find it silently fell through to the debug key instead, and
+            // every release went out signed by a per-runner debug keystore —
+            // a different one each time, which is why upgrades reported a
+            // signature mismatch.
+            storeFile = file("keystore.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("KEY_ALIAS")
+            keyPassword = System.getenv("KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
             // Real signing when a keystore is present, debug signing
             // otherwise. The fallback is what makes `flutter run --release`
             // work on a fresh clone with no keystore; a release that reaches
             // users must be built with the keystore configured.
-            signingConfig =
-                if (file("keystore.jks").exists()) {
-                    signingConfigs.getByName("upload")
-                } else {
-                    signingConfigs.getByName("debug")
-                }
-        }
-    }
-
-    // Declared here rather than inside `buildTypes` so it exists regardless of
-    // which build type is being configured. Credentials come from environment
-    // variables, never from a file in the repository — see
-    // .github/workflows/release.yml.
-    signingConfigs {
-        create("upload") {
-            storeFile = file("keystore.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("KEY_ALIAS")
-            keyPassword = System.getenv("KEY_PASSWORD")
+            //
+            // The check is `exists()`, not "can it be read": a keystore
+            // with a wrong password or alias fails later, at signing time.
+            // That is still the right trade — a hard failure beats falling
+            // through to the debug key, which is what let three releases
+            // install fine and then refuse to upgrade.
+            signingConfig = if (file("keystore.jks").exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
