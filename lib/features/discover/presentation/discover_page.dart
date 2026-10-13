@@ -13,6 +13,7 @@ import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
 import '../../../core/theme/presentation/theme_material.dart';
 import '../../../shared/widgets/horizontal_wheel_scroll.dart';
+import '../../../shared/widgets/song_actions_menu.dart';
 import '../../downloads/application/download_providers.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/domain/playback_item.dart';
@@ -911,12 +912,15 @@ class _DetailPanel extends ConsumerWidget {
                       // (`rowacts`), revealed on the row rather than parked in
                       // a `ListTile` trailing slot that a two-pane detail
                       // cannot afford.
-                      return _DetailTrackRow(
-                        item: item,
-                        index: index,
-                        strings: strings,
-                        onPlay: () => onPlay(item),
-                        onDownload: () => onDownload(item),
+                      return SongContextMenuRegion(
+                        item: PlaybackItem.fromMusicItem(item),
+                        child: _DetailTrackRow(
+                          item: item,
+                          index: index,
+                          strings: strings,
+                          onPlay: () => onPlay(item),
+                          onDownload: () => onDownload(item),
+                        ),
                       );
                     },
                   ),

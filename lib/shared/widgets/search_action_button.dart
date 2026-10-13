@@ -13,6 +13,8 @@ class SearchActionButton extends ConsumerStatefulWidget {
     required this.onCancel,
     this.searchLabelKey = ThemeStringKey.searchAction,
     this.stopLabelKey = ThemeStringKey.searchStop,
+    this.accentColor,
+    this.accentInkColor,
   });
 
   final bool isSearching;
@@ -20,6 +22,16 @@ class SearchActionButton extends ConsumerStatefulWidget {
   final VoidCallback onCancel;
   final ThemeStringKey searchLabelKey;
   final ThemeStringKey stopLabelKey;
+
+  /// Fill for the idle button. Null uses the skin's own brand colour.
+  ///
+  /// Surfaces that are already coloured by the song — the lyrics search dialog
+  /// sits over the cover-derived player — pass the cover's primary here so the
+  /// button belongs to the same palette instead of reintroducing a swatch.
+  final Color? accentColor;
+
+  /// Ink for [accentColor]. Null uses the skin's `onBrand`.
+  final Color? accentInkColor;
 
   @override
   ConsumerState<SearchActionButton> createState() => _SearchActionButtonState();
@@ -37,6 +49,12 @@ class _SearchActionButtonState extends ConsumerState<SearchActionButton> {
     final strings = ref.watch(activeThemeStringsProvider);
     final searchLabel = strings.resolve(widget.searchLabelKey);
     final stopLabel = strings.resolve(widget.stopLabelKey);
+    final themeStyle = widget.accentColor == null
+        ? null
+        : FilledButton.styleFrom(
+            backgroundColor: widget.accentColor,
+            foregroundColor: widget.accentInkColor ?? colors.onBrand,
+          );
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -50,7 +68,7 @@ class _SearchActionButtonState extends ConsumerState<SearchActionButton> {
                   backgroundColor: colors.danger,
                   foregroundColor: colors.onBrand,
                 )
-              : null,
+              : themeStyle,
           icon: showStop
               ? const Icon(Icons.close)
               : widget.isSearching

@@ -10,6 +10,7 @@ import '../../../core/theme/presentation/theme_material.dart';
 import '../../player/domain/playback_item.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/presentation/artwork_view.dart';
+import '../../../shared/widgets/song_actions_menu.dart';
 import '../application/playlist_providers.dart';
 import '../domain/music_playlist.dart';
 import '../infrastructure/playlist_repository.dart';
@@ -222,27 +223,9 @@ class PlaylistsPage extends ConsumerWidget {
                           .read(playerControllerProvider.notifier)
                           .playItem(item),
                       onRemoveItem: (PlaybackItem item) async {
-                        final confirmed = await _confirmDestructiveAction(
-                          context,
-                          title: strings.resolve(
-                            ThemeStringKey.playlistsRemoveTitle,
-                          ),
-                          message: strings
-                              .resolve(ThemeStringKey.playlistsRemoveMessage)
-                              .replaceAll('{track}', item.title)
-                              .replaceAll('{playlist}', playlist.name),
-                          actionLabel: strings.resolve(
-                            ThemeStringKey.actionRemove,
-                          ),
-                          cancelLabel: strings.resolve(
-                            ThemeStringKey.actionCancel,
-                          ),
-                        );
-                        if (confirmed) {
-                          await ref
-                              .read(playlistControllerProvider.notifier)
-                              .removeItem(playlist.id, item.id);
-                        }
+                        await ref
+                            .read(playlistControllerProvider.notifier)
+                            .removeItem(playlist.id, item.id);
                       },
                     );
                   },
@@ -586,15 +569,37 @@ class _SelectedPlaylistCard extends ConsumerWidget {
               child: Column(
                 children: <Widget>[
                   for (final item in playlist.items)
-                    ListTile(
-                      leading: ArtworkView(artworkUrl: item.artworkUrl),
-                      title: Text(item.title),
-                      subtitle: Text(item.artist ?? item.platform ?? ''),
-                      onTap: () => onPlayItem(item),
-                      trailing: IconButton(
-                        tooltip: strings.resolve(ThemeStringKey.actionRemove),
-                        icon: const Icon(Icons.close),
-                        onPressed: () => onRemoveItem(item),
+                    SongContextMenuRegion(
+                      item: item,
+                      // From a playlist, "delete" means detach from this
+                      // playlist — the same action as the row button.
+                      onDelete: () async => onRemoveItem(item),
+                      child: ListTile(
+                        leading: ArtworkView(artworkUrl: item.artworkUrl),
+                        title: Text(item.title),
+                        subtitle: Text(item.artist ?? item.platform ?? ''),
+                        onTap: () => onPlayItem(item),
+                        // The user asked for a per-row "remove from playlist"
+                        // control rather than a menu-only affordance, so the
+                        // trailing slot keeps the direct button and the shared
+                        // right-click menu adds everything else.
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            IconButton(
+                              tooltip: strings.resolve(
+                                ThemeStringKey.actionRemove,
+                              ),
+                              icon: const Icon(Icons.remove_circle_outline),
+                              onPressed: () => onRemoveItem(item),
+                            ),
+                            SongActionsMenuButton(
+                              item: item,
+                              iconSize: 18,
+                              tooltipKey: ThemeStringKey.playerMore,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                 ],
