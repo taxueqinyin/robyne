@@ -153,24 +153,25 @@ jobs:
       startsWith(github.ref, 'refs/tags/v') ||
       startsWith(github.event.inputs.tag, 'v')
     steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      # Needed only for the changelog below, which reads `git log` between the
+      # Needed for the changelog below, which reads `git log` between the
       # previous tag and this one. The default checkout is a shallow single
       # commit, which cannot see either.
       #
-      # `clean: false` is load-bearing. Checkout wipes untracked files by
-      # default, so running it after the download above deleted `artifacts/`
-      # outright: the release was then published with no builds attached to
-      # it. The workspace starts empty here, so there is nothing to clean.
+      # This runs *before* the download, and that order is load-bearing.
+      # Checkout deletes the workspace contents whenever it has to `git init`
+      # a fresh repository, which is the case on the first checkout of a job.
+      # With the download first, that wiped `artifacts/` and the release was
+      # published with no builds attached. `clean: false` does not prevent it:
+      # it only skips `git clean`, not the init-time wipe.
       - name: Check out history
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          clean: false
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Create release
         uses: softprops/action-gh-release@v2
