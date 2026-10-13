@@ -17,11 +17,13 @@ import 'package:robyne/features/search/application/search_controller.dart'
     as search_state;
 import 'package:robyne/core/theme/domain/theme_package.dart';
 import 'package:robyne/features/search/presentation/search_page.dart';
+import 'package:robyne/shared/widgets/search_action_button.dart';
 
 void main() {
-  testWidgets('search field does not update global state while composing', (
-    tester,
-  ) async {
+  testWidgets('the page hosts no search field of its own', (tester) async {
+    // Every search entry point now lives in the shell's top bar, so a second
+    // field here would be a second keyword the user has to keep in sync with
+    // the one they actually typed into. The page is results only.
     final container = ProviderContainer(
       overrides: [
         pluginRepositoryProvider.overrideWithValue(_FakePluginRepository()),
@@ -37,13 +39,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField), '中文');
-    await tester.pump();
-
-    expect(
-      container.read(search_state.searchControllerProvider).value?.keyword,
-      isEmpty,
-    );
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(SearchActionButton), findsNothing);
   });
 
   testWidgets('search page renders source pills instead of Material chips', (

@@ -104,6 +104,7 @@ class TrayPanelController {
   static const showMethod = 'tray_panel.show';
   static const hideMethod = 'tray_panel.hide';
   static const hiddenMethod = 'tray_panel.hidden';
+  static const destroyMethod = 'tray_panel.destroy';
   static const setAnchorMethod = 'tray_panel.set_anchor';
   static const sizeMethod = 'tray_panel.size';
 
@@ -239,7 +240,28 @@ class TrayPanelController {
   }
 
   Future<void> dispose() async {
+    final controller = _controller;
     _controller = null;
+    _visible = false;
+    if (controller == null) {
+      return;
+    }
+    // The panel is a separate top-level window with its own Flutter engine,
+    // so the only way to take it down is to ask it to close itself. Without
+    // this the engine outlives the main window and process shutdown waits on
+    // it, which is the stall after "退出".
+    //
+    // The reply is best-effort. Asking the panel to close also tears down the
+    // isolate that has to send the reply, so a panel that dies fast enough
+    // never answers at all. Waiting on that reply unconditionally would hang
+    // the exit path on a Future that cannot complete.
+    try {
+      await controller
+          .invokeMethod<void>(destroyMethod)
+          .timeout(const Duration(milliseconds: 800), onTimeout: () => null);
+    } catch (_) {
+      // The panel is already gone; nothing left to close.
+    }
   }
 
   Future<WindowController?> _ensureController() async {

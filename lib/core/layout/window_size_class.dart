@@ -119,8 +119,15 @@ class WindowSizeClass {
   /// Absolute dimensions are how a desktop-tuned value silently eats a phone
   /// screen: `340` cover art inside a `336dp` column overflows by 4dp and
   /// pushes the lyrics pane off. Every fixed extent must pass through here.
-  double clampDimension(double value, {required double maxRatio}) {
-    final limit = size.shortestSide * maxRatio;
+  double clampDimension(
+    double value, {
+    required double maxRatio,
+    double? maxExtent,
+  }) {
+    final ratioLimit = size.shortestSide * maxRatio;
+    final limit = maxExtent == null
+        ? ratioLimit
+        : (maxExtent < ratioLimit ? maxExtent : ratioLimit);
     return value < limit ? value : limit;
   }
 }

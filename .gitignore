@@ -55,6 +55,9 @@ android/local.properties
 # Optional materials preview sheet (`ROBYNE_PREVIEW=1 flutter test ...`)
 /test/shots/
 
+# Golden failure diffs flutter test writes on a pixel mismatch.
+/test/failures/
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile

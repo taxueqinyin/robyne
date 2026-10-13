@@ -1,21 +1,17 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/debug/ime_trace.dart';
 import '../../../core/layout/window_size_class.dart';
 import '../../../core/theme/application/theme_providers.dart';
 import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
-import '../../../shared/widgets/search_action_button.dart';
+import '../../../shared/widgets/song_actions_menu.dart';
 import '../../../shared/widgets/horizontal_wheel_scroll.dart';
 import '../../downloads/application/download_providers.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/domain/playback_item.dart';
 import '../../player/presentation/artwork_view.dart';
 import '../../plugin/application/plugin_controller.dart';
-import '../../plugin/domain/plugin_definition.dart';
 import '../application/search_controller.dart' as search_state;
 import '../domain/music_item.dart';
 
@@ -27,24 +23,6 @@ class SearchPage extends ConsumerStatefulWidget {
 }
 
 class _SearchPageState extends ConsumerState<SearchPage> {
-  late final TextEditingController _keywordController;
-
-  @override
-  void initState() {
-    super.initState();
-    _keywordController = TextEditingController(
-      text:
-          ref.read(search_state.searchControllerProvider).value?.keyword ?? '',
-    );
-    attachImeTextControllerTrace(_keywordController, 'search.keyword');
-  }
-
-  @override
-  void dispose() {
-    _keywordController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final searchValue = ref.watch(search_state.searchControllerProvider);
@@ -83,64 +61,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             style: TextStyle(fontSize: 12, color: colors.textMuted),
           ),
           const SizedBox(height: 18),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: TextField(
-                  controller: _keywordController,
-                  style: TextStyle(fontSize: 13, color: colors.textPrimary),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: true,
-                    fillColor: colors.surfaceBase,
-                    hintText: strings.resolve(ThemeStringKey.searchHint),
-                    hintStyle: TextStyle(fontSize: 13, color: colors.textMuted),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                    prefixIcon: Icon(
-                      Icons.search,
-                      size: 18,
-                      color: colors.textMuted,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(
-                        Radius.circular(tokens.radius.md),
-                      ),
-                      borderSide: BorderSide(color: colors.borderSubtle),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(
-                        Radius.circular(tokens.radius.md),
-                      ),
-                      borderSide: BorderSide(color: colors.borderSubtle),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(
-                        Radius.circular(tokens.radius.md),
-                      ),
-                      borderSide: BorderSide(
-                        color: colors.borderFocus,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  keyboardType: TextInputType.text,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (_) => _search(plugins),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SearchActionButton(
-                isSearching: state.isSearching,
-                onSearch: () => _search(plugins),
-                onCancel: () => ref
-                    .read(search_state.searchControllerProvider.notifier)
-                    .cancel(),
-              ),
-            ],
-          ),
           if (state.error != null) ...<Widget>[
             const SizedBox(height: 12),
             Text(
@@ -181,12 +101,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         ],
       ),
     );
-  }
-
-  void _search(List<PluginDefinition> plugins) {
-    final controller = ref.read(search_state.searchControllerProvider.notifier);
-    controller.updateKeyword(_keywordController.text);
-    unawaited(controller.search(plugins));
   }
 }
 
@@ -413,9 +327,8 @@ class _SearchResults extends ConsumerWidget {
           }
 
           final item = result.items[index];
-          return GestureDetector(
-            onSecondaryTapDown: (details) =>
-                _showResultMenu(context, details.globalPosition, item),
+          return SongContextMenuRegion(
+            item: PlaybackItem.fromMusicItem(item),
             // The design's track row carries the source as a chip beside the
             // title and reveals play/download on the row, rather than parking
             // them in a `ListTile` trailing slot.
@@ -430,34 +343,6 @@ class _SearchResults extends ConsumerWidget {
         },
       ),
     );
-  }
-
-  Future<void> _showResultMenu(
-    BuildContext context,
-    Offset position,
-    MusicItem item,
-  ) async {
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx,
-        position.dy,
-      ),
-      items: const <PopupMenuEntry<String>>[
-        PopupMenuItem<String>(
-          value: 'download',
-          child: ListTile(
-            leading: Icon(Icons.download),
-            title: Text('Download'),
-          ),
-        ),
-      ],
-    );
-    if (selected == 'download') {
-      onDownload(item);
-    }
   }
 }
 

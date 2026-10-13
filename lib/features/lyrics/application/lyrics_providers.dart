@@ -81,6 +81,29 @@ final currentLyricsProvider = Provider<AsyncValue<LyricDocument?>>((ref) {
   return lyrics.whenData((document) => document?.copyWith(offset: liveOffset));
 });
 
+/// Index of the line that should be highlighted, or -1 when none is active.
+///
+/// Playback reports a new position several times a second, but the highlighted
+/// line only changes when playback crosses a timestamp. Consumers that draw
+/// lyrics watch this instead of the raw position: watching the position made
+/// the whole reading column re-lay out on every tick, which read as a constant
+/// shiver over the lines already sung.
+final activeLyricIndexProvider = Provider<int>((ref) {
+  final document = ref.watch(currentLyricsProvider).value;
+  if (document == null || document.lines.isEmpty) {
+    return -1;
+  }
+  final snapshot = ref.watch(playerSnapshotsProvider).value;
+  final position = snapshot != null && snapshot.currentSource != null
+      ? snapshot.position
+      : ref.watch(
+          playerControllerProvider.select(
+            (value) => value.value?.lastPosition ?? Duration.zero,
+          ),
+        );
+  return document.activeIndex(position);
+});
+
 final desktopLyricThemeProvider = FutureProvider<DesktopLyricTheme>((
   ref,
 ) async {

@@ -56,6 +56,12 @@ Future<void> bootstrap([List<String> args = const <String>[]]) async {
 /// Snap, the taskbar thumbnail buttons) alive after `TitleBarStyle.hidden`, so
 /// the window stays a normal OS window — only the strip of chrome is gone,
 /// replaced by the buttons the skin draws in the top bar.
+///
+/// macOS is the one platform where that is not enough: the plugin makes the
+/// title bar transparent but then re-shows the three standard window buttons
+/// unless `windowButtonVisibility` is false, so the window used to open with
+/// both the system's traffic lights and the ones the top bar draws. Windows
+/// and Linux have no standard buttons and ignore the flag.
 Future<void> _configureMainWindow(MainWindowState? savedState) async {
   if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
     return;
@@ -64,6 +70,7 @@ Future<void> _configureMainWindow(MainWindowState? savedState) async {
   await windowManager.waitUntilReadyToShow(
     const WindowOptions(
       titleBarStyle: TitleBarStyle.hidden,
+      windowButtonVisibility: false,
       minimumSize: MainWindowState.minimumSize,
     ),
   );

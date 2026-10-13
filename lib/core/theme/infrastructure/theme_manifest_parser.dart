@@ -6,6 +6,7 @@ import '../domain/theme_home.dart';
 import '../domain/theme_layout.dart';
 import '../domain/theme_materials.dart';
 import '../domain/theme_navigation.dart';
+import '../domain/theme_now_playing.dart';
 import '../domain/theme_package.dart';
 import '../domain/theme_regions.dart';
 import '../domain/theme_strings.dart';
@@ -604,6 +605,9 @@ class ThemeManifestParser {
       // shape each form factor's composition independently, and the parser is
       // the only layer that sees the raw JSON.
       home: ThemeHomeLayout.parse(homeRaw),
+      // The full-window player composition. Absent means the flagship
+      // two-pane look, which is what every pre-existing skin gets.
+      nowPlaying: ThemeNowPlayingLayout.parse(raw['nowPlaying']),
     );
   }
 

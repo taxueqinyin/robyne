@@ -143,6 +143,14 @@ void main() {
         container.read(playerControllerProvider).value!.history.length,
         historyCount,
       );
+
+      // Skipping past the last queue entry in single-loop restarts at the top
+      // instead of stopping playback.
+      await controller.playNext();
+      expect(
+        container.read(playerControllerProvider).value!.currentItem?.title,
+        'A',
+      );
     },
   );
 

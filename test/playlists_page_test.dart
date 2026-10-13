@@ -131,17 +131,11 @@ void main() {
     await _pumpUi(tester);
     await tester.tap(find.text('待删歌单'));
     await _pumpUi(tester);
-    await tester.tap(find.widgetWithIcon(IconButton, Icons.close).first);
-    await _pumpUi(tester);
-    expect(find.text('Remove track'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await _pumpUi(tester);
-    expect(controller.removedItems, isEmpty);
-    expect(find.text('测试歌曲'), findsOneWidget);
-
-    await tester.tap(find.widgetWithIcon(IconButton, Icons.close).first);
-    await _pumpUi(tester);
-    await tester.tap(find.text('Remove'));
+    // The row's right-hand button removes directly, without a confirm step
+    // (the user asked for a one-tap "移出播放列表"). Re-adding is the undo.
+    await tester.tap(
+      find.widgetWithIcon(IconButton, Icons.remove_circle_outline).first,
+    );
     await _pumpUi(tester);
     expect(controller.removedItems, contains('plugin:Test:A'));
 

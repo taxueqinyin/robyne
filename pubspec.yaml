@@ -141,3 +141,13 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+  fonts:
+    # Xiaomi's MiSans, released free for commercial use. It carries the whole
+    # CJK set the UI needs, which the platform default cannot guarantee across
+    # Windows, macOS and Linux.
+    #
+    # A single variable font covers every weight, so there is no per-weight
+    # entry to keep in sync; Flutter reads the weight axis from the same file.
+    - family: MiSans
+      fonts:
+        - asset: assets/fonts/MiSansVF.ttf

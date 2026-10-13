@@ -132,6 +132,15 @@ enum ThemeStringKey {
   /// shell itself draws.
   playerCapsuleEnter('player.capsule.enter', 'Capsule mode'),
 
+  /// The frameless window's own minimise / maximise / close tooltips.
+  ///
+  /// The shell draws these because the native title bar is hidden, so they are
+  /// chrome text like any other: a skin that writes its own language should
+  /// not end up with English tooltips on the buttons it sees every session.
+  windowMinimize('window.minimize', 'Minimise'),
+  windowMaximize('window.maximize', 'Maximise'),
+  windowClose('window.close', 'Close'),
+
   /// The capsule's own close affordance: it restores the full shell.
   playerCapsuleExit('player.capsule.exit', 'Restore window'),
 
@@ -156,7 +165,7 @@ enum ThemeStringKey {
   playerLyricOffset('player.lyric.offset', 'Lyric offset'),
   playerLyricOffsetHint(
     'player.lyric.offsetHint',
-    'Drag to shift lyric timing in real time.',
+    'Turn the dial to shift timing; one turn is 10s. Scroll for 0.25s steps.',
   ),
   playerLyricsEmpty('player.lyrics.empty', 'No lyrics linked.'),
   playerLyricsDisabled(
@@ -410,6 +419,24 @@ enum ThemeStringKey {
   actionRemove('action.remove', 'Remove'),
   actionClear('action.clear', 'Clear'),
   actionCreate('action.create', 'Create'),
+
+  // The global right-click song menu. Kept here rather than in one page's
+  // private strings so search, discover, library, playlists and the player
+  // all say the same thing about the same action.
+  actionPlay('action.play', 'Play'),
+  actionPlayNext('action.playNext', 'Play next'),
+  actionAddTo('action.addTo', 'Add to'),
+  actionDownload('action.download', 'Download'),
+  actionShare('action.share', 'Share'),
+  actionDelete('action.delete', 'Delete'),
+  actionCopySongInfo('action.copySongInfo', 'Copy song info'),
+  actionCopiedSongInfo('action.copiedSongInfo', 'Song info copied'),
+  actionCopiedShareLink('action.copiedShareLink', 'Share link copied'),
+
+  // The Now Playing page's two right-click surfaces. Song actions and lyric
+  // actions are different tool sets; the user asked for them to be named.
+  nowPlayingSongMenu('nowPlaying.songMenu', 'Song actions'),
+  nowPlayingLyricMenu('nowPlaying.lyricMenu', 'Lyric actions'),
 
   // Settings surface chrome. The tab names and every row's copy are skin
   // text: a skin that ships in another language should not have to accept

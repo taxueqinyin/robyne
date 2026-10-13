@@ -53,6 +53,17 @@ class _DesktopLyricWindowAppState extends State<DesktopLyricWindowApp>
     final controller = await WindowController.fromCurrentEngine();
     _controller = controller;
     await controller.setWindowMethodHandler((call) async {
+      if (call.method == DesktopLyricWindowController.destroyMethod) {
+        // The main window is quitting. Close this window and let the engine
+        // that owns it go down with it.
+        //
+        // `windowManager.destroy()` must not be used here: it is a bare
+        // `PostQuitMessage`, which is process-wide, and this engine shares
+        // the main isolate's single message loop. Posting WM_QUIT from here
+        // kills the loop the main isolate still needs to receive this reply.
+        unawaited(windowManager.close());
+        return true;
+      }
       if (call.method != DesktopLyricWindowController.updateMethod) {
         return null;
       }

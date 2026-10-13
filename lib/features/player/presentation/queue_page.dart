@@ -7,6 +7,7 @@ import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
 import '../application/player_providers.dart';
 import '../domain/playback_item.dart';
+import '../../../shared/widgets/song_actions_menu.dart';
 import 'artwork_view.dart';
 
 class QueuePage extends ConsumerWidget {
@@ -238,15 +239,19 @@ class _QueueList extends ConsumerWidget {
       itemBuilder: (context, index) {
         final item = state.queue[index];
         final selected = item.id == state.currentItem?.id;
-        return _QueueItemRow(
+        return SongContextMenuRegion(
           item: item,
-          active: selected,
-          removeLabel: strings.resolve(ThemeStringKey.actionRemove),
-          onTap: () =>
-              ref.read(playerControllerProvider.notifier).playItem(item),
-          onRemove: () => ref
-              .read(playerControllerProvider.notifier)
-              .removeFromQueue(item.id),
+          inQueue: true,
+          child: _QueueItemRow(
+            item: item,
+            active: selected,
+            removeLabel: strings.resolve(ThemeStringKey.actionRemove),
+            onTap: () =>
+                ref.read(playerControllerProvider.notifier).playItem(item),
+            onRemove: () => ref
+                .read(playerControllerProvider.notifier)
+                .removeFromQueue(item.id),
+          ),
         );
       },
     );

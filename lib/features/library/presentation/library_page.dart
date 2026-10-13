@@ -9,6 +9,7 @@ import '../../../core/theme/infrastructure/token_resolver.dart';
 import '../../player/application/player_providers.dart';
 import '../../player/domain/playback_item.dart';
 import '../application/library_providers.dart';
+import '../../../shared/widgets/song_actions_menu.dart';
 
 /// Matches the shell breakpoint in [RobyneShell].
 const double _compactWidthBreakpoint = 700;
@@ -158,12 +159,15 @@ class LibraryPage extends ConsumerWidget {
                             SizedBox(width: metrics.cardGap),
                         itemBuilder: (context, index) {
                           final item = tracks[index];
-                          return _BannerCard(
+                          return SongContextMenuRegion(
                             item: item,
-                            width: metrics.cardMinWidth,
-                            onTap: () => ref
-                                .read(playerControllerProvider.notifier)
-                                .playItem(item),
+                            child: _BannerCard(
+                              item: item,
+                              width: metrics.cardMinWidth,
+                              onTap: () => ref
+                                  .read(playerControllerProvider.notifier)
+                                  .playItem(item),
+                            ),
                           );
                         },
                       ),
@@ -247,92 +251,100 @@ class LibraryPage extends ConsumerWidget {
                   itemBuilder: (context, index) {
                     final item = tracks[index];
                     final tokens = RobyneTheme.of(context).tokens;
-                    return InkWell(
-                      onTap: () => ref
-                          .read(playerControllerProvider.notifier)
-                          .playItem(item),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: compactRows ? 2 : 8,
-                        ),
-                        child: Row(
-                          children: <Widget>[
-                            Container(
-                              width: artworkSize,
-                              height: artworkSize,
-                              decoration: BoxDecoration(
-                                color: tokens.components.card.surface,
-                                borderRadius: BorderRadius.circular(
-                                  tokens.radius.sm,
+                    return SongContextMenuRegion(
+                      item: item,
+                      // Deleting a local row detaches it from the library
+                      // index; it does not touch the file on disk.
+                      onDelete: () => ref
+                          .read(localMusicLibraryProvider.notifier)
+                          .remove(item.id),
+                      child: InkWell(
+                        onTap: () => ref
+                            .read(playerControllerProvider.notifier)
+                            .playItem(item),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: compactRows ? 2 : 8,
+                          ),
+                          child: Row(
+                            children: <Widget>[
+                              Container(
+                                width: artworkSize,
+                                height: artworkSize,
+                                decoration: BoxDecoration(
+                                  color: tokens.components.card.surface,
+                                  borderRadius: BorderRadius.circular(
+                                    tokens.radius.sm,
+                                  ),
                                 ),
-                              ),
-                              child: Icon(
-                                Icons.music_note,
-                                size: artworkSize * 0.45,
-                                color: tokens.color.textMuted,
-                              ),
-                            ),
-                            SizedBox(width: compactRows ? 10 : 12),
-                            Expanded(
-                              flex: 4,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Text(
-                                    item.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    item.artist ?? item.localPath ?? '',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: tokens.color.textMuted,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                item.album ?? '',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
+                                child: Icon(
+                                  Icons.music_note,
+                                  size: artworkSize * 0.45,
                                   color: tokens.color.textMuted,
                                 ),
                               ),
-                            ),
-                            if (item.duration != null)
-                              Text(
-                                _formatDuration(item.duration!),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: tokens.color.textMuted,
+                              SizedBox(width: compactRows ? 10 : 12),
+                              Expanded(
+                                flex: 4,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Text(
+                                      item.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      item.artist ?? item.localPath ?? '',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: tokens.color.textMuted,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            IconButton(
-                              tooltip: 'Remove',
-                              iconSize: 16,
-                              icon: Icon(
-                                Icons.close,
-                                color: tokens.color.textMuted,
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  item.album ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: tokens.color.textMuted,
+                                  ),
+                                ),
                               ),
-                              onPressed: () => ref
-                                  .read(localMusicLibraryProvider.notifier)
-                                  .remove(item.id),
-                            ),
-                          ],
+                              if (item.duration != null)
+                                Text(
+                                  _formatDuration(item.duration!),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: tokens.color.textMuted,
+                                  ),
+                                ),
+                              IconButton(
+                                tooltip: 'Remove',
+                                iconSize: 16,
+                                icon: Icon(
+                                  Icons.close,
+                                  color: tokens.color.textMuted,
+                                ),
+                                onPressed: () => ref
+                                    .read(localMusicLibraryProvider.notifier)
+                                    .remove(item.id),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );

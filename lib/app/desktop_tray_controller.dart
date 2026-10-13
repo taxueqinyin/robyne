@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../core/theme/domain/theme_strings.dart';
 import '../core/theme/application/theme_providers.dart';
+import '../features/lyrics/application/desktop_lyric_window_controller.dart';
 import '../features/player/application/player_providers.dart';
 import '../features/player/domain/playback_item.dart';
 import '../features/playlists/application/playlist_providers.dart';
@@ -43,6 +44,14 @@ BuildContext? _trayRootContext;
 void registerTrayRootContext(BuildContext context) {
   _trayRootContext = context;
 }
+
+/// How long the exit path waits on a secondary window before giving up on it.
+///
+/// Asking a peer engine to close also tears down the isolate that has to
+/// answer, so a window that dies quickly never sends its reply. Every await
+/// on a peer window needs this ceiling or the exit hangs on a Future that
+/// cannot complete.
+const Duration _peerShutdownBudget = Duration(milliseconds: 800);
 
 class DesktopTrayController with TrayListener, WindowListener {
   DesktopTrayController(this._ref);
@@ -487,22 +496,40 @@ class DesktopTrayController with TrayListener, WindowListener {
       return;
     }
     _closing = true;
-    await _ref.read(mainWindowControllerProvider).persistNow();
+    await _guarded(() => _ref.read(mainWindowControllerProvider).persistNow());
+    // Secondary engines are closed before the main window goes down. Each
+    // peer owns its own Flutter engine on this message loop, and closing the
+    // main window first leaves those engines to be torn down by process
+    // shutdown instead of in an orderly way.
+    await _guarded(() => _panel?.dispose() ?? Future<void>.value());
+    await _guarded(_closeDesktopLyrics);
+    await _guarded(trayManager.destroy);
+    await _guarded(() => windowManager.setPreventClose(false));
+    await _guarded(() => windowManager.close());
+    // Every await above is bounded, so reaching here means the graceful path
+    // ran to the end. `windowManager.close()` only posts WM_CLOSE at the main
+    // window; the message loop that has to deliver it is this isolate's, and
+    // any engine still alive on it can keep the process from winding down.
+    // Exit unconditionally rather than only when a step throws.
+    exit(0);
+  }
+
+  /// Runs a shutdown step that must never stall the exit path.
+  ///
+  /// Peer windows are the reason for the timeout: asking one to close tears
+  /// down the isolate that has to answer, so a fast death yields no reply.
+  Future<void> _guarded(Future<void> Function() step) async {
     try {
-      await _panel?.dispose();
-      await trayManager.destroy();
-    } catch (_) {}
-    try {
-      // The close is intercepted for the tray decision, so it has to be
-      // released before the programmatic close can reach WM_DESTROY.
-      // `destroy()` calls `PostQuitMessage` directly, while child Flutter
-      // windows are still attached to this message loop. Closing the
-      // top-level window lets Windows unwind each engine in the normal order.
-      await windowManager.setPreventClose(false);
-      await windowManager.close();
+      await step().timeout(_peerShutdownBudget, onTimeout: () => null);
     } catch (_) {
-      exit(0);
+      // A failed shutdown step still leaves the remaining ones to run.
     }
+  }
+
+  /// Closes the desktop lyric window's engine, which outlives the main window
+  /// otherwise and makes process shutdown wait on a third engine.
+  Future<void> _closeDesktopLyrics() async {
+    await _ref.read(desktopLyricWindowControllerProvider).dispose();
   }
 
   Future<void> dispose() async {

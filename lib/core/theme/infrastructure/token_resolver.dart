@@ -279,10 +279,23 @@ class TokenResolver {
       chipTheme: ChipThemeData(
         backgroundColor: c.surfaceBase,
         selectedColor: comp.list.itemSelected,
-        checkmarkColor: comp.navBar.selectedItem,
+        // `itemSelected` is a surface token, and a light skin may set it to a
+        // near-black (the flagship's is #2E211D). The label ink and the
+        // checkmark are therefore both resolved against that fill, so a
+        // selected chip never ends up dark-on-dark.
+        checkmarkColor: contrastOn(comp.list.itemSelected),
         deleteIconColor: c.textMuted,
+        // `ChoiceChip` swaps in `secondaryLabelStyle` as its label when it is
+        // selected (choice_chip.dart), so the selected ink is declared here —
+        // against the fill the chip paints, not the page's text colour.
+        // The same luminance rule the checkmark uses decides it: a dark
+        // selected fill (the flagship's is #2E211D) must carry light ink, and
+        // `textPrimary` is dark in exactly the skins that pick a dark fill.
         labelStyle: TextStyle(color: c.textSecondary, fontSize: 12),
-        secondaryLabelStyle: TextStyle(color: c.textPrimary, fontSize: 12),
+        secondaryLabelStyle: TextStyle(
+          color: contrastOn(comp.list.itemSelected),
+          fontSize: 12,
+        ),
         side: BorderSide(color: c.borderDefault),
         shape: fullShape,
       ),

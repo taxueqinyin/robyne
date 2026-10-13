@@ -1310,24 +1310,37 @@ class _TopBarState extends ConsumerState<_TopBar> {
                           horizontal: 12,
                           vertical: 8,
                         ),
-                        prefix: IconButton(
-                          key: const Key('topbar-search-submit'),
-                          tooltip: ref
-                              .watch(activeThemeStringsProvider)
-                              .resolve(ThemeStringKey.searchAction),
-                          onPressed: () => _search(plugins),
-                          padding: EdgeInsets.zero,
-                          iconSize: 18,
-                          icon: ThemeIconView(
-                            slot: ThemeIconKey.search,
-                            fallback: Icons.search,
-                            size: 18,
-                            color: colors.textMuted,
-                          ),
-                        ),
+                        // The submit button trails the field rather than
+                        // leading it: the pill reads left-to-right as "what
+                        // am I searching for" and then "go", and the `Ctrl K`
+                        // hint belongs beside the text, not beside the button.
                         suffix: Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: _CtrlKHint(colors: colors, tokens: tokens),
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              _CtrlKHint(colors: colors, tokens: tokens),
+                              IconButton(
+                                key: const Key('topbar-search-submit'),
+                                tooltip: ref
+                                    .watch(activeThemeStringsProvider)
+                                    .resolve(ThemeStringKey.searchAction),
+                                onPressed: () => _search(plugins),
+                                padding: EdgeInsets.zero,
+                                iconSize: 18,
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 28,
+                                  height: 28,
+                                ),
+                                icon: ThemeIconView(
+                                  slot: ThemeIconKey.search,
+                                  fallback: Icons.search,
+                                  size: 18,
+                                  color: colors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         suffixConstraints: const BoxConstraints(
                           minHeight: 0,
@@ -1393,17 +1406,17 @@ class _WindowControls extends ConsumerWidget {
         ),
         WindowControlButton(
           icon: Icons.horizontal_rule,
-          tooltip: '最小化',
+          tooltip: strings.resolve(ThemeStringKey.windowMinimize),
           onPressed: () => unawaited(windowManager.minimize()),
         ),
         WindowControlButton(
           icon: Icons.crop_square,
-          tooltip: '最大化',
+          tooltip: strings.resolve(ThemeStringKey.windowMaximize),
           onPressed: () => unawaited(_toggleMaximize()),
         ),
         WindowControlButton(
           icon: Icons.close,
-          tooltip: '关闭',
+          tooltip: strings.resolve(ThemeStringKey.windowClose),
           destructive: true,
           onPressed: () => unawaited(
             ref.read(desktopTrayControllerProvider).onTitleBarClose(),
@@ -2890,7 +2903,7 @@ class _QueueTab extends StatelessWidget {
   }
 }
 
-class _QueueRow extends StatelessWidget {
+class _QueueRow extends ConsumerWidget {
   const _QueueRow({
     required this.item,
     required this.active,
@@ -2902,10 +2915,11 @@ class _QueueRow extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = RobyneTheme.of(context).tokens;
     final colors = tokens.color;
     final accent = _queueAccent(item.id);
+    final strings = ref.watch(activeThemeStringsProvider);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(tokens.radius.sm),
@@ -2995,6 +3009,26 @@ class _QueueRow extends StatelessWidget {
                 _formatQueueDuration(item.duration!),
                 style: TextStyle(fontSize: 10, color: colors.textMuted),
               ),
+            // Every queue row carries its own remove control: "take this one
+            // out" is the action a queue is asked for most, and burying it in
+            // the right-click menu made it read as missing.
+            SizedBox(
+              width: 26,
+              height: 26,
+              child: IconButton(
+                key: ValueKey<String>('queue-row-remove-${item.id}'),
+                padding: EdgeInsets.zero,
+                iconSize: 14,
+                tooltip: strings.resolve(ThemeStringKey.actionRemove),
+                onPressed: () => ref
+                    .read(playerControllerProvider.notifier)
+                    .removeFromQueue(item.id),
+                icon: Icon(
+                  Icons.remove_circle_outline,
+                  color: colors.textMuted,
+                ),
+              ),
+            ),
           ],
         ),
       ),

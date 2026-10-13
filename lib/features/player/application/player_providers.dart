@@ -38,6 +38,26 @@ final queuePanelVisibleProvider = NotifierProvider<QueuePanelNotifier, bool?>(
   QueuePanelNotifier.new,
 );
 
+/// Whether the queue overlay inside the immersive player is open.
+///
+/// Deliberately separate from [queuePanelVisibleProvider]: that one drives the
+/// *shell's* docked panel, which on desktop is always on and which the player
+/// overlay covers. Sharing it meant the player's queue button wrote a flag the
+/// user could not see change, so the button read as broken.
+final nowPlayingQueueOpenProvider =
+    NotifierProvider<NowPlayingQueueOpenNotifier, bool>(
+      NowPlayingQueueOpenNotifier.new,
+    );
+
+class NowPlayingQueueOpenNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void toggle() => state = !state;
+
+  void close() => state = false;
+}
+
 class QueuePanelNotifier extends Notifier<bool?> {
   @override
   bool? build() {
@@ -848,7 +868,21 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
   }
 
   /// Replaces the queue with [items] and starts the first one.
-  Future<void> replaceQueueWithItems(List<PlaybackItem> items) async {
+  /// Keeps [currentItem] playing when it is still in [items]; otherwise the
+  /// first entry takes over.
+  ///
+  /// "Play next" rewrites the whole queue, and defaulting to `items.first`
+  /// made it jump to the top of the list instead of inserting after the
+  /// current track — the queue was right, the song was wrong.
+  ///
+  /// A surviving [currentItem] is re-installed *without* reloading its source:
+  /// [_playQueue] used to start it over from 0:00, so "play next" cut the
+  /// playing song back to its first second. The track keeps playing; only the
+  /// list behind it changes. See [insertAfterCurrent].
+  Future<void> replaceQueueWithItems(
+    List<PlaybackItem> items, {
+    PlaybackItem? currentItem,
+  }) async {
     await future;
     if (!ref.mounted) {
       return;
@@ -859,11 +893,84 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
     if (next.isEmpty) {
       return;
     }
-    await stop();
-    if (!ref.mounted) {
+    final preferred = currentItem;
+    final kept = preferred == null
+        ? null
+        : next
+              .where((item) => item.id == preferred.id)
+              .cast<PlaybackItem?>()
+              .firstOrNull;
+    if (kept != null) {
+      _installQueue(next, kept);
       return;
     }
     await _playQueue(next, currentItem: next.first);
+  }
+
+  /// Puts [item] directly behind whatever is playing.
+  ///
+  /// The whole point of "play next" is that the current song is not disturbed,
+  /// so an item lands at `currentIndex + 1` in the *existing* queue and
+  /// playback is left untouched. There is nothing to reload, seek or stop:
+  /// only the list moves. With an empty queue the item is the queue, so normal
+  /// start-of-playback rules apply.
+  Future<void> insertAfterCurrent(PlaybackItem item) async {
+    await future;
+    if (!ref.mounted || item.id.isEmpty) {
+      return;
+    }
+    final current = _current;
+    final playing = current.currentItem;
+    if (playing == null) {
+      await _playQueue(<PlaybackItem>[item], currentItem: item);
+      return;
+    }
+    // Queueing the song that is already playing would insert a duplicate
+    // behind itself; it is already what the transport will move to next.
+    if (item.id == playing.id) {
+      return;
+    }
+    // Re-queueing an item that is already in the list moves it instead of
+    // growing a second copy, so the state after two identical requests is the
+    // same as after one.
+    final without = current.queue
+        .where((candidate) => candidate.id != item.id)
+        .toList();
+    final anchor = without.indexWhere(
+      (candidate) => candidate.id == playing.id,
+    );
+    final insertAt = anchor < 0 ? without.length : anchor + 1;
+    without.insert(insertAt, item);
+    await installQueueAndKeepPlaying(without, playing);
+  }
+
+  /// Persists [queue] with [currentItem] still selected, leaving the audio
+  /// engine alone.
+  ///
+  /// [playItem] is the right call when a song has to *start*; it is the wrong
+  /// call when the song is already playing, because it stops and reloads the
+  /// source at 0:00. Every queue edit that preserves the current track goes
+  /// through here so "did listening change" and "did the list change" stay
+  /// separate.
+  ///
+  /// The belt-and-braces guard is deliberate: a caller that reaches for
+  /// [playItem] after an insert is a regression waiting to happen, and the
+  /// engine's own completion listener would otherwise race it. If the
+  /// snapshot reports completion before the state lands, the controller
+  /// plays the next track instead of restarting the one the user hears.
+  void _installQueue(List<PlaybackItem> queue, PlaybackItem currentItem) {
+    _setData(_current.copyWith(queue: queue, currentItem: currentItem));
+  }
+
+  Future<void> installQueueAndKeepPlaying(
+    List<PlaybackItem> queue,
+    PlaybackItem currentItem,
+  ) async {
+    _installQueue(queue, currentItem);
+    final snapshot = ref.read(audioPlayerServiceProvider).snapshot;
+    if (snapshot.completed && snapshot.currentSource != null) {
+      await playNext();
+    }
   }
 
   /// Installs [queue] and plays [currentItem] from it.
@@ -1123,7 +1230,9 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
       PlaybackMode.allLoop => queue[(index + 1) % queue.length],
       PlaybackMode.singleLoop =>
         manual
-            ? (index >= 0 && index < queue.length - 1 ? queue[index + 1] : null)
+            ? (index >= 0 && index < queue.length - 1
+                  ? queue[index + 1]
+                  : queue.first)
             : current.currentItem,
       PlaybackMode.random => _randomNext(queue, index),
     };
@@ -1141,28 +1250,123 @@ class PlayerController extends AsyncNotifier<PlayerControllerState> {
         .read(playbackRandomProvider)
         .nextInt(candidates.length)];
   }
+}
 
-  Duration _stableDuration({
-    required Duration snapshotDuration,
-    required Duration savedDuration,
-  }) {
-    if (snapshotDuration <= Duration.zero) {
-      return savedDuration;
-    }
-    if (savedDuration <= Duration.zero) {
-      return snapshotDuration;
-    }
-    final difference = (snapshotDuration - savedDuration).abs();
-    if (difference == Duration.zero) {
-      return savedDuration;
-    }
-    if (difference <= const Duration(seconds: 2)) {
-      if (snapshotDuration > savedDuration) {
-        return savedDuration;
-      }
-      final adjusted = savedDuration - const Duration(seconds: 1);
-      return adjusted > snapshotDuration ? adjusted : snapshotDuration;
-    }
+/// Reconciles a freshly reported duration with the one already known.
+///
+/// Codecs report a provisional total before the whole file has been parsed, and
+/// the first figure can be off by a second or two. Adopting it verbatim made
+/// the total visibly shrink a moment after playback started, so a small
+/// disagreement keeps the remembered value and only a large one wins.
+Duration _stableDuration({
+  required Duration snapshotDuration,
+  required Duration savedDuration,
+}) {
+  if (snapshotDuration <= Duration.zero) {
+    return savedDuration;
+  }
+  if (savedDuration <= Duration.zero) {
     return snapshotDuration;
   }
+  final difference = (snapshotDuration - savedDuration).abs();
+  if (difference == Duration.zero) {
+    return savedDuration;
+  }
+  if (difference <= const Duration(seconds: 2)) {
+    if (snapshotDuration > savedDuration) {
+      return savedDuration;
+    }
+    final adjusted = savedDuration - const Duration(seconds: 1);
+    return adjusted > snapshotDuration ? adjusted : snapshotDuration;
+  }
+  return snapshotDuration;
+}
+
+/// The scrubber's displayed position and duration, resolved once for everyone.
+///
+/// Two surfaces draw a progress bar (the player bar and the immersive player)
+/// and they must not disagree. They also must not each re-derive it: the
+/// immersive player used to, and opening it showed a full bar over a 00:00
+/// total because it trusted a snapshot the player had not seeked yet.
+///
+/// The rule is the player bar's, generalised: while a restore is pending — no
+/// source loaded yet, or a restore target is still set — the *remembered*
+/// position and duration are what the user should see, because that is the
+/// point playback is about to resume from. Once the source is live the
+/// snapshot takes over, with the duration stabilised so a codec's early report
+/// does not visibly shrink the total.
+final playbackProgressProvider = Provider<PlaybackProgress>((ref) {
+  final snapshot = ref.watch(playerSnapshotsProvider).value;
+  final state = ref.watch(playerControllerProvider).value;
+
+  final hasLoadedSource = snapshot?.currentSource != null;
+  final restoreTarget = state?.restoreTargetPosition ?? Duration.zero;
+  final restorePending = !hasLoadedSource || restoreTarget > Duration.zero;
+  final restoredDuration = _restoredDuration(
+    itemDuration: state?.currentItem?.duration,
+    lastDuration: state?.lastDuration ?? Duration.zero,
+  );
+  final stableDuration = _stableDuration(
+    snapshotDuration: snapshot?.duration ?? Duration.zero,
+    savedDuration: restoredDuration,
+  );
+  final duration = restorePending && restoredDuration > Duration.zero
+      ? restoredDuration
+      : hasLoadedSource && stableDuration > Duration.zero
+      ? stableDuration
+      : restoredDuration;
+  final position = restorePending
+      ? state?.lastPosition ?? Duration.zero
+      : snapshot?.position ?? Duration.zero;
+  final max = duration.inMilliseconds <= 0
+      ? 1.0
+      : duration.inMilliseconds.toDouble();
+
+  return PlaybackProgress(
+    position: Duration(
+      milliseconds: position.inMilliseconds.clamp(0, max.toInt()),
+    ),
+    duration: duration,
+    max: max,
+    playing: snapshot?.playing == true,
+  );
+});
+
+/// What a progress bar should show; see [playbackProgressProvider].
+class PlaybackProgress {
+  const PlaybackProgress({
+    required this.position,
+    required this.duration,
+    required this.max,
+    required this.playing,
+  });
+
+  final Duration position;
+  final Duration duration;
+
+  /// The slider's own maximum, which never reaches zero so a bar over an
+  /// unknown total cannot render as full.
+  final double max;
+  final bool playing;
+}
+
+/// The duration to show while a restore is pending.
+///
+/// The item's own duration is preferred, but it is absent on a plugin track
+/// that has not been probed yet, so the last known duration stands in. When
+/// both are present they are reconciled the same way a live snapshot is.
+Duration _restoredDuration({
+  required Duration? itemDuration,
+  required Duration lastDuration,
+}) {
+  if (itemDuration == null || itemDuration <= Duration.zero) {
+    return lastDuration;
+  }
+  if (lastDuration <= Duration.zero) {
+    return itemDuration;
+  }
+  return _stableDuration(
+    snapshotDuration: lastDuration,
+    savedDuration: itemDuration,
+  );
 }

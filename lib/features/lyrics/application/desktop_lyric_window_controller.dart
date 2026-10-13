@@ -130,6 +130,7 @@ class DesktopLyricPayload {
 
 class DesktopLyricWindowController {
   static const updateMethod = 'desktop_lyric.update';
+  static const destroyMethod = 'desktop_lyric.destroy';
   static const _retryCount = 6;
   static const _retryGap = Duration(milliseconds: 180);
 
@@ -199,6 +200,28 @@ class DesktopLyricWindowController {
         }
         await Future<void>.delayed(_retryGap);
       }
+    }
+  }
+
+  /// Closes the lyric window's engine so it does not outlive the main window.
+  ///
+  /// The reply is best-effort for the same reason the tray panel's is: the
+  /// peer has to close itself, and closing it tears down the isolate that
+  /// would answer. Dropping the handle keeps a stalled lyric engine from
+  /// blocking the exit path.
+  Future<void> dispose() async {
+    final controller = _controller;
+    _controller = null;
+    _visible = false;
+    if (controller == null) {
+      return;
+    }
+    try {
+      await controller
+          .invokeMethod<void>(destroyMethod)
+          .timeout(const Duration(milliseconds: 800), onTimeout: () => null);
+    } catch (_) {
+      // The lyric window is already gone; nothing left to close.
     }
   }
 }

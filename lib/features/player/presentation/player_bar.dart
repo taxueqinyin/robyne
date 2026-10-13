@@ -59,33 +59,13 @@ class PlayerBar extends ConsumerWidget {
     final error = playerState?.error;
     final hasLoadedSource = snapshot?.currentSource != null;
     final hasRestoredItem = playerState?.currentItem != null;
-    final restoreTarget = playerState?.restoreTargetPosition ?? Duration.zero;
-    final useRestoredPlaybackState =
-        !hasLoadedSource || restoreTarget > Duration.zero;
-    final snapshotDuration = snapshot?.duration ?? Duration.zero;
-    final restoredDuration = _restoredDuration(
-      itemDuration: playerState?.currentItem?.duration,
-      lastDuration: playerState?.lastDuration ?? Duration.zero,
-    );
-    final stableDuration = _stableDuration(
-      snapshotDuration: snapshotDuration,
-      savedDuration: restoredDuration,
-    );
-    final duration =
-        useRestoredPlaybackState && restoredDuration > Duration.zero
-        ? restoredDuration
-        : hasLoadedSource && stableDuration > Duration.zero
-        ? stableDuration
-        : restoredDuration;
-    final position = useRestoredPlaybackState
-        ? playerState?.lastPosition ?? Duration.zero
-        : snapshot?.position ?? Duration.zero;
-    final maxPosition = duration.inMilliseconds <= 0
-        ? 1.0
-        : duration.inMilliseconds.toDouble();
-    final currentPosition = position.inMilliseconds
-        .clamp(0, maxPosition.toInt())
-        .toDouble();
+    // Resolved in one place now, because the immersive player draws the same
+    // bar and the two used to disagree. See [playbackProgressProvider].
+    final progress = ref.watch(playbackProgressProvider);
+    final duration = progress.duration;
+    final position = progress.position;
+    final maxPosition = progress.max;
+    final currentPosition = position.inMilliseconds.toDouble();
     if (_tracePlayerBar) {
       debugPrint(
         '[ROBYNE_PLAYER_TRACE] PlayerBar '
@@ -437,43 +417,6 @@ class PlayerBar extends ConsumerWidget {
 
   String _formatPosition(Duration position, Duration duration) {
     return '${_formatElapsed(position)} / ${_formatTotalDuration(duration)}';
-  }
-
-  Duration _restoredDuration({
-    required Duration? itemDuration,
-    required Duration lastDuration,
-  }) {
-    if (itemDuration == null || itemDuration <= Duration.zero) {
-      return lastDuration;
-    }
-    if (lastDuration <= Duration.zero) {
-      return itemDuration;
-    }
-    return _stableDuration(
-      snapshotDuration: lastDuration,
-      savedDuration: itemDuration,
-    );
-  }
-
-  Duration _stableDuration({
-    required Duration snapshotDuration,
-    required Duration savedDuration,
-  }) {
-    if (savedDuration <= Duration.zero || snapshotDuration <= Duration.zero) {
-      return snapshotDuration;
-    }
-    final difference = (snapshotDuration - savedDuration).abs();
-    if (difference == Duration.zero) {
-      return savedDuration;
-    }
-    if (difference <= const Duration(seconds: 2)) {
-      if (snapshotDuration > savedDuration) {
-        return savedDuration;
-      }
-      final adjusted = savedDuration - const Duration(seconds: 1);
-      return adjusted > snapshotDuration ? adjusted : snapshotDuration;
-    }
-    return snapshotDuration;
   }
 
   String _formatElapsed(Duration duration) {
