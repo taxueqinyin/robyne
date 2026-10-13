@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,6 +67,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          baseThemePackageProvider.overrideWithValue(xuanFixture()),
           audioPlayerServiceProvider.overrideWithValue(
             _FakeAudio(
               const PlayerSnapshot(
@@ -107,6 +110,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          baseThemePackageProvider.overrideWithValue(xuanFixture()),
           audioPlayerServiceProvider.overrideWithValue(
             _FakeAudio(
               const PlayerSnapshot(
@@ -137,18 +141,57 @@ void main() {
     expect(_lyricIsActive(tester, 'line 20'), isTrue);
     expect(find.text('line 30'), findsNothing);
 
-    await tester.tap(find.byTooltip('More'));
+    // The per-track menu no longer sits inline on the page: the lyric region
+    // owns its own right-click menu, which is where the offset control lives.
+    // The active line is drawn several times — blurred glow passes under the
+    // ink — so the finder matches more than one copy.
+    final lyricCentre = tester.getCenter(find.text('line 20').first);
+    final gesture = await tester.startGesture(
+      lyricCentre,
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await gesture.up();
     await tester.pumpAndSettle();
 
-    expect(find.text('Lyric offset'), findsOneWidget);
-    tester
-        .widget<Slider>(find.byKey(const Key('lyric-offset-slider')))
-        .onChanged
-        ?.call(10000);
+    expect(find.text('歌词相关功能'), findsOneWidget);
+    // The flagship skin names the control in its own language, so the
+    // assertion follows the skin rather than the neutral default.
+    expect(find.text('歌词偏移'), findsOneWidget);
+    // The offset control is a dial: one full revolution is 10s. Dragging
+    // around the hub is the real interaction, so the test sweeps the pointer
+    // along the rim rather than poking a widget's callback.
+    await _sweepDial(tester, turns: 1);
     await tester.pumpAndSettle();
 
     expect(_lyricIsActive(tester, 'line 30'), isTrue);
   });
+}
+
+/// Drags a pointer around the offset dial [turns] times.
+///
+/// The dial integrates angle deltas, so the sweep has to walk the rim in small
+/// steps: a straight `drag` would cut across the hub where the angle is
+/// undefined and would not accumulate a full turn.
+Future<void> _sweepDial(WidgetTester tester, {required int turns}) async {
+  final dialCentre = tester.getCenter(
+    find.byKey(const Key('lyric-offset-dial')),
+  );
+  const radius = 48.0;
+  const steps = 36;
+  Offset at(double fraction) {
+    final angle = fraction * 2 * math.pi;
+    return dialCentre + Offset(math.sin(angle), -math.cos(angle)) * radius;
+  }
+
+  final gesture = await tester.startGesture(at(0));
+  for (var turn = 0; turn < turns; turn++) {
+    for (var step = 1; step <= steps; step++) {
+      await gesture.moveTo(at(turn + step / steps));
+      await tester.pump();
+    }
+  }
+  await gesture.up();
 }
 
 String _lrcLines(int count) {
@@ -159,13 +202,18 @@ String _lrcLines(int count) {
 }
 
 bool _lyricIsActive(WidgetTester tester, String text) {
-  final context = tester.element(find.text(text));
-  // Stage 2 moved lyric colour out of Material's fixed colour roles and into
-  // the skin's component token, so the assertion reads the same contract the
-  // UI does.
-  final tokens = RobyneTheme.of(context).tokens;
-  return DefaultTextStyle.of(context).style.color ==
-      tokens.components.lyric.activeLine;
+  // The active line is painted as several stacked copies (blurred glow passes
+  // plus the ink), so the finder matches all of them. The ink copy is the one
+  // whose colour is the resolved lyric colour.
+  final tokens = RobyneTheme.of(tester.element(find.text(text).first)).tokens;
+  return find
+      .text(text)
+      .evaluate()
+      .any(
+        (element) =>
+            DefaultTextStyle.of(element).style.color ==
+            tokens.components.lyric.activeLine,
+      );
 }
 
 class _SeededPlayerController extends PlayerController {

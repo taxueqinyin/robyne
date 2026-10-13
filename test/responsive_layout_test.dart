@@ -369,12 +369,12 @@ void main() {
     );
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(
-      location: tester.getCenter(find.byType(NowPlayingPage)),
-    );
-    await mouse.moveTo(
-      tester.getCenter(find.byType(NowPlayingPage)) + const Offset(1, 1),
-    );
+    // The chrome bands are the only hover surfaces: the top controls sit in
+    // the window's top edge, so the pointer has to land inside that 40dp row
+    // for the chrome to appear. The page's centre is the lyrics, which must
+    // not hold the chrome up.
+    await mouse.addPointer(location: const Offset(1200, 20));
+    await mouse.moveTo(const Offset(1201, 21));
     await tester.pump();
     expect(
       tester
