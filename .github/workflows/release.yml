@@ -79,11 +79,15 @@ jobs:
       - name: Verify the APK is signed with the release key
         if: ${{ vars.SIGN_ANDROID == 'true' }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           apk="build/app/outputs/flutter-apk/app-release.apk"
-          dn=$("$ANDROID_HOME/build-tools/"*/apksigner verify --print-certs "$apk" \
-            | grep 'certificate DN:' | head -1)
-          echo "Signer: $dn"
+          # Pick exactly one apksigner. A glob over build-tools/* expands to
+          # every installed version and hands the extra paths to apksigner as
+          # arguments, which it rejects with "Unsupported command".
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          echo "Using $apksigner"
+          dn=$("$apksigner" verify --print-certs "$apk" | grep 'certificate DN:' | head -1 || true)
+          echo "Signer: ${dn:-<none>}"
           if [ -z "$dn" ]; then
             echo "::error::Could not read the APK's signing certificate."
             exit 1
