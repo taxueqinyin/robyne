@@ -58,7 +58,9 @@ void main() {
     expect(rows, findsNWidgets(4));
   });
 
-  testWidgets('the desktop header offers the plugin browser', (tester) async {
+  testWidgets('the discover tab is the first-level catalogue page', (
+    tester,
+  ) async {
     tester.view.physicalSize =
         const Size(1280, 900) * tester.view.devicePixelRatio;
     addTearDown(tester.view.resetPhysicalSize);
@@ -73,18 +75,18 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    // The entry is the explore icon in the home header. Tapping it swaps the
-    // home page for the plugin browser without leaving the Discover tab.
+    // Rankings and hot playlists are the destination itself now, not a
+    // second-level browser behind a header pill.
+    expect(find.byType(DiscoverPage), findsOneWidget);
+    expect(find.text('排行榜'), findsOneWidget);
+    expect(find.text('热门歌单'), findsOneWidget);
     final strings = ProviderScope.containerOf(
       tester.element(find.byType(RobyneShell)),
     ).read(activeThemeStringsProvider);
-    final entry = find.byTooltip(strings.resolve(ThemeStringKey.discoverMore));
-    expect(entry, findsOneWidget);
-    await tester.tap(entry);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.byType(DiscoverPage), findsOneWidget);
+    expect(
+      find.byTooltip(strings.resolve(ThemeStringKey.discoverMore)),
+      findsNothing,
+    );
   });
 
   testWidgets('the queue toggle opens the queue drawer on a phone', (

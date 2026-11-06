@@ -45,10 +45,27 @@ class CollectionPlayController {
     return action;
   }
 
-  /// Applies a caller-resolved [action] to already-loaded [tracks].
-  Future<void> apply(List<MusicItem> tracks, PlaylistOpenAction action) async {
-    await _apply(null, tracks, action);
+  /// Applies a caller-resolved [action] to already-loaded collection tracks.
+  /// Local playlists use [applyPlaybackItems] with their persisted items.
+  Future<void> applyMusicItems(
+    List<MusicItem> tracks,
+    PlaylistOpenAction action,
+  ) async {
+    await _applyPlaybackItems(
+      tracks.map(PlaybackItem.fromMusicItem).toList(growable: false),
+      action,
+    );
   }
+
+  Future<void> applyPlaybackItems(
+    List<PlaybackItem> items,
+    PlaylistOpenAction action,
+  ) async {
+    await _applyPlaybackItems(items, action);
+  }
+
+  Future<void> apply(List<MusicItem> tracks, PlaylistOpenAction action) =>
+      applyMusicItems(tracks, action);
 
   /// Pins [action] so later plays skip the dialog.
   Future<void> remember(PlaylistOpenAction action) async {
@@ -57,14 +74,21 @@ class CollectionPlayController {
         .setPlaylistOpenAction(action);
   }
 
+  /// The pinned answer, or `null` when the user still has to be asked.
+  Future<PlaylistOpenAction?> resolveAction() => _resolveAction();
+
   Future<void> _apply(
     OnlineCollectionItem? collection,
     List<MusicItem> tracks,
     PlaylistOpenAction action,
   ) async {
-    final items = tracks
-        .map(PlaybackItem.fromMusicItem)
-        .toList(growable: false);
+    await applyMusicItems(tracks, action);
+  }
+
+  Future<void> _applyPlaybackItems(
+    List<PlaybackItem> items,
+    PlaylistOpenAction action,
+  ) async {
     final player = _ref.read(playerControllerProvider.notifier);
     switch (action) {
       case PlaylistOpenAction.append:

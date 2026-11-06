@@ -64,9 +64,35 @@ class PlaylistController extends AsyncNotifier<List<MusicPlaylist>> {
     return ref.watch(playlistRepositoryProvider).listPlaylists();
   }
 
+  /// Applies a mutation result to the already-loaded snapshot.
+  ///
+  /// A reload is only needed before the first build or after an error. Keeping
+  /// the other playlists and their decoded tracks intact is what makes a
+  /// favourite toggle or one-row deletion cheap on large libraries.
+  void _patch(
+    List<MusicPlaylist> Function(List<MusicPlaylist> playlists) patch,
+  ) {
+    final current = state;
+    if (current case AsyncData<List<MusicPlaylist>>(:final value)) {
+      state = AsyncData<List<MusicPlaylist>>(patch(value));
+    } else {
+      ref.invalidateSelf();
+    }
+  }
+
+  List<MusicPlaylist> _replace(
+    List<MusicPlaylist> playlists,
+    String id,
+    MusicPlaylist Function(MusicPlaylist playlist) update,
+  ) {
+    return <MusicPlaylist>[
+      for (final playlist in playlists)
+        if (playlist.id == id) update(playlist) else playlist,
+    ];
+  }
+
   Future<void> createPlaylist(String name) async {
-    await ref.read(playlistRepositoryProvider).createPlaylist(name);
-    ref.invalidateSelf();
+    await createImportedPlaylist(name: name, items: const <PlaybackItem>[]);
   }
 
   Future<String> createImportedPlaylist({
@@ -74,17 +100,63 @@ class PlaylistController extends AsyncNotifier<List<MusicPlaylist>> {
     required List<PlaybackItem> items,
     String? id,
     DateTime? createdAt,
+    String description = '',
+    String? coverUrl,
   }) async {
-    final playlistId = await ref
-        .read(playlistRepositoryProvider)
-        .createImportedPlaylist(
-          name: name,
-          items: items,
-          id: id,
-          createdAt: createdAt,
-        );
-    ref.invalidateSelf();
+    final repository = ref.read(playlistRepositoryProvider);
+    final playlistId = await repository.createImportedPlaylist(
+      name: name,
+      items: items,
+      id: id,
+      createdAt: createdAt,
+      description: description,
+      coverUrl: coverUrl,
+    );
+    final created = MusicPlaylist(
+      id: playlistId,
+      name: name.trim().isEmpty ? 'New playlist' : name.trim(),
+      description: description.trim(),
+      coverUrl: _trimmedOrNull(coverUrl),
+      isFavorites: false,
+      items: List<PlaybackItem>.unmodifiable(items),
+    );
+    _patch(
+      (playlists) => <MusicPlaylist>[
+        ...playlists.where((playlist) => playlist.id != playlistId),
+        created,
+      ],
+    );
     return playlistId;
+  }
+
+  Future<void> updatePlaylistInfo(
+    String id, {
+    required String name,
+    required String description,
+    String? coverUrl,
+  }) async {
+    final normalizedName = name.trim().isEmpty ? 'New playlist' : name.trim();
+    final normalizedDescription = description.trim();
+    final normalizedCover = _trimmedOrNull(coverUrl);
+    await ref
+        .read(playlistRepositoryProvider)
+        .updatePlaylistInfo(
+          id,
+          name: normalizedName,
+          description: normalizedDescription,
+          coverUrl: normalizedCover,
+        );
+    _patch(
+      (playlists) => _replace(
+        playlists,
+        id,
+        (playlist) => playlist.copyWith(
+          name: normalizedName,
+          description: normalizedDescription,
+          coverUrl: normalizedCover,
+        ),
+      ),
+    );
   }
 
   Future<bool> containsPlaylistWithName(String name) {
@@ -98,41 +170,96 @@ class PlaylistController extends AsyncNotifier<List<MusicPlaylist>> {
   }
 
   Future<void> deletePlaylist(String id) async {
+    if (id == PlaylistRepository.favoritesId) {
+      return;
+    }
     await ref.read(playlistRepositoryProvider).deletePlaylist(id);
-    ref.invalidateSelf();
+    _patch(
+      (playlists) => playlists
+          .where((playlist) => playlist.id != id)
+          .toList(growable: false),
+    );
   }
 
   Future<void> addItem(String playlistId, PlaybackItem item) async {
-    await ref.read(playlistRepositoryProvider).addItem(playlistId, item);
-    ref.invalidateSelf();
+    final repository = ref.read(playlistRepositoryProvider);
+    final alreadyAdded = await repository
+        .itemsForPlaylist(playlistId)
+        .then((items) => items.any((candidate) => candidate.id == item.id));
+    if (alreadyAdded) {
+      return;
+    }
+    await repository.addItem(playlistId, item);
+    _patch(
+      (playlists) => _replace(
+        playlists,
+        playlistId,
+        (playlist) =>
+            playlist.copyWith(items: <PlaybackItem>[...playlist.items, item]),
+      ),
+    );
   }
 
-  Future<void> removeItem(String playlistId, String itemId) async {
-    await ref.read(playlistRepositoryProvider).removeItem(playlistId, itemId);
-    ref.invalidateSelf();
-  }
+  Future<void> removeItem(String playlistId, String itemId) =>
+      removeItems(playlistId, <String>{itemId});
 
   Future<void> toggleFavorite(PlaybackItem item) async {
-    await ref.read(playlistRepositoryProvider).toggleFavorite(item);
+    final repository = ref.read(playlistRepositoryProvider);
+    final wasFavorite = await repository.isFavorite(item.id);
+    await repository.toggleFavorite(item);
     if (ref.read(selectedPlaylistIdProvider) ==
         PlaylistRepository.favoritesId) {
       ref.read(selectedPlaylistIdProvider.notifier).showLiked();
     }
-    ref.invalidateSelf();
+    _patch(
+      (playlists) => _replace(
+        playlists,
+        PlaylistRepository.favoritesId,
+        (playlist) => playlist.copyWith(
+          items: wasFavorite
+              ? playlist.items
+                    .where((candidate) => candidate.id != item.id)
+                    .toList(growable: false)
+              : <PlaybackItem>[...playlist.items, item],
+        ),
+      ),
+    );
   }
 
   Future<void> saveCollectionAsPlaylist({
     required String name,
     required List<PlaybackItem> items,
     required String collectionKey,
-  }) async {
-    await ref
-        .read(playlistRepositoryProvider)
-        .createImportedPlaylist(
-          id: PlaylistRepository.importedPlaylistId(collectionKey),
-          name: name,
-          items: items,
-        );
-    ref.invalidateSelf();
+    String description = '',
+    String? coverUrl,
+  }) => createImportedPlaylist(
+    id: PlaylistRepository.importedPlaylistId(collectionKey),
+    name: name,
+    items: items,
+    description: description,
+    coverUrl: coverUrl,
+  );
+
+  Future<void> removeItems(String playlistId, Set<String> itemIds) async {
+    if (itemIds.isEmpty) {
+      return;
+    }
+    await ref.read(playlistRepositoryProvider).removeItems(playlistId, itemIds);
+    _patch(
+      (playlists) => _replace(
+        playlists,
+        playlistId,
+        (playlist) => playlist.copyWith(
+          items: playlist.items
+              .where((item) => !itemIds.contains(item.id))
+              .toList(growable: false),
+        ),
+      ),
+    );
   }
+}
+
+String? _trimmedOrNull(String? value) {
+  final trimmed = value?.trim();
+  return trimmed == null || trimmed.isEmpty ? null : trimmed;
 }

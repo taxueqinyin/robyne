@@ -121,6 +121,8 @@ class LyricPreferences extends Table {
 class Playlists extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
+  TextColumn get description => text().withDefault(const Constant(''))();
+  TextColumn get coverUrl => text().nullable()();
   BoolColumn get isFavorites => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -222,7 +224,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -238,6 +240,12 @@ class AppDatabase extends _$AppDatabase {
       // silently reshuffled by upgrading.
       if (from < 3) {
         await m.addColumn(pluginDefinitionRows, pluginDefinitionRows.sortIndex);
+      }
+      // v4 adds editable playlist metadata. Existing rows keep the defaults
+      // and the generated first-track cover until the user edits them.
+      if (from < 4) {
+        await m.addColumn(playlists, playlists.description);
+        await m.addColumn(playlists, playlists.coverUrl);
       }
     },
   );

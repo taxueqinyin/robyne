@@ -14,8 +14,6 @@ import '../infrastructure/discover_cache_store.dart';
 final discoverControllerProvider =
     NotifierProvider<DiscoverController, DiscoverState>(DiscoverController.new);
 
-enum DiscoverSurface { rankings, hotPlaylists }
-
 /// How long a discovery response stays valid before another request hits the
 /// plugin again.
 ///
@@ -51,12 +49,12 @@ class _CacheEntry<T> {
 /// Keys include the plugin id (and for sheets, the tag), because the same
 /// key must never leak data between plugins or between two different tag
 /// pages.
-String _cacheKey(DiscoverSurface surface, String pluginId, [Object? tag]) {
-  return switch (surface) {
-    DiscoverSurface.rankings => 'rankings:$pluginId',
-    DiscoverSurface.hotPlaylists => 'sheets:$pluginId:${tag?.toString() ?? ''}',
-  };
-}
+String _rankingsCacheKey(String pluginId) => 'rankings:$pluginId';
+
+String _sheetTagsCacheKey(String pluginId) => 'sheets:$pluginId:';
+
+String _sheetPageCacheKey(String pluginId, Object? tag) =>
+    'sheets:$pluginId:${tag?.toString() ?? ''}';
 
 String discoverPluginSignature(List<PluginDefinition> plugins) {
   final enabled = plugins
@@ -79,12 +77,7 @@ class DiscoverState {
   const DiscoverState({
     this.pluginSignature = '',
     this.selectedPluginId,
-    this.surface = DiscoverSurface.rankings,
-    this.availableSurfaces = const <DiscoverSurface>[
-      DiscoverSurface.rankings,
-      DiscoverSurface.hotPlaylists,
-    ],
-    this.supportsRankingDetail = true,
+    this.selectedCollection,
     this.topListGroups = const <OnlineCollectionGroup>[],
     this.isLoadingTopLists = false,
     this.topListsError,
@@ -105,9 +98,13 @@ class DiscoverState {
 
   final String pluginSignature;
   final String? selectedPluginId;
-  final DiscoverSurface surface;
-  final List<DiscoverSurface> availableSurfaces;
-  final bool supportsRankingDetail;
+
+  /// The collection the user drilled into, if any.
+  ///
+  /// This is what tells the page to show the detail surface: [detail] is only
+  /// the loaded result, and it is still null while the first page is in
+  /// flight, so keying the view off it would leave a click with no feedback.
+  final OnlineCollectionItem? selectedCollection;
   final List<OnlineCollectionGroup> topListGroups;
   final bool isLoadingTopLists;
   final AppError? topListsError;
@@ -125,14 +122,13 @@ class DiscoverState {
   final bool isLoadingMoreDetail;
   final AppError? detailError;
 
-  String? get selectedCollectionKey => detail?.collection.uniqueKey;
+  String? get selectedCollectionKey =>
+      selectedCollection?.uniqueKey ?? detail?.collection.uniqueKey;
 
   DiscoverState copyWith({
     String? pluginSignature,
     Object? selectedPluginId = _discoverUnset,
-    DiscoverSurface? surface,
-    List<DiscoverSurface>? availableSurfaces,
-    bool? supportsRankingDetail,
+    Object? selectedCollection = _discoverUnset,
     List<OnlineCollectionGroup>? topListGroups,
     bool? isLoadingTopLists,
     Object? topListsError = _discoverUnset,
@@ -155,10 +151,9 @@ class DiscoverState {
       selectedPluginId: identical(selectedPluginId, _discoverUnset)
           ? this.selectedPluginId
           : selectedPluginId as String?,
-      surface: surface ?? this.surface,
-      availableSurfaces: availableSurfaces ?? this.availableSurfaces,
-      supportsRankingDetail:
-          supportsRankingDetail ?? this.supportsRankingDetail,
+      selectedCollection: identical(selectedCollection, _discoverUnset)
+          ? this.selectedCollection
+          : selectedCollection as OnlineCollectionItem?,
       topListGroups: topListGroups ?? this.topListGroups,
       isLoadingTopLists: isLoadingTopLists ?? this.isLoadingTopLists,
       topListsError: identical(topListsError, _discoverUnset)
@@ -225,7 +220,7 @@ class DiscoverController extends Notifier<DiscoverState> {
     final signature = discoverPluginSignature(enabled);
     if (enabled.isEmpty) {
       _invalidateAllRequests();
-      state = DiscoverState(pluginSignature: signature, surface: state.surface);
+      state = DiscoverState(pluginSignature: signature);
       return;
     }
 
@@ -252,7 +247,7 @@ class DiscoverController extends Notifier<DiscoverState> {
         selectedPluginId: selectedPluginId,
       ),
     );
-    await _loadCurrentSurface(force: false);
+    await _loadAll(force: false);
   }
 
   Future<void> selectPlugin(String pluginId) async {
@@ -262,58 +257,29 @@ class DiscoverController extends Notifier<DiscoverState> {
     }
     _invalidateAllRequests();
     state = _resetForPlugin(state.copyWith(selectedPluginId: pluginId));
-    await _loadCurrentSurface(force: false);
+    await _loadAll(force: false);
   }
 
-  Future<void> selectSurface(DiscoverSurface surface) async {
-    if (surface == state.surface) {
-      return;
-    }
-    state = state.copyWith(surface: surface);
-    if (_needsLoadForSurface(surface)) {
-      await _loadCurrentSurface(force: false);
-    }
-  }
-
-  Future<void> reloadCurrentSurface() async {
-    await _loadCurrentSurface(force: true);
-  }
-
-  /// Seeds the home page's shelf from the first enabled plugin that can serve
-  /// hot playlists.
+  /// Reloads both sections for the selected source.
   ///
-  /// Plugin capabilities are probed by calling, not declared up front, so a
-  /// plugin can be enabled yet still fail `getRecommendSheetTags` (one bundled fixture is
-  /// the standing example: it has rankings but no recommend-sheet tags).
-  /// Without this the home rail would stay empty forever on a machine whose
-  /// first plugin is ranking-only. Each candidate is tried in order and the
-  /// first success owns the shelf; the browser is left on the winning plugin
-  /// so opening it shows the same data instead of an error.
-  Future<void> seedHomeShelf() async {
-    if (_pluginsById.isEmpty) {
-      return;
-    }
-    final candidates = _pluginsById.values.toList(growable: false);
-    final startingId = state.selectedPluginId;
+  /// The page paints rankings and hot playlists at the same time, so the
+  /// header's refresh is one action over the pair. The per-section retry
+  /// buttons call [reloadRankings] / [reloadHotPlaylists] instead, so one
+  /// broken section does not discard the other one's data.
+  Future<void> refreshAll() async {
+    await _loadAll(force: true);
+  }
 
-    for (final plugin in candidates) {
-      if (plugin.id != startingId) {
-        _invalidateAllRequests();
-        state = _resetForPlugin(state.copyWith(selectedPluginId: plugin.id));
-      }
-      state = state.copyWith(surface: DiscoverSurface.hotPlaylists);
-      await _loadHotPlaylists(force: false, reloadCatalog: true);
-      if (!ref.mounted) {
-        return;
-      }
-      if (state.hotPlaylistItems.isNotEmpty) {
-        return;
-      }
-    }
+  Future<void> reloadRankings() async {
+    await _loadTopLists(force: true);
+  }
+
+  Future<void> reloadHotPlaylists() async {
+    await _loadHotPlaylists(force: true, reloadCatalog: true);
   }
 
   Future<void> reloadDetail() async {
-    final collection = state.detail?.collection;
+    final collection = state.selectedCollection ?? state.detail?.collection;
     if (collection == null) {
       return;
     }
@@ -403,6 +369,10 @@ class DiscoverController extends Notifier<DiscoverState> {
   }
 
   Future<void> openCollection(OnlineCollectionItem collection) async {
+    // The page keys its detail surface off this, not off `detail`: the
+    // request has not answered yet, and a click that changes nothing reads as
+    // broken.
+    state = state.copyWith(selectedCollection: collection, detailError: null);
     if (collection.kind == OnlineCollectionKind.topList) {
       await _loadTopListDetail(collection);
       return;
@@ -410,23 +380,61 @@ class DiscoverController extends Notifier<DiscoverState> {
     await _loadMusicSheetDetail(collection, page: 1, append: false);
   }
 
-  /// Clears the open collection so the browse pane becomes the only pane.
-  ///
-  /// Only used by the single-pane layout, where detail and browse share one
-  /// slot instead of sitting side by side. See ADR-001 decision D6.
+  /// Leaves the detail surface and returns to rankings + hot playlists.
   void closeDetail() {
-    if (state.detail == null) {
+    if (state.detail == null && state.selectedCollection == null) {
       return;
     }
     // Any in-flight detail load is invalidated first, otherwise a late
-    // response would re-open the pane the user just dismissed.
+    // response would re-open the view the user just dismissed.
     _invalidateAllRequests();
     state = state.copyWith(
+      selectedCollection: null,
       detail: null,
       detailError: null,
       isLoadingDetail: false,
       isLoadingMoreDetail: false,
     );
+  }
+
+  /// Puts a collection back on screen from the key the shell recorded.
+  ///
+  /// The navigation history only stores the opaque
+  /// [OnlineCollectionItem.uniqueKey], so the item is looked up among the ones
+  /// already loaded for the selected source. A key that is gone — the source
+  /// was switched, or the cache moved on — falls back to the catalogue rather
+  /// than parking the user on an empty drill-down.
+  Future<void> restoreCollection(String key) async {
+    if (state.selectedCollectionKey == key) {
+      return;
+    }
+    final item = _findCollection(key);
+    if (item == null) {
+      closeDetail();
+      return;
+    }
+    await openCollection(item);
+  }
+
+  OnlineCollectionItem? _findCollection(String key) {
+    for (final group in state.topListGroups) {
+      for (final item in group.items) {
+        if (item.uniqueKey == key) {
+          return item;
+        }
+      }
+    }
+    for (final item in state.hotPlaylistItems) {
+      if (item.uniqueKey == key) {
+        return item;
+      }
+    }
+    final selected = state.selectedCollection;
+    if (selected != null && selected.uniqueKey == key) {
+      return selected;
+    }
+    final open = state.detail?.collection;
+    return open != null && open.uniqueKey == key ? open : null;
   }
 
   Future<void> loadMoreDetail() async {
@@ -447,24 +455,17 @@ class DiscoverController extends Notifier<DiscoverState> {
     );
   }
 
-  Future<void> _loadCurrentSurface({required bool force}) async {
-    switch (state.surface) {
-      case DiscoverSurface.rankings:
-        await _loadTopLists(force: force);
-        return;
-      case DiscoverSurface.hotPlaylists:
-        await _loadHotPlaylists(force: force, reloadCatalog: true);
-        return;
-    }
-  }
-
-  bool _needsLoadForSurface(DiscoverSurface surface) {
-    return switch (surface) {
-      DiscoverSurface.rankings =>
-        state.topListGroups.isEmpty && !state.isLoadingTopLists,
-      DiscoverSurface.hotPlaylists =>
-        state.hotPlaylistItems.isEmpty && !state.isLoadingHotPlaylists,
-    };
+  /// Fetches both sections for the selected source.
+  ///
+  /// The first-level page shows rankings and hot playlists together, so a
+  /// source switch has to fill both. Each loader has its own request id and
+  /// its own cache entry, so they can run concurrently without trampling one
+  /// another's state.
+  Future<void> _loadAll({required bool force}) async {
+    await Future.wait<void>(<Future<void>>[
+      _loadTopLists(force: force),
+      _loadHotPlaylists(force: force, reloadCatalog: true),
+    ]);
   }
 
   Future<void> _loadTopLists({required bool force}) async {
@@ -472,7 +473,7 @@ class DiscoverController extends Notifier<DiscoverState> {
     if (plugin == null) {
       return;
     }
-    final key = _cacheKey(DiscoverSurface.rankings, plugin.id);
+    final key = _rankingsCacheKey(plugin.id);
     // A cache hit is a complete answer: paint it and stop, so switching
     // between plugins and tabs is instant and does not touch the plugin
     // runtime at all.
@@ -558,7 +559,7 @@ class DiscoverController extends Notifier<DiscoverState> {
     // Tag catalogues change even less often than the playlists themselves, so
     // they are cached by plugin rather than by tag — one request for the
     // catalog serves every tab switch within the TTL.
-    final tagKey = _cacheKey(DiscoverSurface.hotPlaylists, plugin.id);
+    final tagKey = _sheetTagsCacheKey(plugin.id);
     final cachedTags = _sheetTagCache[tagKey];
     final useCachedTags = !force && cachedTags != null && cachedTags.isFresh;
 
@@ -648,11 +649,7 @@ class DiscoverController extends Notifier<DiscoverState> {
 
     // The page itself is cached by (plugin, tag) so switching tabs and coming
     // back does not re-request what the user was just looking at.
-    final pageKey = _cacheKey(
-      DiscoverSurface.hotPlaylists,
-      plugin.id,
-      selectedTag.key,
-    );
+    final pageKey = _sheetPageCacheKey(plugin.id, selectedTag.key);
     final cachedPage = _sheetPageCache[pageKey];
     if (!force && cachedPage != null && cachedPage.isFresh) {
       state = state.copyWith(
@@ -1136,6 +1133,7 @@ class DiscoverController extends Notifier<DiscoverState> {
 
   DiscoverState _resetForPlugin(DiscoverState current) {
     return current.copyWith(
+      selectedCollection: null,
       topListGroups: const <OnlineCollectionGroup>[],
       isLoadingTopLists: false,
       topListsError: null,

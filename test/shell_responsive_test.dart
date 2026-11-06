@@ -11,11 +11,20 @@ import 'package:robyne/core/theme/domain/theme_navigation.dart';
 import 'package:robyne/core/theme/domain/theme_package.dart';
 import 'package:robyne/core/theme/domain/theme_regions.dart';
 import 'package:robyne/core/theme/infrastructure/theme_manifest_parser.dart';
+import 'package:robyne/core/theme/infrastructure/token_resolver.dart';
 import 'package:robyne/features/player/application/player_providers.dart';
 import 'package:robyne/features/player/domain/playback_item.dart';
 import 'package:robyne/features/player/presentation/player_bar.dart';
+import 'package:robyne/features/search/application/search_controller.dart'
+    as search_state;
+import 'package:robyne/features/search/presentation/search_page.dart';
 import 'package:robyne/features/library/application/library_providers.dart';
 import 'package:robyne/features/playlists/application/playlist_providers.dart';
+import 'package:robyne/features/playlists/domain/music_playlist.dart';
+import 'package:robyne/features/discover/application/discover_controller.dart';
+import 'package:robyne/features/discover/domain/online_collection.dart';
+import 'package:robyne/features/plugin/domain/plugin_definition.dart';
+import 'package:robyne/features/search/domain/music_item.dart';
 
 /// Stage 2 acceptance for the flagship shell.
 ///
@@ -122,6 +131,91 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  });
+
+  group('the phone search page can run a second search', () {
+    testWidgets('the results page carries a keyword box', (tester) async {
+      // The phone arrangement has no `topBar`, so the shell draws no global
+      // search field. Without a field on the page itself the only way to look
+      // for something else was to navigate back to the home header — the
+      // results were a dead end with no way out except the nav bar.
+      await _pumpShell(tester, _phonePortrait, _xuan());
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RobyneShell)),
+      );
+
+      container.read(selectedTabProvider.notifier).select(RobyneTab.search);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(SearchPage), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the field on the results page runs a new query', (
+      tester,
+    ) async {
+      await _pumpShell(tester, _phonePortrait, _xuan());
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RobyneShell)),
+      );
+
+      container.read(selectedTabProvider.notifier).select(RobyneTab.search);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.enterText(find.byType(TextField), 'second query');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        container.read(search_state.searchControllerProvider).value?.keyword,
+        'second query',
+      );
+      // Still on the results page: submitting must not bounce the user
+      // somewhere else to show them what they asked for.
+      expect(container.read(selectedTabProvider), RobyneTab.search);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the field fits a landscape phone without overflow', (
+      tester,
+    ) async {
+      // 800x360 is the cramped end of the mobile shell: the title, subtitle
+      // and keyword box now all sit above the results.
+      await _pumpShell(tester, _phoneLandscape, _xuan());
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RobyneShell)),
+      );
+
+      container.read(selectedTabProvider.notifier).select(RobyneTab.search);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(SearchPage), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the desktop shell still owns the only field', (tester) async {
+      // The desktop on-screen invariant is unchanged: one field, in the top
+      // bar, and no duplicate on the results page.
+      await _pumpShell(tester, _desktop, _xuan());
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RobyneShell)),
+      );
+
+      container.read(selectedTabProvider.notifier).select(RobyneTab.search);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(SearchPage), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byKey(const Key('topbar-search-submit')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('a skin can move the nav bar', () {
@@ -431,6 +525,145 @@ void main() {
       expect(container.read(selectedTabProvider), RobyneTab.library);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('the discover drill-down lights up the top-bar back', (
+      tester,
+    ) async {
+      await _pumpShell(
+        tester,
+        _desktop,
+        _xuan(),
+        overrides: <Object>[
+          discoverControllerProvider.overrideWith(
+            _SeededDiscoverController.new,
+          ),
+        ],
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RobyneShell)),
+      );
+      expect(_topbarBackEnabled(tester), isFalse);
+
+      // Opening a collection is page-local state, so the shell only learns
+      // about it through the history entry the router records from the page's
+      // key. Without that the arrow stayed dark and a ranking became a dead
+      // end.
+      await container
+          .read(discoverControllerProvider.notifier)
+          .openCollection(_collection);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        container.read(discoverControllerProvider).selectedCollection,
+        isNotNull,
+      );
+      expect(_topbarBackEnabled(tester), isTrue);
+
+      await tester.tap(find.byKey(const Key('topbar-back')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        container.read(discoverControllerProvider).selectedCollection,
+        isNull,
+      );
+
+      // Forward must land on the same drill-down: the history only carries the
+      // key, so this also covers the lookup back into the loaded catalogue.
+      await tester.tap(find.byKey(const Key('topbar-forward')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        container.read(discoverControllerProvider).selectedCollectionKey,
+        _collection.uniqueKey,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the system back closes the drill-down, not the app', (
+      tester,
+    ) async {
+      await _pumpShell(
+        tester,
+        _phonePortrait,
+        _xuan(),
+        overrides: <Object>[
+          discoverControllerProvider.overrideWith(
+            _SeededDiscoverController.new,
+          ),
+        ],
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RobyneShell)),
+      );
+      await container
+          .read(discoverControllerProvider.notifier)
+          .openCollection(_collection);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final navigatorState = tester.state<NavigatorState>(
+        find.byType(Navigator).first,
+      );
+      final maybePopped = navigatorState.maybePop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Without the PopScope the gesture would leave the app from inside a
+      // ranking, which reads exactly like the back button doing nothing.
+      expect(maybePopped, completes);
+      expect(
+        container.read(discoverControllerProvider).selectedCollection,
+        isNull,
+      );
+      expect(find.byType(RobyneShell), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('tapping 发现 again returns the drill-down to the catalogue', (
+      tester,
+    ) async {
+      await _pumpShell(
+        tester,
+        _desktop,
+        _xuan(),
+        overrides: <Object>[
+          discoverControllerProvider.overrideWith(
+            _SeededDiscoverController.new,
+          ),
+        ],
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RobyneShell)),
+      );
+      await container
+          .read(discoverControllerProvider.notifier)
+          .openCollection(_collection);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(_topbarBackEnabled(tester), isTrue);
+
+      // The nav entry is the phone-shaped back: no panel arrow, and a short
+      // landscape window has no top bar at all.
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('shell-nav-left')),
+          matching: find.text('发现'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        container.read(discoverControllerProvider).selectedCollection,
+        isNull,
+      );
+      // Closing rewrites the history entry instead of stacking a second one,
+      // so the back arrow cannot re-open the page the user just left.
+      expect(_topbarBackEnabled(tester), isFalse);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   testWidgets('the phone liked entry returns from the playlist overview', (
@@ -457,6 +690,63 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(container.read(selectedPlaylistIdProvider), isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a rail playlist drops its highlight when another tab opens', (
+    tester,
+  ) async {
+    await _pumpShell(
+      tester,
+      _desktop,
+      _xuan(),
+      overrides: <Object>[
+        playlistControllerProvider.overrideWith(_SeededPlaylistController.new),
+      ],
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(RobyneShell)),
+    );
+    final selectedFill = RobyneTheme.of(
+      tester.element(find.byType(RobyneShell)),
+    ).tokens.components.navBar.selectedIndicatorFill;
+
+    Color? railPlaylistFill() {
+      return tester
+          .widget<Material>(
+            find
+                .ancestor(
+                  of: find.descendant(
+                    of: find.byKey(const Key('shell-nav-left')),
+                    matching: find.text('Rail playlist'),
+                  ),
+                  matching: find.byType(Material),
+                )
+                .first,
+          )
+          .color;
+    }
+
+    container.read(selectedPlaylistIdProvider.notifier).select('playlist:rail');
+    container.read(selectedTabProvider.notifier).select(RobyneTab.playlists);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(railPlaylistFill(), selectedFill);
+
+    // The rail's playlist id survives the destination change (the back stack
+    // needs it), but the highlight must not: two rows used to look selected.
+    for (final tab in <RobyneTab>[
+      RobyneTab.discover,
+      RobyneTab.library,
+      RobyneTab.downloads,
+    ]) {
+      container.read(selectedTabProvider.notifier).select(tab);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(railPlaylistFill(), isNot(selectedFill), reason: '$tab');
+      expect(container.read(selectedPlaylistIdProvider), 'playlist:rail');
+    }
     expect(tester.takeException(), isNull);
   });
 
@@ -498,41 +788,45 @@ void main() {
     });
   });
 
-  group('the flagship boards', () {
-    testWidgets('desktop composes hero, recommendations and recent', (
+  group('the flagship discover page', () {
+    testWidgets('desktop leads with sources, rankings and hot playlists', (
       tester,
     ) async {
       await _pumpShell(tester, _desktop, _xuan());
 
-      // The three shelves of `desktop-discover.png`, in order.
+      // Both catalogue sections are first-level content now; the plugin
+      // browser that used to hide them one level down is gone.
       expect(find.text('发现'), findsWidgets);
-      expect(find.text('为你推荐'), findsOneWidget);
-      expect(find.text('最近入库'), findsOneWidget);
-      // The phone-only tiles stay out of the desktop column.
-      expect(find.text('每日电台'), findsWidgets);
+      expect(find.text('排行榜'), findsOneWidget);
+      expect(find.text('热门歌单'), findsOneWidget);
+      // The daily radio block was removed with the old home composition.
+      expect(find.text('每日电台'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('portrait phone leads with tiles and liked songs', (
-      tester,
-    ) async {
-      await _pumpShell(tester, _phonePortrait, _xuan());
+    testWidgets(
+      'portrait phone keeps both sections and drops the old shelves',
+      (tester) async {
+        await _pumpShell(tester, _phonePortrait, _xuan());
 
-      expect(find.text('分类歌单'), findsOneWidget);
-      expect(find.text('红心歌曲'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        expect(find.text('排行榜'), findsOneWidget);
+        expect(find.text('热门歌单'), findsOneWidget);
+        expect(find.text('分类歌单'), findsNothing);
+        expect(find.text('红心歌曲'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
-    testWidgets('landscape phone shows the shelf grid, not the banner', (
+    testWidgets('landscape phone stacks the two sections without overflow', (
       tester,
     ) async {
       await _pumpShell(tester, _phoneLandscape, _xuan());
 
-      // `mobile-landscape.png` drops the banner and the liked-songs list in
-      // favour of a chip row plus a five-column shelf; keeping the portrait
-      // blocks there is what produced a 70px overflow.
-      expect(find.text('为你推荐'), findsOneWidget);
-      expect(find.text('红心歌曲'), findsNothing);
+      // 800x360 is the historical overflow case: the compact header plus two
+      // stacked sections must still fit.
+      expect(find.text('排行榜'), findsOneWidget);
+      expect(find.text('热门歌单'), findsOneWidget);
+      expect(find.text('为你推荐'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -655,4 +949,70 @@ class _SeededLibraryController extends LocalMusicLibraryController {
 
   @override
   Future<List<PlaybackItem>> build() async => _tracks;
+}
+
+/// One manual playlist, so the rail has a row to light up.
+class _SeededPlaylistController extends PlaylistController {
+  @override
+  Future<List<MusicPlaylist>> build() async => const <MusicPlaylist>[
+    MusicPlaylist(
+      id: 'playlist:rail',
+      name: 'Rail playlist',
+      isFavorites: false,
+      items: <PlaybackItem>[],
+    ),
+  ];
+}
+
+/// One collection for the drill-down history test: the page only ever puts
+/// its key in the snapshot, so the fixture needs nothing but an identity.
+const OnlineCollectionItem _collection = OnlineCollectionItem(
+  id: 'top-1',
+  pluginId: 'fixture-plugin-0',
+  platform: 'Fixture',
+  kind: OnlineCollectionKind.topList,
+  title: 'Top 50',
+  raw: <String, Object?>{'id': 'top-1'},
+);
+
+bool _topbarBackEnabled(WidgetTester tester) {
+  final button = tester.widget<IconButton>(
+    find.descendant(
+      of: find.byKey(const Key('topbar-back')),
+      matching: find.byType(IconButton),
+    ),
+  );
+  return button.onPressed != null;
+}
+
+/// A discover controller with the network taken out.
+///
+/// The drill-down is page state, so the history wiring can be tested without
+/// a plugin round-trip: `openCollection` records the selection and the panel
+/// renders the (empty) track list.
+class _SeededDiscoverController extends DiscoverController {
+  @override
+  DiscoverState build() => DiscoverState(
+    pluginSignature: discoverPluginSignature(const <PluginDefinition>[]),
+    // The catalogue has to hold the item: the history only stores its key, so
+    // the forward arrow restores the drill-down by looking it up here.
+    hotPlaylistItems: const <OnlineCollectionItem>[_collection],
+  );
+
+  @override
+  Future<void> syncPlugins(List<PluginDefinition> plugins) async {}
+
+  @override
+  Future<void> openCollection(OnlineCollectionItem collection) {
+    state = state.copyWith(
+      selectedCollection: collection,
+      detail: OnlineCollectionDetail(
+        collection: collection,
+        items: const <MusicItem>[],
+        page: 1,
+        isEnd: true,
+      ),
+    );
+    return Future<void>.value();
+  }
 }

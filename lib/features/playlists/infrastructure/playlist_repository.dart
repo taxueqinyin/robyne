@@ -16,9 +16,18 @@ class PlaylistRepository {
 
   static const favoritesId = 'favorites';
 
+  /// SQLite builds before 3.32 allow 999 bound variables per statement.
+  static const int _queryBatchSize = 500;
+
   final db.AppDatabase _database;
   final LegacyStorageMigration? _legacyMigration;
 
+  /// Loads every playlist and its tracks in a fixed number of queries.
+  ///
+  /// The association rows keep the authoritative order, while the playback
+  /// rows are fetched once and decoded once per unique song. Sharing a song
+  /// between playlists must produce two references to the same list position
+  /// without a second database lookup or JSON decode.
   Future<List<MusicPlaylist>> listPlaylists() async {
     await _legacyMigration?.ensureMigrated();
     await ensureFavoritesPlaylist();
@@ -29,18 +38,59 @@ class PlaylistRepository {
                 (row) => OrderingTerm.asc(row.createdAt),
               ]))
             .get();
-    final playlists = <MusicPlaylist>[];
-    for (final row in rows) {
-      playlists.add(
+    final associations = await _allPlaylistAssociations();
+    final referencedIds = <String>{
+      for (final association in associations) association.itemId,
+    };
+    final playbackRows = await _playbackItemsById(referencedIds);
+    final itemsById = <String, PlaybackItem>{
+      for (final row in playbackRows) row.id: _itemFromRow(row),
+    };
+    final grouped = <String, List<PlaybackItem>>{};
+    for (final association in associations) {
+      final item = itemsById[association.itemId];
+      if (item != null) {
+        (grouped[association.playlistId] ??= <PlaybackItem>[]).add(item);
+      }
+    }
+    return <MusicPlaylist>[
+      for (final row in rows)
         MusicPlaylist(
           id: row.id,
           name: row.name,
+          description: row.description,
+          coverUrl: row.coverUrl,
           isFavorites: row.isFavorites,
-          items: await itemsForPlaylist(row.id),
+          items: grouped[row.id] ?? const <PlaybackItem>[],
         ),
+    ];
+  }
+
+  Future<List<db.PlaybackItem>> _playbackItemsById(Set<String> ids) async {
+    if (ids.isEmpty) {
+      return const <db.PlaybackItem>[];
+    }
+    final idList = ids.toList(growable: false);
+    final rows = <db.PlaybackItem>[];
+    for (var start = 0; start < idList.length; start += _queryBatchSize) {
+      final chunk = idList.skip(start).take(_queryBatchSize).toList();
+      rows.addAll(
+        await (_database.select(
+          _database.playbackItems,
+        )..where((row) => row.id.isIn(chunk))).get(),
       );
     }
-    return playlists;
+    return rows;
+  }
+
+  Future<List<db.PlaylistItem>> _allPlaylistAssociations() {
+    return (_database.select(_database.playlistItems)
+          ..orderBy(<OrderingTerm Function(db.$PlaylistItemsTable)>[
+            (row) => OrderingTerm.asc(row.playlistId),
+            (row) => OrderingTerm.asc(row.position),
+            (row) => OrderingTerm.asc(row.addedAt),
+          ]))
+        .get();
   }
 
   Future<void> ensureFavoritesPlaylist() async {
@@ -72,6 +122,8 @@ class PlaylistRepository {
     required List<PlaybackItem> items,
     String? id,
     DateTime? createdAt,
+    String description = '',
+    String? coverUrl,
   }) async {
     await _legacyMigration?.ensureMigrated();
     final playlistId =
@@ -84,6 +136,8 @@ class PlaylistRepository {
             db.PlaylistsCompanion.insert(
               id: playlistId,
               name: name.trim().isEmpty ? 'New playlist' : name.trim(),
+              description: Value(description.trim()),
+              coverUrl: Value(_trimmedOrNull(coverUrl)),
               isFavorites: const Value(false),
               createdAt: Value(now),
               updatedAt: Value(DateTime.now()),
@@ -197,10 +251,16 @@ class PlaylistRepository {
   }
 
   Future<void> removeItem(String playlistId, String itemId) async {
+    await removeItems(playlistId, <String>{itemId});
+  }
+
+  Future<void> removeItems(String playlistId, Set<String> itemIds) async {
     await _legacyMigration?.ensureMigrated();
+    if (itemIds.isEmpty) {
+      return;
+    }
     await (_database.delete(_database.playlistItems)..where(
-          (row) =>
-              row.playlistId.equals(playlistId) & row.itemId.equals(itemId),
+          (row) => row.playlistId.equals(playlistId) & row.itemId.isIn(itemIds),
         ))
         .go();
   }
@@ -229,7 +289,7 @@ class PlaylistRepository {
   }
 
   Future<List<PlaybackItem>> itemsForPlaylist(String playlistId) async {
-    final rows =
+    final associations =
         await (_database.select(_database.playlistItems)
               ..where((row) => row.playlistId.equals(playlistId))
               ..orderBy(<OrderingTerm Function(db.$PlaylistItemsTable)>[
@@ -237,17 +297,17 @@ class PlaylistRepository {
                 (row) => OrderingTerm.asc(row.addedAt),
               ]))
             .get();
-    final items = <PlaybackItem>[];
-    for (final row in rows) {
-      final item =
-          await (_database.select(_database.playbackItems)
-                ..where((playbackItem) => playbackItem.id.equals(row.itemId)))
-              .getSingleOrNull();
-      if (item != null) {
-        items.add(_itemFromRow(item));
-      }
+    if (associations.isEmpty) {
+      return const <PlaybackItem>[];
     }
-    return items;
+    final ids = associations.map((row) => row.itemId).toSet();
+    final playbackRows = await _playbackItemsById(ids);
+    final itemsById = <String, PlaybackItem>{
+      for (final row in playbackRows) row.id: _itemFromRow(row),
+    };
+    return <PlaybackItem>[
+      for (final association in associations) ?itemsById[association.itemId],
+    ];
   }
 
   Future<int> _nextPosition(String playlistId) async {
@@ -315,5 +375,29 @@ class PlaylistRepository {
       }
     } catch (_) {}
     return const <String, Object?>{};
+  }
+
+  Future<void> updatePlaylistInfo(
+    String id, {
+    required String name,
+    required String description,
+    String? coverUrl,
+  }) async {
+    final normalizedName = name.trim();
+    await (_database.update(
+      _database.playlists,
+    )..where((row) => row.id.equals(id))).write(
+      db.PlaylistsCompanion(
+        name: Value(normalizedName.isEmpty ? 'New playlist' : normalizedName),
+        description: Value(description.trim()),
+        coverUrl: Value(_trimmedOrNull(coverUrl)),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  static String? _trimmedOrNull(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 }

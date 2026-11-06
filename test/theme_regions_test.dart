@@ -163,6 +163,64 @@ void main() {
   });
 
   group('RobyneShellPlan.resolve', () {
+    test('a rail too narrow for its labels collapses instead of padding', () {
+      // The dead band. The flagship skin declares navBar at 0.18, which is
+      // 137dp on a 760dp window: wider than the glyphs it draws, narrower
+      // than a label needs. Reserving 137dp for a 72dp strip of icons was
+      // the bug — the ratio is the skin's, but turning it into dp is D7.
+      const skin = RobyneArrangement(
+        formFactor: RobyneFormFactor.desktop,
+        placements: <RobyneRegionPlacement>[
+          RobyneRegionPlacement(
+            region: RobyneRegion.navBar,
+            slot: RobyneSlot.left,
+            size: 0.18,
+          ),
+          RobyneRegionPlacement(
+            region: RobyneRegion.content,
+            slot: RobyneSlot.center,
+          ),
+          RobyneRegionPlacement(
+            region: RobyneRegion.queue,
+            slot: RobyneSlot.right,
+            size: 0.22,
+          ),
+        ],
+      );
+      final plan = RobyneShellPlan.resolve(
+        arrangement: skin,
+        width: 760,
+        height: 760,
+      );
+
+      expect(plan.navIconOnly, isTrue);
+      expect(plan.leftExtent, RobyneShellPlan.navSideCapsule);
+      // The rail gives up its dead space to the page, and the docked queue
+      // keeps its own column: only the nav's side is clamped.
+      expect(plan.rightExtent, greaterThan(0));
+      expect(
+        plan.contentWidth,
+        greaterThan(760 - 137 - plan.rightExtent),
+        reason: 'the page wins the width the rail no longer needs',
+      );
+      expect(plan.leftExtent + plan.rightExtent + plan.contentWidth, 760);
+    });
+
+    test('a rail that can carry labels keeps its declared ratio', () {
+      // The same 0.18 ratio on a board that can afford it must be untouched:
+      // the collapse is a last resort, not a restyle.
+      final plan = RobyneShellPlan.resolve(
+        arrangement: RobyneArrangement.parse(<Object?>[
+          <String, Object?>{'region': 'navBar', 'slot': 'left', 'size': 0.18},
+          <String, Object?>{'region': 'content', 'slot': 'center'},
+        ], formFactor: RobyneFormFactor.desktop),
+        width: 1360,
+        height: 900,
+      );
+      expect(plan.navIconOnly, isFalse);
+      expect(plan.leftExtent, greaterThanOrEqualTo(168));
+    });
+
     test('content is never smaller than the floor on a desktop', () {
       final plan = RobyneShellPlan.resolve(
         arrangement: RobyneArrangement.desktop,

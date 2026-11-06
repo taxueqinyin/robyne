@@ -51,7 +51,10 @@ class DownloadController extends AsyncNotifier<List<DownloadTask>> {
     return repository.listTasks();
   }
 
-  Future<void> startDownload(PlaybackItem item) async {
+  Future<void> startDownload(
+    PlaybackItem item, {
+    String quality = 'standard',
+  }) async {
     if (!item.isPlugin) {
       return;
     }
@@ -76,7 +79,7 @@ class DownloadController extends AsyncNotifier<List<DownloadTask>> {
     String? temporaryDownloadPath;
     String? temporaryConversionPath;
     try {
-      final sourceResult = await _mediaSourceFromPluginItem(item);
+      final sourceResult = await _mediaSourceFromPluginItem(item, quality);
       final source = switch (sourceResult) {
         Ok(:final value) => value,
         Failure(:final error) => throw _DownloadException(error),
@@ -225,6 +228,7 @@ class DownloadController extends AsyncNotifier<List<DownloadTask>> {
 
   Future<Result<MediaSource>> _mediaSourceFromPluginItem(
     PlaybackItem item,
+    String quality,
   ) async {
     final repository = ref.read(pluginRepositoryProvider);
     final compat = ref.read(musicFreeCompatAdapterProvider);
@@ -259,7 +263,7 @@ class DownloadController extends AsyncNotifier<List<DownloadTask>> {
       plugin: plugin,
       source: source,
       method: 'getMediaSource',
-      arguments: <Object?>[item.raw, 'standard'],
+      arguments: <Object?>[item.raw, quality],
     );
     return switch (mediaResult) {
       Ok<Object?>(:final value) => compat.mediaSourceFromPluginValue(value),

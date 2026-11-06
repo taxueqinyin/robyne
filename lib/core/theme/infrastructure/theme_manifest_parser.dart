@@ -779,10 +779,15 @@ class ThemeManifestParser {
     if (raw == null) {
       return baseline;
     }
+    // `family` absent means "keep the app's bundled default", not "clear to
+    // the platform font": MiSans ships with the app precisely so a skin that
+    // does not name a typeface still gets a CJK-capable one. Passing null
+    // into `copyWith` would clear the sentinel and drop that default, which
+    // is how a headless test ended up painting tofu for every CJK glyph.
     final family = _fontFamily(raw['family']);
     final scale = _ranged(raw['scale'], 0.75, 1.5);
     return baseline.copyWith(
-      fontFamily: family,
+      fontFamily: family ?? baseline.fontFamily,
       scale: scale,
       bodyWeight: _weight(raw['bodyWeight']),
       titleWeight: _weight(raw['titleWeight']),

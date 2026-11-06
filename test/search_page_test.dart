@@ -15,32 +15,75 @@ import 'package:robyne/features/search/domain/music_item.dart';
 import 'package:robyne/features/search/domain/search_result.dart';
 import 'package:robyne/features/search/application/search_controller.dart'
     as search_state;
+import 'package:robyne/app/shell_chrome.dart';
 import 'package:robyne/core/theme/domain/theme_package.dart';
 import 'package:robyne/features/search/presentation/search_page.dart';
 import 'package:robyne/shared/widgets/search_action_button.dart';
 
 void main() {
-  testWidgets('the page hosts no search field of its own', (tester) async {
-    // Every search entry point now lives in the shell's top bar, so a second
+  testWidgets('with a shell top bar the page hosts no field of its own', (
+    tester,
+  ) async {
+    // The desktop shell draws the global search field in `topBar`, so a second
     // field here would be a second keyword the user has to keep in sync with
     // the one they actually typed into. The page is results only.
-    final container = ProviderContainer(
-      overrides: [
-        pluginRepositoryProvider.overrideWithValue(_FakePluginRepository()),
-      ],
-    );
-    addTearDown(container.dispose);
-
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(home: Scaffold(body: SearchPage())),
-      ),
-    );
-    await tester.pumpAndSettle();
-
+    await _pumpSearchPage(tester, topBarVisible: true);
     expect(find.byType(TextField), findsNothing);
     expect(find.byType(SearchActionButton), findsNothing);
+  });
+
+  testWidgets('with no shell top bar the page carries the keyword box', (
+    tester,
+  ) async {
+    // A phone arrangement has no `topBar`, and D7 drops one before the content
+    // when a window is too short. With no field anywhere on screen the only
+    // way to search a second time was to leave the results and find the home
+    // header.
+    await _pumpSearchPage(tester, topBarVisible: false);
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('a page outside the shell assumes it must carry the field', (
+    tester,
+  ) async {
+    // `ShellChrome.maybeOf` is null in a standalone page. Treating that as
+    // "there is a top bar" is the assumption that stranded a phone user, so
+    // the default has to be the safe one.
+    await _pumpSearchPage(tester, topBarVisible: null);
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('the page field runs a search for the typed keyword', (
+    tester,
+  ) async {
+    final container = await _pumpSearchPage(tester, topBarVisible: false);
+
+    await tester.enterText(find.byType(TextField), 'night route');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      container.read(search_state.searchControllerProvider).value?.keyword,
+      'night route',
+    );
+  });
+
+  testWidgets('the page field picks up a keyword searched elsewhere', (
+    tester,
+  ) async {
+    // The home header runs the first search, the results page runs the second.
+    // The mounted page's controller has to follow the shared keyword or it
+    // shows the previous query above results for a newer one.
+    final container = await _pumpSearchPage(tester, topBarVisible: false);
+
+    container
+        .read(search_state.searchControllerProvider.notifier)
+        .updateKeyword('from the home header');
+    await tester.pump();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller?.text, 'from the home header');
   });
 
   testWidgets('search page renders source pills instead of Material chips', (
@@ -176,6 +219,34 @@ void main() {
     expect(find.text('搜索'), findsWidgets);
     expect(find.text('Search'), findsNothing);
   });
+}
+
+/// Pumps the page with an explicit shell chrome state.
+///
+/// [topBarVisible] null means "no `ShellChrome` above the page", which is what
+/// a standalone page or a widget test sees.
+Future<ProviderContainer> _pumpSearchPage(
+  WidgetTester tester, {
+  required bool? topBarVisible,
+}) async {
+  final container = ProviderContainer(
+    overrides: [
+      pluginRepositoryProvider.overrideWithValue(_FakePluginRepository()),
+    ],
+  );
+  addTearDown(container.dispose);
+
+  final page = const MaterialApp(home: Scaffold(body: SearchPage()));
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: topBarVisible == null
+          ? page
+          : ShellChrome(topBarVisible: topBarVisible, child: page),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return container;
 }
 
 class _FakePluginRepository implements PluginRepository {

@@ -160,4 +160,37 @@ void main() {
     expect(detail.items.single.title, 'Second Track');
     expect(detail.isEnd, isTrue);
   });
+
+  test('a partial detail row keeps the cover and copy the list showed', () {
+    final adapter = MusicFreeCompatAdapter();
+    const row = OnlineCollectionItem(
+      id: 'top-1',
+      pluginId: 'plugin:test',
+      platform: 'Test',
+      kind: OnlineCollectionKind.topList,
+      title: 'Top 50',
+      description: 'Weekly',
+      artworkUrl: 'https://example.test/cover.jpg',
+      raw: <String, Object?>{'id': 'top-1'},
+    );
+
+    // Several plugins echo only id/title in `topListItem`; the cover stayed
+    // behind in the list response. Replacing the row with that fragment made
+    // the drill-down lose the cover the grid had just painted.
+    final result = adapter.collectionDetailFromPluginValue(
+      <String, Object?>{
+        'topListItem': <String, Object?>{'id': 'top-1', 'title': 'Top 50'},
+        'musicList': <Object?>[
+          <String, Object?>{'id': 'song-1', 'title': 'First Track'},
+        ],
+      },
+      collection: row,
+      page: 1,
+    );
+
+    final detail = result.fold((value) => value, (error) => throw error);
+    expect(detail.collection.artworkUrl, 'https://example.test/cover.jpg');
+    expect(detail.collection.description, 'Weekly');
+    expect(detail.items.single.title, 'First Track');
+  });
 }

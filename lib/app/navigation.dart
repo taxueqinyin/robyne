@@ -23,25 +23,6 @@ final selectedTabProvider = NotifierProvider<SelectedTabNotifier, RobyneTab>(
   SelectedTabNotifier.new,
 );
 
-/// Whether the Discover destination is showing the plugin browser.
-///
-/// This is shell state rather than page-local state because two surfaces drive
-/// it: the home header offers the way in, and the browser's own back button
-/// closes it. Keeping it in a provider is also what lets the flagship home
-/// page stay a `StatelessWidget`-style composition driven by skin data.
-final discoverBrowserProvider = NotifierProvider<DiscoverBrowserNotifier, bool>(
-  DiscoverBrowserNotifier.new,
-);
-
-class DiscoverBrowserNotifier extends Notifier<bool> {
-  @override
-  bool build() => false;
-
-  void open() => state = true;
-
-  void close() => state = false;
-}
-
 class SelectedTabNotifier extends Notifier<RobyneTab> {
   @override
   // The flagship lands on Discover, matching the design's first screen.
@@ -62,20 +43,32 @@ class SelectedTabNotifier extends Notifier<RobyneTab> {
 /// id is captured as an opaque part of a history entry; the playlist page
 /// remains the owner of what that id means.
 class NavigationSnapshot {
-  const NavigationSnapshot({required this.tab, this.playlistId});
+  const NavigationSnapshot({
+    required this.tab,
+    this.playlistId,
+    this.discoverCollectionKey,
+  });
 
   final RobyneTab tab;
   final String? playlistId;
+
+  /// The discover drill-down, as `OnlineCollectionItem.uniqueKey`.
+  ///
+  /// Null means the discover page is showing its catalogue. The key is opaque
+  /// here for the same reason the playlist id is: the page owns what it means,
+  /// the shell only needs something it can put back.
+  final String? discoverCollectionKey;
 
   @override
   bool operator ==(Object other) {
     return other is NavigationSnapshot &&
         other.tab == tab &&
-        other.playlistId == playlistId;
+        other.playlistId == playlistId &&
+        other.discoverCollectionKey == discoverCollectionKey;
   }
 
   @override
-  int get hashCode => Object.hash(tab, playlistId);
+  int get hashCode => Object.hash(tab, playlistId, discoverCollectionKey);
 }
 
 class NavigationHistoryState {
@@ -109,6 +102,22 @@ class NavigationHistoryState {
     );
   }
 
+  /// Rewrites the entry the shell is standing on.
+  ///
+  /// Closing a drill-down is not a new destination — pushing a second
+  /// "discover, no collection" entry would leave the old one behind, and the
+  /// back arrow would happily re-open the page the user just left.
+  NavigationHistoryState replaceCurrent(NavigationSnapshot snapshot) {
+    if (snapshot == current) {
+      return this;
+    }
+    final next = entries.toList(growable: false)..[index] = snapshot;
+    return NavigationHistoryState(
+      entries: List<NavigationSnapshot>.unmodifiable(next),
+      index: index,
+    );
+  }
+
   NavigationHistoryState back() {
     return canGoBack
         ? NavigationHistoryState(entries: entries, index: index - 1)
@@ -131,8 +140,33 @@ class NavigationHistoryNotifier extends Notifier<NavigationHistoryState> {
   @override
   NavigationHistoryState build() => const NavigationHistoryState();
 
-  void record({required RobyneTab tab, String? playlistId}) {
-    state = state.push(NavigationSnapshot(tab: tab, playlistId: playlistId));
+  void record({
+    required RobyneTab tab,
+    String? playlistId,
+    String? discoverCollectionKey,
+  }) {
+    state = state.push(
+      NavigationSnapshot(
+        tab: tab,
+        playlistId: playlistId,
+        discoverCollectionKey: discoverCollectionKey,
+      ),
+    );
+  }
+
+  /// Rewrites the current entry instead of appending a new one.
+  void replaceCurrent({
+    required RobyneTab tab,
+    String? playlistId,
+    String? discoverCollectionKey,
+  }) {
+    state = state.replaceCurrent(
+      NavigationSnapshot(
+        tab: tab,
+        playlistId: playlistId,
+        discoverCollectionKey: discoverCollectionKey,
+      ),
+    );
   }
 
   void back() {

@@ -3,14 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/navigation.dart';
 import '../../../core/errors/app_error.dart';
 import '../../../core/layout/window_size_class.dart';
 import '../../../core/theme/application/theme_providers.dart';
 import '../../../core/theme/domain/theme_layout.dart';
-import '../../../core/theme/domain/theme_materials.dart';
 import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
+import '../../../core/theme/domain/theme_materials.dart';
+import '../../../core/theme/domain/theme_tokens.dart';
 import '../../../core/theme/presentation/theme_material.dart';
 import '../../../shared/widgets/horizontal_wheel_scroll.dart';
 import '../../../shared/widgets/song_actions_menu.dart';
@@ -25,172 +25,275 @@ import '../application/discover_controller.dart';
 import '../domain/online_collection.dart';
 import 'collection_actions.dart';
 
+/// The first-level discovery surface: sources, rankings and hot playlists.
+///
+/// The two catalogue sections are peers, not tabs. A previous revision hid
+/// them behind a two-way switch inside a second-level browser, which meant the
+/// user had to pick a surface before they could see either; the design spec
+/// (§4.2) describes them as sections of the page itself. Both therefore load
+/// together for the selected source and both are on screen at once — side by
+/// side where the content column is wide enough, stacked and sharing one
+/// scroll view otherwise.
 class DiscoverPage extends ConsumerWidget {
   const DiscoverPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pluginsValue = ref.watch(pluginControllerProvider);
-    final discoverState = ref.watch(discoverControllerProvider);
-    final controller = ref.read(discoverControllerProvider.notifier);
-    // Ordered the way the plugin page arranged it: the source row is the same
-    // list of sources the user sorted, so a drag there shows up here.
+    // Ordered the way the plugin page arranged it, so a drag there reorders
+    // this strip too.
     final enabledPlugins = ref.watch(orderedEnabledPluginsProvider);
-    final pluginSignature = discoverPluginSignature(enabledPlugins);
+    final state = ref.watch(discoverControllerProvider);
+    final controller = ref.read(discoverControllerProvider.notifier);
     final strings = ref.watch(activeThemeStringsProvider);
     final tokens = RobyneTheme.of(context).tokens;
     final colors = tokens.color;
     final metrics = ref.watch(activeThemeContentMetricsProvider);
-    final compactWidth =
-        WindowSizeClass.of(context).width != WindowWidthClass.expanded;
-    // The discover destination is wrapped in a back button when the browser
-    // is open (see `_DiscoverSurface`). Reserving a leading slot for it keeps
-    // the page heading on the same left axis as every other surface instead
-    // of sliding under the floating control.
-    final leadingInset = ref.watch(discoverBrowserProvider) ? 44.0 : 0.0;
+    final sizeClass = WindowSizeClass.of(context);
+    final compactWidth = sizeClass.width != WindowWidthClass.expanded;
+    final compactHeight = sizeClass.isCompactHeight;
+    final signature = discoverPluginSignature(enabledPlugins);
 
-    if (discoverState.pluginSignature != pluginSignature) {
+    if (state.pluginSignature != signature) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(controller.syncPlugins(enabledPlugins));
       });
     }
 
-    // The design's secondary browser leads with a header row of its own
-    // ("插件榜单" + 刷新), sitting on the same gutter as the home page so the
-    // two read as one surface and not as a dialog dropped on top of it.
-    final header = Row(
-      children: <Widget>[
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                strings.resolve(ThemeStringKey.discoverRankingEntry),
-                style: TextStyle(
-                  fontSize: tokens.typography.resolvedPageTitleSize,
-                  fontWeight: FontWeight.w700,
-                  color: colors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                strings.resolve(ThemeStringKey.discoverEnablePlugin),
-                style: TextStyle(fontSize: 12, color: colors.textMuted),
-              ),
-            ],
-          ),
-        ),
-        _PillButton(
-          icon: Icons.refresh,
-          label: strings.resolve(ThemeStringKey.discoverRefresh),
-          onTap: enabledPlugins.isEmpty
-              ? null
-              : () => unawaited(controller.reloadCurrentSurface()),
-        ),
-      ],
-    );
-
-    final body = enabledPlugins.isEmpty
-        ? Center(
-            child: Text(
-              strings.resolve(ThemeStringKey.discoverEnablePlugin),
-              style: TextStyle(color: colors.textSecondary),
-            ),
-          )
-        : _BrowserBody(state: discoverState, controller: controller);
+    final horizontalGutter = compactWidth
+        ? metrics.gutterCompact
+        : metrics.gutter;
+    final detail = state.selectedCollection != null;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        (compactWidth ? metrics.gutterCompact : metrics.gutter) + leadingInset,
-        20,
-        compactWidth ? metrics.gutterCompact : metrics.gutter,
-        20,
+        horizontalGutter,
+        compactHeight ? 10 : 20,
+        horizontalGutter,
+        compactHeight ? 10 : 20,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          header,
-          if (pluginsValue.hasError) ...<Widget>[
-            const SizedBox(height: 12),
-            Text(
-              pluginsValue.error.toString(),
-              style: TextStyle(color: colors.danger),
+          // The detail surface owns the whole page: its header carries the
+          // back affordance, and the source strip would only compete with it.
+          if (!detail) ...<Widget>[
+            _DiscoverHeader(
+              compactHeight: compactHeight,
+              strings: strings,
+              tokens: tokens,
+              onRefresh: enabledPlugins.isEmpty
+                  ? null
+                  : () => unawaited(controller.refreshAll()),
             ),
+            SizedBox(height: compactHeight ? 8 : 14),
+            _SourceStrip(
+              plugins: enabledPlugins,
+              state: state,
+              onSelect: (pluginId) =>
+                  unawaited(controller.selectPlugin(pluginId)),
+            ),
+            SizedBox(height: compactHeight ? 10 : 18),
+            if (pluginsValue.hasError) ...<Widget>[
+              Text(
+                pluginsValue.error.toString(),
+                style: TextStyle(fontSize: 12, color: colors.danger),
+              ),
+              const SizedBox(height: 10),
+            ],
           ],
-          const SizedBox(height: 16),
-          Expanded(child: body),
+          Expanded(
+            child: detail
+                ? _DetailPanel(
+                    state: state,
+                    strings: strings,
+                    onRetry: () => unawaited(controller.reloadDetail()),
+                    onLoadMore: () => unawaited(controller.loadMoreDetail()),
+                    onPlay: (item) => unawaited(
+                      ref
+                          .read(playerControllerProvider.notifier)
+                          .playFromPlugin(item),
+                    ),
+                    onDownload: (item) => unawaited(
+                      ref
+                          .read(downloadControllerProvider.notifier)
+                          .startDownload(PlaybackItem.fromMusicItem(item)),
+                    ),
+                  )
+                : _BrowseSurface(
+                    state: state,
+                    strings: strings,
+                    compactHeight: compactHeight,
+                    showPluginHint: enabledPlugins.isEmpty,
+                    onSelectCollection: (collection) =>
+                        unawaited(controller.openCollection(collection)),
+                    onRetryRankings: () =>
+                        unawaited(controller.reloadRankings()),
+                    onRetryHotPlaylists: () =>
+                        unawaited(controller.reloadHotPlaylists()),
+                    onSelectTag: (tag) =>
+                        unawaited(controller.selectHotPlaylistTag(tag)),
+                    onLoadMoreHotPlaylists: () =>
+                        unawaited(controller.loadMoreHotPlaylists()),
+                  ),
+          ),
         ],
       ),
     );
   }
 }
 
-/// The design's compact header button: a bordered pill, not a raised button.
+/// Page identity and the one page-level action.
 ///
-/// The mockup's secondary surfaces use one control shape throughout
-/// (`pillbtn`), so the browser's actions are drawn from the same widget the
-/// home page uses rather than from Material's button styles.
-class _PillButton extends ConsumerWidget {
-  const _PillButton({required this.icon, required this.label, this.onTap});
+/// A short window (landscape phone) compresses the title and the source strip
+/// into a single row: at 360dp tall the stacked header plus section headings
+/// left almost no room for the catalogue itself.
+class _DiscoverHeader extends StatelessWidget {
+  const _DiscoverHeader({
+    required this.compactHeight,
+    required this.strings,
+    required this.tokens,
+    required this.onRefresh,
+  });
 
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
+  final bool compactHeight;
+  final ThemeStrings strings;
+  final ThemeTokens tokens;
+  final VoidCallback? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = tokens.color;
+    final title = Text(
+      strings.resolve(ThemeStringKey.discoverPageTitle),
+      style: TextStyle(
+        fontSize: tokens.typography.resolvedPageTitleSize,
+        fontWeight: FontWeight.w700,
+        color: colors.textPrimary,
+      ),
+    );
+    if (compactHeight) {
+      return Row(
+        children: <Widget>[
+          Text(
+            strings.resolve(ThemeStringKey.discoverPageTitle),
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
+          ),
+          const Spacer(),
+          _PillButton(
+            icon: Icons.refresh,
+            label: strings.resolve(ThemeStringKey.discoverRefresh),
+            onTap: onRefresh,
+          ),
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              title,
+              const SizedBox(height: 4),
+              Text(
+                strings.resolve(ThemeStringKey.discoverPageSubtitle),
+                style: TextStyle(fontSize: 12, color: colors.textMuted),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        _PillButton(
+          icon: Icons.refresh,
+          label: strings.resolve(ThemeStringKey.discoverRefresh),
+          onTap: onRefresh,
+        ),
+      ],
+    );
+  }
+}
+
+/// The source strip, shaped like the search page's result tabs.
+///
+/// One source owns both sections at a time, so this is a selector rather than
+/// a filter: the selected pill is the plugin whose rankings and playlists are
+/// on screen. The trailing affordance only speaks for the selected source —
+/// the other pills have no state to report until they are chosen.
+class _SourceStrip extends ConsumerWidget {
+  const _SourceStrip({
+    required this.plugins,
+    required this.state,
+    required this.onSelect,
+  });
+
+  final List<PluginDefinition> plugins;
+  final DiscoverState state;
+  final ValueChanged<String> onSelect;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = RobyneTheme.of(context).tokens;
-    final colors = tokens.color;
-    final enabled = onTap != null;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.all(Radius.circular(tokens.radius.full)),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: colors.surfaceBase,
-          borderRadius: BorderRadius.all(Radius.circular(tokens.radius.full)),
-          border: Border.all(color: colors.borderSubtle),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(
-              icon,
-              size: 15,
-              color: enabled ? colors.textSecondary : colors.textDisabled,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: enabled ? colors.textSecondary : colors.textDisabled,
-              ),
-            ),
-          ],
+    if (plugins.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final loading = state.isLoadingTopLists || state.isLoadingHotPlaylists;
+    final failed =
+        state.topListsError != null && state.hotPlaylistsError != null;
+    return SizedBox(
+      height: 40,
+      // With several plugins the strip overflows; the wheel adapter keeps a
+      // plain mouse wheel usable instead of requiring shift+wheel.
+      child: HorizontalWheelScroll(
+        builder: (context, controller) => ListView.separated(
+          controller: controller,
+          scrollDirection: Axis.horizontal,
+          itemCount: plugins.length,
+          separatorBuilder: (context, index) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final plugin = plugins[index];
+            final selected = plugin.id == state.selectedPluginId;
+            return _SourcePill(
+              label: plugin.platform,
+              selected: selected,
+              trailing: selected && loading
+                  ? const SizedBox.square(
+                      dimension: 13,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : selected && failed
+                  ? Icon(
+                      Icons.error_outline,
+                      size: 15,
+                      color: RobyneTheme.of(context).tokens.color.danger,
+                    )
+                  : null,
+              onTap: () => onSelect(plugin.id),
+            );
+          },
         ),
       ),
     );
   }
 }
 
-/// One plugin source in the browser's source row.
-///
-/// The mockup draws these as bordered pills that turn brand-tinted when
-/// selected, rather than Material's `ChoiceChip`, whose selected state is a
-/// solid brand fill — too loud inside a panel that is already a card.
-class _SourceChip extends StatelessWidget {
-  const _SourceChip({
+/// A bordered source pill — the same shape the search page's result tabs use.
+class _SourcePill extends StatelessWidget {
+  const _SourcePill({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.trailing,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +304,7 @@ class _SourceChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.all(Radius.circular(tokens.radius.full)),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: selected ? comp.selectedIndicatorFill : colors.surfaceBase,
           borderRadius: BorderRadius.all(Radius.circular(tokens.radius.full)),
@@ -209,117 +312,21 @@ class _SourceChip extends StatelessWidget {
             color: selected ? comp.selectedIndicator : colors.borderDefault,
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected ? comp.selectedItem : colors.textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The design's two-way switch between rankings and hot playlists.
-///
-/// A track with two pills (`segbar` in the mockup). Material's
-/// `SegmentedButton` was the wrong shape here: inside a 5/11-wide pane it
-/// wrapped its own labels, and its selected fill is a solid primary swatch
-/// rather than the design's translucent brand wash.
-class _SurfaceSwitch extends ConsumerWidget {
-  const _SurfaceSwitch({required this.surface, required this.onSelectSurface});
-
-  final DiscoverSurface surface;
-  final ValueChanged<DiscoverSurface> onSelectSurface;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = RobyneTheme.of(context).tokens;
-    final colors = tokens.color;
-    final comp = tokens.components.navBar;
-    final strings = ref.watch(activeThemeStringsProvider);
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: colors.textPrimary.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.all(Radius.circular(tokens.radius.md)),
-        border: Border.all(color: colors.borderSubtle),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          for (final entry in <(DiscoverSurface, ThemeStringKey, IconData)>[
-            (
-              DiscoverSurface.rankings,
-              ThemeStringKey.discoverRankings,
-              Icons.emoji_events_outlined,
-            ),
-            (
-              DiscoverSurface.hotPlaylists,
-              ThemeStringKey.discoverHotPlaylists,
-              Icons.grid_view_outlined,
-            ),
-          ]) ...<Widget>[
-            _SurfacePill(
-              icon: entry.$3,
-              label: strings.resolve(entry.$2),
-              selected: surface == entry.$1,
-              accent: comp.selectedItem,
-              fill: comp.selectedIndicatorFill,
-              onTap: () => onSelectSurface(entry.$1),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SurfacePill extends StatelessWidget {
-  const _SurfacePill({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.accent,
-    required this.fill,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final Color accent;
-  final Color fill;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = RobyneTheme.of(context).tokens;
-    final colors = tokens.color;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.all(Radius.circular(tokens.radius.sm)),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? fill : const Color(0x00000000),
-          borderRadius: BorderRadius.all(Radius.circular(tokens.radius.sm)),
-        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(icon, size: 15, color: selected ? accent : colors.textMuted),
-            const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                color: selected ? accent : colors.textSecondary,
+                color: selected ? comp.selectedItem : colors.textSecondary,
               ),
             ),
+            if (trailing != null) ...<Widget>[
+              const SizedBox(width: 6),
+              trailing!,
+            ],
           ],
         ),
       ),
@@ -327,257 +334,297 @@ class _SurfacePill extends StatelessWidget {
   }
 }
 
-/// Renders the browse/detail split when at least one plugin is enabled.
-///
-/// Split out of [DiscoverPage] so the enabled-plugin gate above reads as one
-/// decision ("is there data at all?") instead of being tangled with the
-/// two-pane layout question.
-class _BrowserBody extends ConsumerWidget {
-  const _BrowserBody({required this.state, required this.controller});
-
-  final DiscoverState state;
-  final DiscoverController controller;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Consumer(
-      builder: (context, ref, _) {
-        ref.watch(discoverControllerProvider);
-        // Same ordered source list as the page header, so the browser and the
-        // home page agree on which plugin is "first".
-        final enabledPlugins = ref.watch(orderedEnabledPluginsProvider);
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            // The design draws the browser as two panes (来源 | 榜单歌曲).
-            // The pane needs enough width to carry both a source list and the
-            // detail rows, so the split is a content question, not a shell
-            // breakpoint: a 1280 window minus the queue and rail has ~800dp
-            // here and should split, while a 360dp-tall landscape phone must
-            // keep the detail full-pane with a back affordance. See ADR-001
-            // decision D6.
-            final splitPanes = constraints.maxWidth >= 560;
-            final browse = _BrowsePanel(
-              plugins: enabledPlugins,
-              state: ref.watch(discoverControllerProvider),
-              onSelectPlugin: (pluginId) =>
-                  unawaited(controller.selectPlugin(pluginId)),
-              onSelectSurface: (surface) =>
-                  unawaited(controller.selectSurface(surface)),
-              onRetry: () => unawaited(controller.reloadCurrentSurface()),
-              onSelectCollection: (collection) =>
-                  unawaited(controller.openCollection(collection)),
-              onSelectTag: (tag) =>
-                  unawaited(controller.selectHotPlaylistTag(tag)),
-              onLoadMoreHotPlaylists: () =>
-                  unawaited(controller.loadMoreHotPlaylists()),
-            );
-            final detail = _DetailPanel(
-              state: ref.watch(discoverControllerProvider),
-              onRetry: () => unawaited(controller.reloadDetail()),
-              onLoadMore: () => unawaited(controller.loadMoreDetail()),
-              onBack: splitPanes ? null : () => controller.closeDetail(),
-              onPlay: (item) => unawaited(
-                ref
-                    .read(playerControllerProvider.notifier)
-                    .playFromPlugin(item),
-              ),
-              onDownload: (item) => unawaited(
-                ref
-                    .read(downloadControllerProvider.notifier)
-                    .startDownload(PlaybackItem.fromMusicItem(item)),
-              ),
-            );
-
-            if (splitPanes) {
-              return Row(
-                children: <Widget>[
-                  Expanded(flex: 5, child: browse),
-                  const SizedBox(width: 16),
-                  Expanded(flex: 6, child: detail),
-                ],
-              );
-            }
-
-            return AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              child: ref.watch(discoverControllerProvider).detail != null
-                  ? detail
-                  : browse,
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _BrowsePanel extends ConsumerWidget {
-  const _BrowsePanel({
-    required this.plugins,
+/// The two catalogue sections, arranged for the available content width.
+class _BrowseSurface extends ConsumerWidget {
+  const _BrowseSurface({
     required this.state,
-    required this.onSelectPlugin,
-    required this.onSelectSurface,
-    required this.onRetry,
+    required this.strings,
+    required this.compactHeight,
+    required this.showPluginHint,
     required this.onSelectCollection,
+    required this.onRetryRankings,
+    required this.onRetryHotPlaylists,
     required this.onSelectTag,
     required this.onLoadMoreHotPlaylists,
   });
 
-  final List<PluginDefinition> plugins;
   final DiscoverState state;
-  final ValueChanged<String> onSelectPlugin;
-  final ValueChanged<DiscoverSurface> onSelectSurface;
-  final VoidCallback onRetry;
+  final ThemeStrings strings;
+  final bool compactHeight;
+  final bool showPluginHint;
   final ValueChanged<OnlineCollectionItem> onSelectCollection;
+  final VoidCallback onRetryRankings;
+  final VoidCallback onRetryHotPlaylists;
   final ValueChanged<OnlineSheetTag> onSelectTag;
   final VoidCallback onLoadMoreHotPlaylists;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = RobyneTheme.of(context).tokens;
-    final colors = tokens.color;
-    final strings = ref.watch(activeThemeStringsProvider);
-    return _PanelShell(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            strings.resolve(ThemeStringKey.discoverSources),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.4,
-              color: colors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          // A `Wrap` inside a horizontal scroll view is handed unbounded
-          // width, so every chip lands on one line and the row overflows the
-          // pane instead of wrapping. Scrollable axis wants a `Row`: chips
-          // keep their intrinsic width and the row scrolls when the pane is
-          // narrower than the source list (seen at 400dp phone width).
-          HorizontalWheelScroll(
-            builder: (context, controller) => SingleChildScrollView(
-              controller: controller,
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                spacing: 8,
-                children: plugins
-                    .map(
-                      (plugin) => _SourceChip(
-                        label: plugin.platform,
-                        selected: plugin.id == state.selectedPluginId,
-                        onTap: () => onSelectPlugin(plugin.id),
+    // The skin decides how a collection flow presents (grid of covers or rows
+    // of tiles). Both sections read the same declaration so they cannot
+    // disagree about what "discover" looks like.
+    final style = ref.watch(
+      contentStyleForProvider(ThemeContentSurface.discover),
+    );
+    final rankings = _RankingsSection(
+      state: state,
+      strings: strings,
+      style: style,
+      onSelect: onSelectCollection,
+      onRetry: onRetryRankings,
+    );
+    final hotPlaylists = _HotPlaylistsSection(
+      state: state,
+      strings: strings,
+      style: style,
+      onSelect: onSelectCollection,
+      onRetry: onRetryHotPlaylists,
+      onSelectTag: onSelectTag,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        if (showPluginHint) ...<Widget>[
+          _EnablePluginHint(strings: strings, compact: compactHeight),
+          SizedBox(height: compactHeight ? 10 : 16),
+        ],
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Two panes need room for a readable cover grid each. Below this
+              // the stacked reading order is better than two 140dp columns.
+              final twoColumns = !compactHeight && constraints.maxWidth >= 620;
+              if (twoColumns) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Expanded(
+                      child: _SectionScroll(
+                        storageKey: 'discover-rankings',
+                        child: rankings,
                       ),
-                    )
-                    .toList(growable: false),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // The design's segmented control is a track with two brand-tinted
-          // pills, not Material's outline-button group: at 300dp of pane
-          // width the Material version wraps its own labels.
-          _SurfaceSwitch(
-            surface: state.surface,
-            onSelectSurface: onSelectSurface,
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: switch (state.surface) {
-              DiscoverSurface.rankings => _RankingsBrowser(
-                state: state,
-                onRetry: onRetry,
-                onSelectCollection: onSelectCollection,
-              ),
-              DiscoverSurface.hotPlaylists => _HotPlaylistsBrowser(
-                state: state,
-                onRetry: onRetry,
-                onSelectTag: onSelectTag,
-                onSelectCollection: onSelectCollection,
+                    ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: _SectionScroll(
+                        storageKey: 'discover-hot-playlists',
+                        onLoadMore: onLoadMoreHotPlaylists,
+                        child: hotPlaylists,
+                      ),
+                    ),
+                  ],
+                );
+              }
+              return _SectionScroll(
+                storageKey: 'discover-stack',
                 onLoadMore: onLoadMoreHotPlaylists,
-              ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    rankings,
+                    const SizedBox(height: 24),
+                    hotPlaylists,
+                  ],
+                ),
+              );
             },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _RankingsBrowser extends ConsumerWidget {
-  const _RankingsBrowser({
+/// One scrollable column, with the hot-playlist pagination trigger attached.
+///
+/// Pagination hangs off the scroll view rather than a "load more" button: the
+/// catalogue is a wall of covers, and a button at the bottom of a short list is
+/// a button the user has to hunt for. A post-frame check covers the case the
+/// scroll listener cannot see — content shorter than the viewport, where no
+/// scroll event ever fires but the next page is still wanted.
+class _SectionScroll extends StatefulWidget {
+  const _SectionScroll({
+    required this.storageKey,
+    required this.child,
+    this.onLoadMore,
+  });
+
+  final String storageKey;
+  final Widget child;
+  final VoidCallback? onLoadMore;
+
+  @override
+  State<_SectionScroll> createState() => _SectionScrollState();
+}
+
+class _SectionScrollState extends State<_SectionScroll> {
+  final ScrollController _controller = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleLoadMore();
+  }
+
+  @override
+  void didUpdateWidget(_SectionScroll oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _scheduleLoadMore();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _scheduleLoadMore() {
+    if (widget.onLoadMore == null) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMoreIfClose());
+  }
+
+  void _loadMoreIfClose() {
+    final onLoadMore = widget.onLoadMore;
+    if (!mounted || onLoadMore == null || !_controller.hasClients) {
+      return;
+    }
+    if (_controller.position.extentAfter < 500) {
+      onLoadMore();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scrollView = SingleChildScrollView(
+      controller: _controller,
+      // Opening a collection and coming back should land where the user left,
+      // not at the top of the page.
+      key: PageStorageKey<String>(widget.storageKey),
+      padding: const EdgeInsets.only(bottom: 8),
+      child: widget.child,
+    );
+    if (widget.onLoadMore == null) {
+      return scrollView;
+    }
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification.metrics.extentAfter < 500) {
+          widget.onLoadMore!();
+        }
+        return false;
+      },
+      child: scrollView,
+    );
+  }
+}
+
+class _RankingsSection extends StatelessWidget {
+  const _RankingsSection({
     required this.state,
+    required this.strings,
+    required this.style,
+    required this.onSelect,
     required this.onRetry,
-    required this.onSelectCollection,
   });
 
   final DiscoverState state;
+  final ThemeStrings strings;
+  final ThemeListStyle style;
+  final ValueChanged<OnlineCollectionItem> onSelect;
   final VoidCallback onRetry;
-  final ValueChanged<OnlineCollectionItem> onSelectCollection;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final strings = ref.watch(activeThemeStringsProvider);
-    final colors = RobyneTheme.of(context).tokens.color;
-    if (state.isLoadingTopLists && state.topListGroups.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (state.topListsError != null && state.topListGroups.isEmpty) {
-      return _ErrorState(error: state.topListsError!, onRetry: onRetry);
-    }
-    if (state.topListGroups.isEmpty) {
-      return Center(
-        child: Text(
-          strings.resolve(ThemeStringKey.discoverEmptyRankings),
-          style: TextStyle(color: colors.textMuted),
-        ),
-      );
-    }
-    return _GroupedCollectionList(
-      groups: state.topListGroups,
-      selectedCollectionKey: state.selectedCollectionKey,
-      onSelectCollection: onSelectCollection,
+  Widget build(BuildContext context) {
+    final heading = strings.resolve(ThemeStringKey.discoverRankings);
+    final groups = state.topListGroups;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _SectionHeading(label: heading),
+        const SizedBox(height: 10),
+        if (state.isLoadingTopLists && groups.isEmpty)
+          const _SectionLoading()
+        else if (state.topListsError != null && groups.isEmpty)
+          _SectionError(error: state.topListsError!, onRetry: onRetry)
+        else if (groups.isEmpty)
+          _SectionEmpty(
+            label: strings.resolve(ThemeStringKey.discoverEmptyRankings),
+          )
+        else ...<Widget>[
+          for (final group in groups) ...<Widget>[
+            // A plugin often names its first group after the section itself
+            // ("排行榜 → 排行榜"); printing it twice only adds noise.
+            if (group.title.trim().isNotEmpty && group.title.trim() != heading)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  group.title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: RobyneTheme.of(context).tokens.color.textSecondary,
+                  ),
+                ),
+              ),
+            _CollectionFlow(
+              items: group.items,
+              style: style,
+              onSelect: onSelect,
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (state.topListsError != null)
+            _InlineError(error: state.topListsError!, onRetry: onRetry),
+        ],
+      ],
     );
   }
 }
 
-class _HotPlaylistsBrowser extends ConsumerWidget {
-  const _HotPlaylistsBrowser({
+class _HotPlaylistsSection extends ConsumerWidget {
+  const _HotPlaylistsSection({
     required this.state,
+    required this.strings,
+    required this.style,
+    required this.onSelect,
     required this.onRetry,
     required this.onSelectTag,
-    required this.onSelectCollection,
-    required this.onLoadMore,
   });
 
   final DiscoverState state;
+  final ThemeStrings strings;
+  final ThemeListStyle style;
+  final ValueChanged<OnlineCollectionItem> onSelect;
   final VoidCallback onRetry;
   final ValueChanged<OnlineSheetTag> onSelectTag;
-  final ValueChanged<OnlineCollectionItem> onSelectCollection;
-  final VoidCallback onLoadMore;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final strings = ref.watch(activeThemeStringsProvider);
-    final colors = RobyneTheme.of(context).tokens.color;
+    final heading = strings.resolve(ThemeStringKey.discoverHotPlaylists);
     final quickTags = state.pinnedSheetTags.isNotEmpty
         ? state.pinnedSheetTags
         : state.sheetTagGroups
               .expand((group) => group.tags)
               .take(6)
               .toList(growable: false);
+    final hasTags = quickTags.isNotEmpty || state.sheetTagGroups.isNotEmpty;
+    final showFooter = state.isLoadingMoreHotPlaylists;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        if (quickTags.isNotEmpty || state.sheetTagGroups.isNotEmpty)
+        _SectionHeading(label: heading),
+        if (hasTags) ...<Widget>[
+          const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: <Widget>[
               for (final tag in quickTags)
-                _SourceChip(
+                _TagChip(
                   label: tag.title,
                   selected: tag.key == state.selectedSheetTag?.key,
                   onTap: () => onSelectTag(tag),
@@ -590,119 +637,27 @@ class _HotPlaylistsBrowser extends ConsumerWidget {
                 ),
             ],
           ),
-        if (quickTags.isNotEmpty || state.sheetTagGroups.isNotEmpty)
-          const SizedBox(height: 16),
-        Expanded(
-          child: Builder(
-            builder: (context) {
-              if (state.isLoadingHotPlaylists &&
-                  state.hotPlaylistItems.isEmpty) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (state.hotPlaylistsError != null &&
-                  state.hotPlaylistItems.isEmpty) {
-                return _ErrorState(
-                  error: state.hotPlaylistsError!,
-                  onRetry: onRetry,
-                );
-              }
-              if (state.hotPlaylistItems.isEmpty) {
-                return Center(
-                  child: Text(
-                    strings.resolve(ThemeStringKey.discoverEmptyPlaylists),
-                    style: TextStyle(color: colors.textMuted),
-                  ),
-                );
-              }
-
-              final showFooter =
-                  state.isLoadingMoreHotPlaylists ||
-                  state.hotPlaylistsError != null;
-              return NotificationListener<ScrollNotification>(
-                onNotification: (notification) {
-                  if (notification.metrics.extentAfter < 500 &&
-                      !state.isLoadingMoreHotPlaylists &&
-                      !state.isLoadingHotPlaylists &&
-                      !state.hotPlaylistsIsEnd) {
-                    onLoadMore();
-                  }
-                  return false;
-                },
-                child: Consumer(
-                  builder: (context, ref, _) {
-                    // The skin decides how `content.style` presents a
-                    // collection flow (design spec §2.5). `grid` reads as a
-                    // compact tiled grid; every other value keeps the row
-                    // list, which is also the degradation fallback.
-                    final style = ref.watch(
-                      contentStyleForProvider(ThemeContentSurface.discover),
-                    );
-                    final child = style == ThemeListStyle.grid
-                        ? GridView.builder(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            gridDelegate:
-                                SliverGridDelegateWithMaxCrossAxisExtent(
-                                  maxCrossAxisExtent: 190,
-                                  mainAxisSpacing: 12,
-                                  crossAxisSpacing: 12,
-                                  // The card is 96dp of cover plus a fixed
-                                  // caption block. An aspect ratio cannot
-                                  // express that: when the tile narrows (two
-                                  // columns in an 800dp pane) a 0.78 ratio
-                                  // left the cover insisting on its share and
-                                  // clipped the title to one truncated line.
-                                  mainAxisExtent: 96 + _collectionCardCaption,
-                                ),
-                            itemCount:
-                                state.hotPlaylistItems.length +
-                                (showFooter ? 1 : 0),
-                            itemBuilder: (context, index) {
-                              if (index >= state.hotPlaylistItems.length) {
-                                return _CollectionFooter(
-                                  isLoading: state.isLoadingMoreHotPlaylists,
-                                  error: state.hotPlaylistsError,
-                                );
-                              }
-                              final item = state.hotPlaylistItems[index];
-                              return _CollectionCard(
-                                item: item,
-                                selected:
-                                    item.uniqueKey ==
-                                    state.selectedCollectionKey,
-                                onTap: () => onSelectCollection(item),
-                              );
-                            },
-                          )
-                        : ListView.separated(
-                            itemCount:
-                                state.hotPlaylistItems.length +
-                                (showFooter ? 1 : 0),
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              if (index >= state.hotPlaylistItems.length) {
-                                return _CollectionFooter(
-                                  isLoading: state.isLoadingMoreHotPlaylists,
-                                  error: state.hotPlaylistsError,
-                                );
-                              }
-                              final item = state.hotPlaylistItems[index];
-                              return _CollectionTile(
-                                item: item,
-                                selected:
-                                    item.uniqueKey ==
-                                    state.selectedCollectionKey,
-                                onTap: () => onSelectCollection(item),
-                              );
-                            },
-                          );
-                    return child;
-                  },
-                ),
-              );
-            },
+        ],
+        const SizedBox(height: 10),
+        if (state.isLoadingHotPlaylists && state.hotPlaylistItems.isEmpty)
+          const _SectionLoading()
+        else if (state.hotPlaylistsError != null &&
+            state.hotPlaylistItems.isEmpty)
+          _SectionError(error: state.hotPlaylistsError!, onRetry: onRetry)
+        else if (state.hotPlaylistItems.isEmpty)
+          _SectionEmpty(
+            label: strings.resolve(ThemeStringKey.discoverEmptyPlaylists),
+          )
+        else ...<Widget>[
+          _CollectionFlow(
+            items: state.hotPlaylistItems,
+            style: style,
+            onSelect: onSelect,
           ),
-        ),
+          if (state.hotPlaylistsError != null)
+            _InlineError(error: state.hotPlaylistsError!, onRetry: onRetry),
+          if (showFooter) const _CollectionFooter(isLoading: true, error: null),
+        ],
       ],
     );
   }
@@ -740,7 +695,7 @@ class _HotPlaylistsBrowser extends ConsumerWidget {
                 runSpacing: 8,
                 children: group.tags
                     .map(
-                      (tag) => _SourceChip(
+                      (tag) => _TagChip(
                         label: tag.title,
                         selected: tag.key == state.selectedSheetTag?.key,
                         onTap: () {
@@ -760,185 +715,383 @@ class _HotPlaylistsBrowser extends ConsumerWidget {
   }
 }
 
-class _DetailPanel extends ConsumerWidget {
-  const _DetailPanel({
-    required this.state,
-    required this.onRetry,
-    required this.onLoadMore,
-    required this.onPlay,
-    required this.onDownload,
-    this.onBack,
+/// One collection list in either the skin's grid or list presentation.
+class _CollectionFlow extends StatelessWidget {
+  const _CollectionFlow({
+    required this.items,
+    required this.style,
+    required this.onSelect,
   });
 
-  final DiscoverState state;
-  final VoidCallback onRetry;
-  final VoidCallback onLoadMore;
-  final ValueChanged<MusicItem> onPlay;
-  final ValueChanged<MusicItem> onDownload;
-
-  /// Non-null only when the detail owns the whole pane; pops back to browse.
-  final VoidCallback? onBack;
+  final List<OnlineCollectionItem> items;
+  final ThemeListStyle style;
+  final ValueChanged<OnlineCollectionItem> onSelect;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = RobyneTheme.of(context).tokens;
-    final colors = tokens.color;
-    final strings = ref.watch(activeThemeStringsProvider);
-    final detail = state.detail;
-    return _PanelShell(
-      child: Builder(
-        builder: (context) {
-          if (state.isLoadingDetail && detail == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (state.detailError != null && detail == null) {
-            return _ErrorState(error: state.detailError!, onRetry: onRetry);
-          }
-          if (detail == null) {
-            return Center(
-              child: Text(
-                strings.resolve(ThemeStringKey.discoverChooseCollection),
-                style: TextStyle(color: colors.textMuted),
-              ),
-            );
-          }
-
-          final showFooter =
-              state.isLoadingMoreDetail || state.detailError != null;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  if (onBack != null)
-                    IconButton(
-                      tooltip: strings.resolve(
-                        ThemeStringKey.discoverBackToBrowse,
-                      ),
-                      onPressed: onBack,
-                      icon: const Icon(Icons.arrow_back),
-                    ),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(tokens.radius.sm),
-                    child: SizedBox(
-                      width: 72,
-                      height: 72,
-                      child: ArtworkView(
-                        artworkUrl: detail.collection.artworkUrl,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          detail.collection.title,
-                          style: TextStyle(
-                            fontSize:
-                                tokens.typography.resolvedSectionTitleSize,
-                            fontWeight: FontWeight.w700,
-                            color: colors.textPrimary,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          detail.collection.description?.trim().isNotEmpty ==
-                                  true
-                              ? detail.collection.description!
-                              : detail.collection.platform,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colors.textSecondary,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          strings
-                              .resolve(ThemeStringKey.discoverTrackCount)
-                              .replaceAll('{count}', '${detail.items.length}'),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: colors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: strings.resolve(ThemeStringKey.discoverRefresh),
-                    onPressed: onRetry,
-                    icon: const Icon(Icons.refresh),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Collection-level actions: the panel header is the only place
-              // that knows the whole collection, so this is where "play it"
-              // and "favourite it" belong — the rows below are per-track.
-              CollectionActions(collection: detail.collection),
-              const SizedBox(height: 16),
-              Expanded(
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification.metrics.extentAfter < 500 &&
-                        !state.isLoadingDetail &&
-                        !state.isLoadingMoreDetail &&
-                        !detail.isEnd &&
-                        detail.collection.kind ==
-                            OnlineCollectionKind.musicSheet) {
-                      onLoadMore();
-                    }
-                    return false;
-                  },
-                  child: ListView.separated(
-                    itemCount: detail.items.length + (showFooter ? 1 : 0),
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      if (index >= detail.items.length) {
-                        return _CollectionFooter(
-                          isLoading: state.isLoadingMoreDetail,
-                          error: state.detailError,
-                        );
-                      }
-                      final item = detail.items[index];
-                      // The design draws the track row's actions inline
-                      // (`rowacts`), revealed on the row rather than parked in
-                      // a `ListTile` trailing slot that a two-pane detail
-                      // cannot afford.
-                      return SongContextMenuRegion(
-                        item: PlaybackItem.fromMusicItem(item),
-                        child: _DetailTrackRow(
-                          item: item,
-                          index: index,
-                          strings: strings,
-                          onPlay: () => onPlay(item),
-                          onDownload: () => onDownload(item),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    // The grids are nested inside the page's scroll view, so they must not
+    // scroll or expand unboundedly themselves.
+    if (style == ThemeListStyle.grid) {
+      // The caption block is measured, not assumed: a fixed 55dp was arithmetic
+      // about Latin line boxes and overflowed by 3–6dp as soon as a CJK font or
+      // a text scale made the lines taller.
+      final metrics = _CollectionCardMetrics.resolve(
+        RobyneTheme.of(context).tokens,
+        MediaQuery.textScalerOf(context),
+      );
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 190,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          mainAxisExtent: _CollectionCardMetrics.cover + metrics.caption,
+        ),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return _CollectionCard(
+            item: item,
+            metrics: metrics,
+            onTap: () => onSelect(item),
           );
         },
+      );
+    }
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      itemCount: items.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return _CollectionTile(item: item, onTap: () => onSelect(item));
+      },
+    );
+  }
+}
+
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = RobyneTheme.of(context).tokens;
+    return Text(
+      label,
+      style: TextStyle(
+        fontSize: tokens.typography.resolvedSectionTitleSize,
+        fontWeight: FontWeight.w700,
+        color: tokens.color.textPrimary,
       ),
     );
   }
 }
 
-/// One track in the detail pane, in the design's row shape.
+class _SectionLoading extends StatelessWidget {
+  const _SectionLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 40),
+      child: Center(
+        child: SizedBox.square(
+          dimension: 22,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionEmpty extends StatelessWidget {
+  const _SectionEmpty({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          color: RobyneTheme.of(context).tokens.color.textMuted,
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionError extends ConsumerWidget {
+  const _SectionError({required this.error, required this.onRetry});
+
+  final AppError error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(activeThemeStringsProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            '${error.code}: ${error.message}',
+            style: TextStyle(
+              fontSize: 12,
+              color: RobyneTheme.of(context).tokens.color.danger,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _PillButton(
+            icon: Icons.refresh,
+            label: strings.resolve(ThemeStringKey.discoverRetry),
+            onTap: onRetry,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineError extends ConsumerWidget {
+  const _InlineError({required this.error, required this.onRetry});
+
+  final AppError error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final strings = ref.watch(activeThemeStringsProvider);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Icon(Icons.error_outline, size: 14, color: tokens.color.danger),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            '${error.code}: ${error.message}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11, color: tokens.color.danger),
+          ),
+        ),
+        TextButton(
+          onPressed: onRetry,
+          style: TextButton.styleFrom(
+            foregroundColor: tokens.color.textSecondary,
+            visualDensity: VisualDensity.compact,
+            minimumSize: const Size(0, 28),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          child: Text(
+            strings.resolve(ThemeStringKey.discoverRetry),
+            style: const TextStyle(fontSize: 11),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailPanel extends ConsumerWidget {
+  const _DetailPanel({
+    required this.state,
+    required this.strings,
+    required this.onRetry,
+    required this.onLoadMore,
+    required this.onPlay,
+    required this.onDownload,
+  });
+
+  final DiscoverState state;
+  final ThemeStrings strings;
+  final VoidCallback onRetry;
+  final VoidCallback onLoadMore;
+  final ValueChanged<MusicItem> onPlay;
+  final ValueChanged<MusicItem> onDownload;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final detail = state.detail;
+    // The header is built from whichever record the state holds: a click puts
+    // the collection into `selectedCollection` before the first request goes
+    // out, so the way back exists from the first frame. Building it inside
+    // the "detail loaded" branch is how a slow or failing source used to trap
+    // the user in a drill-down with nothing to press.
+    final collection = detail?.collection ?? state.selectedCollection;
+
+    Widget body;
+    if (state.isLoadingDetail && detail == null) {
+      body = const Center(child: CircularProgressIndicator());
+    } else if (state.detailError != null && detail == null) {
+      body = _SectionError(error: state.detailError!, onRetry: onRetry);
+    } else if (detail == null) {
+      body = Center(
+        child: Text(
+          strings.resolve(ThemeStringKey.discoverChooseCollection),
+          style: TextStyle(color: colors.textMuted),
+        ),
+      );
+    } else {
+      final showFooter = state.isLoadingMoreDetail || state.detailError != null;
+      body = NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification.metrics.extentAfter < 500 &&
+              !state.isLoadingDetail &&
+              !state.isLoadingMoreDetail &&
+              !detail.isEnd &&
+              detail.collection.kind == OnlineCollectionKind.musicSheet) {
+            onLoadMore();
+          }
+          return false;
+        },
+        child: ListView.separated(
+          itemCount: detail.items.length + (showFooter ? 1 : 0),
+          separatorBuilder: (context, index) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            if (index >= detail.items.length) {
+              return _CollectionFooter(
+                isLoading: state.isLoadingMoreDetail,
+                error: state.detailError,
+              );
+            }
+            final item = detail.items[index];
+            // The design draws the track row's actions inline (`rowacts`),
+            // revealed on the row rather than parked in a `ListTile` trailing
+            // slot.
+            return SongContextMenuRegion(
+              item: PlaybackItem.fromMusicItem(item),
+              child: _DetailTrackRow(
+                item: item,
+                index: index,
+                strings: strings,
+                onPlay: () => onPlay(item),
+                onDownload: () => onDownload(item),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    return _PanelShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              if (collection != null) ...<Widget>[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(tokens.radius.sm),
+                  child: SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: ArtworkView(artworkUrl: collection.artworkUrl),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _DetailHeaderText(
+                    collection: collection,
+                    itemCount: detail?.items.length,
+                    strings: strings,
+                  ),
+                ),
+              ] else
+                const Spacer(),
+              IconButton(
+                tooltip: strings.resolve(ThemeStringKey.discoverRefresh),
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Collection-level actions: the panel header is the only place that
+          // knows the whole collection, so this is where "play it" and
+          // "favourite it" belong — the rows below are per-track.
+          if (collection != null && detail != null) ...<Widget>[
+            CollectionActions(collection: collection),
+            const SizedBox(height: 16),
+          ],
+          Expanded(child: body),
+        ],
+      ),
+    );
+  }
+}
+
+/// Title, subtitle and track count for the detail header.
 ///
-/// The mockup's track row carries its index, a 38dp cover, title/artist and a
-/// pair of actions that appear on the row. `ListTile` was the wrong tool: its
-/// fixed 72dp height and trailing slot pushed the actions off a 5/11 pane.
+/// Split out so the header can render before the track list exists: the count
+/// line is the only part that needs the loaded detail.
+class _DetailHeaderText extends StatelessWidget {
+  const _DetailHeaderText({
+    required this.collection,
+    required this.itemCount,
+    required this.strings,
+  });
+
+  final OnlineCollectionItem collection;
+  final int? itemCount;
+  final ThemeStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final description = collection.description?.trim() ?? '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          collection.title,
+          style: TextStyle(
+            fontSize: tokens.typography.resolvedSectionTitleSize,
+            fontWeight: FontWeight.w700,
+            color: colors.textPrimary,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          description.isNotEmpty ? description : collection.platform,
+          style: TextStyle(fontSize: 12, color: colors.textSecondary),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (itemCount != null) ...<Widget>[
+          const SizedBox(height: 4),
+          Text(
+            strings
+                .resolve(ThemeStringKey.discoverTrackCount)
+                .replaceAll('{count}', '$itemCount'),
+            style: TextStyle(fontSize: 11, color: colors.textMuted),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// One track in the detail pane, in the design's row shape.
 class _DetailTrackRow extends StatelessWidget {
   const _DetailTrackRow({
     required this.item,
@@ -1025,7 +1178,7 @@ class _DetailTrackRow extends StatelessWidget {
   }
 }
 
-/// The design's inline row action: a 28dp hit target that stays dim until the
+/// The design's inline row action: a 30dp hit target that stays dim until the
 /// row is engaged, rather than a full Material icon button.
 class _RowAction extends StatelessWidget {
   const _RowAction({
@@ -1056,75 +1209,70 @@ class _RowAction extends StatelessWidget {
   }
 }
 
-class _GroupedCollectionList extends ConsumerWidget {
-  const _GroupedCollectionList({
-    required this.groups,
-    required this.selectedCollectionKey,
-    required this.onSelectCollection,
+/// The caption block under a collection cover, measured rather than guessed.
+///
+/// It used to be a single `55` standing in for "two title lines + one
+/// description line". That arithmetic was about Latin line boxes: with a CJK
+/// font (taller line box) or any text scale the block ran 3–6dp past the card
+/// and Flutter painted the yellow overflow stripes. Every line box is now
+/// pinned to the same multiplier the measurement assumes, so the two cannot
+/// disagree.
+class _CollectionCardMetrics {
+  const _CollectionCardMetrics({
+    required this.titleFontSize,
+    required this.descriptionFontSize,
+    required this.titleLineHeight,
+    required this.descriptionLineHeight,
   });
 
-  final List<OnlineCollectionGroup> groups;
-  final String? selectedCollectionKey;
-  final ValueChanged<OnlineCollectionItem> onSelectCollection;
+  static const double cover = 96;
+  static const double titleLines = 2;
+  static const double titleHeightFactor = 1.3;
+  static const double descriptionHeightFactor = 1.3;
+  static const double gap = 4;
+  static const double inset = 8;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = RobyneTheme.of(context).tokens;
-    return ListView.builder(
-      itemCount: groups.length,
-      itemBuilder: (context, index) {
-        final group = groups[index];
-        return Padding(
-          padding: EdgeInsets.only(bottom: index == groups.length - 1 ? 0 : 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                group.title,
-                style: TextStyle(
-                  fontSize: tokens.typography.resolvedSectionTitleSize,
-                  fontWeight: FontWeight.w700,
-                  color: tokens.color.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              for (final item in group.items) ...<Widget>[
-                _CollectionTile(
-                  item: item,
-                  selected: item.uniqueKey == selectedCollectionKey,
-                  onTap: () => onSelectCollection(item),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ],
-          ),
-        );
-      },
+  factory _CollectionCardMetrics.resolve(
+    ThemeTokens tokens,
+    TextScaler scaler,
+  ) {
+    final titleFontSize = tokens.typography.resolvedListPrimarySize;
+    const descriptionFontSize = 11.0;
+    return _CollectionCardMetrics(
+      titleFontSize: titleFontSize,
+      descriptionFontSize: descriptionFontSize,
+      titleLineHeight: scaler.scale(titleFontSize) * titleHeightFactor,
+      descriptionLineHeight:
+          scaler.scale(descriptionFontSize) * descriptionHeightFactor,
     );
   }
+
+  final double titleFontSize;
+  final double descriptionFontSize;
+  final double titleLineHeight;
+  final double descriptionLineHeight;
+
+  double get titleBlock => titleLineHeight * titleLines;
+
+  /// Everything below the cover: inset, the title block, the gap and one
+  /// description line. The half-dp of slack absorbs fractional rounding.
+  double get caption => inset + titleBlock + gap + descriptionLineHeight + 0.5;
 }
 
-/// Fixed caption height for [_CollectionCard]: two title lines (18 + 18), 4dp
-/// gap, then one description line (15).
-const double _collectionCardCaption = 55;
-
-/// One card in the hot-playlist flow.
+/// One card in the collection grid.
 ///
 /// The design's card is a square cover with the caption *below* it (not
 /// inside it) — this is the `covergrid` block in `docs/design/mockups`:
-///   cov(96dp) → ct(≤2 lines, 18dp each) → cs(one line)
-/// A `Row`-shaped tile with the title beside the artwork was the wrong shape
-/// for a 190dp-wide card: the title column was too narrow, so every title
-/// wrapped into a tall blob over the cover and the row height fought back.
+///   cov(96dp) → ct(≤2 lines) → cs(one line)
 class _CollectionCard extends ConsumerWidget {
   const _CollectionCard({
     required this.item,
-    required this.selected,
+    required this.metrics,
     required this.onTap,
   });
 
   final OnlineCollectionItem item;
-  final bool selected;
+  final _CollectionCardMetrics metrics;
   final VoidCallback onTap;
 
   @override
@@ -1133,8 +1281,9 @@ class _CollectionCard extends ConsumerWidget {
     final colors = tokens.color;
     final comp = tokens.components;
     final radius = tokens.radius.md;
+    final description = item.description?.trim() ?? '';
     return Material(
-      color: selected ? comp.card.selected : comp.card.surface,
+      color: comp.card.surface,
       borderRadius: BorderRadius.circular(radius),
       child: InkWell(
         borderRadius: BorderRadius.circular(radius),
@@ -1142,41 +1291,59 @@ class _CollectionCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            // 96dp square cover, top-aligned. A fixed extent from the grid
-            // delegate guarantees the caption block below never has to fight
-            // the cover for vertical room.
+            // 96dp cover, top-aligned. A fixed extent from the grid delegate
+            // guarantees the caption below never fights the cover for room.
             ClipRRect(
               borderRadius: BorderRadius.vertical(top: Radius.circular(radius)),
               child: SizedBox(
                 width: double.infinity,
-                height: 96,
+                height: _CollectionCardMetrics.cover,
                 child: ArtworkView(artworkUrl: item.artworkUrl),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+              padding: const EdgeInsets.fromLTRB(
+                10,
+                _CollectionCardMetrics.inset,
+                10,
+                0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Text(
-                    item.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: tokens.typography.resolvedListPrimarySize,
-                      fontWeight: FontWeight.w600,
-                      color: colors.textPrimary,
-                      height: 1.0,
+                  // Each text gets exactly its measured box, so a third line
+                  // or a taller glyph run is clipped by the box instead of
+                  // overflowing the card.
+                  SizedBox(
+                    height: metrics.titleBlock,
+                    child: Text(
+                      item.title,
+                      maxLines: _CollectionCardMetrics.titleLines.round(),
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: metrics.titleFontSize,
+                        height: _CollectionCardMetrics.titleHeightFactor,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
                     ),
                   ),
-                  if (item.description?.trim().isNotEmpty == true) ...<Widget>[
-                    const SizedBox(height: 4),
-                    Text(
-                      item.description!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: colors.textMuted),
+                  if (description.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: _CollectionCardMetrics.gap),
+                    SizedBox(
+                      height: metrics.descriptionLineHeight,
+                      child: Text(
+                        description,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: metrics.descriptionFontSize,
+                          height:
+                              _CollectionCardMetrics.descriptionHeightFactor,
+                          color: colors.textMuted,
+                        ),
+                      ),
                     ),
                   ],
                 ],
@@ -1190,14 +1357,9 @@ class _CollectionCard extends ConsumerWidget {
 }
 
 class _CollectionTile extends ConsumerWidget {
-  const _CollectionTile({
-    required this.item,
-    required this.selected,
-    required this.onTap,
-  });
+  const _CollectionTile({required this.item, required this.onTap});
 
   final OnlineCollectionItem item;
-  final bool selected;
   final VoidCallback onTap;
 
   @override
@@ -1207,9 +1369,8 @@ class _CollectionTile extends ConsumerWidget {
     final components = RobyneTheme.of(context).tokens.components;
     final tokens = RobyneTheme.of(context).tokens;
     final radius = RobyneTheme.of(context).tokens.radius.sm;
-    final fill = selected ? components.card.selected : components.card.surface;
     return Material(
-      color: fill,
+      color: components.card.surface,
       borderRadius: BorderRadius.circular(radius),
       child: InkWell(
         borderRadius: BorderRadius.circular(radius),
@@ -1304,31 +1465,126 @@ class _CollectionFooter extends ConsumerWidget {
   }
 }
 
-class _ErrorState extends ConsumerWidget {
-  const _ErrorState({required this.error, required this.onRetry});
+/// The design's bordered pill, used for page actions and tag overflow.
+class _PillButton extends ConsumerWidget {
+  const _PillButton({required this.icon, required this.label, this.onTap});
 
-  final AppError error;
-  final VoidCallback onRetry;
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final strings = ref.watch(activeThemeStringsProvider);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Text(
-            '${error.code}: ${error.message}',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: RobyneTheme.of(context).tokens.color.danger,
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.all(Radius.circular(tokens.radius.full)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: colors.surfaceBase,
+          borderRadius: BorderRadius.all(Radius.circular(tokens.radius.full)),
+          border: Border.all(color: colors.borderSubtle),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(
+              icon,
+              size: 15,
+              color: enabled ? colors.textSecondary : colors.textDisabled,
             ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: enabled ? colors.textSecondary : colors.textDisabled,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One playlist tag in the hot-playlist section.
+class _TagChip extends StatelessWidget {
+  const _TagChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    final comp = tokens.components.navBar;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.all(Radius.circular(tokens.radius.full)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? comp.selectedIndicatorFill : colors.surfaceBase,
+          borderRadius: BorderRadius.all(Radius.circular(tokens.radius.full)),
+          border: Border.all(
+            color: selected ? comp.selectedIndicator : colors.borderDefault,
           ),
-          const SizedBox(height: 12),
-          _PillButton(
-            icon: Icons.refresh,
-            label: strings.resolve(ThemeStringKey.discoverRetry),
-            onTap: onRetry,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? comp.selectedItem : colors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EnablePluginHint extends StatelessWidget {
+  const _EnablePluginHint({required this.strings, required this.compact});
+
+  final ThemeStrings strings;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = RobyneTheme.of(context).tokens;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: compact ? 8 : 12),
+      decoration: BoxDecoration(
+        color: tokens.components.card.surface,
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+        border: Border.all(color: tokens.color.borderSubtle),
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(
+            Icons.extension_outlined,
+            size: 16,
+            color: tokens.color.textMuted,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              strings.resolve(ThemeStringKey.discoverEnablePlugin),
+              maxLines: compact ? 1 : 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: tokens.color.textSecondary),
+            ),
           ),
         ],
       ),

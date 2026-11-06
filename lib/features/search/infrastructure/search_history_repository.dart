@@ -113,11 +113,20 @@ class SearchHistoryRepository {
         if (entry.keyword.trim().isNotEmpty && seen.add(entry.keyword.trim()))
           entry,
     ];
-    unique.sort((left, right) {
-      final recent = right.searchedAt.compareTo(left.searchedAt);
-      return recent != 0 ? recent : left.keyword.compareTo(right.keyword);
+    // Ties keep the order they arrived in. `List.sort` is not stable and two
+    // searches can share a millisecond, so a plain timestamp sort let the
+    // alphabetical fallback decide which of them was "newest" — a fast typist
+    // could watch their latest keyword land second.
+    final order = <int>[
+      for (var index = 0; index < unique.length; index += 1) index,
+    ];
+    order.sort((left, right) {
+      final recent = unique[right].searchedAt.compareTo(
+        unique[left].searchedAt,
+      );
+      return recent != 0 ? recent : left.compareTo(right);
     });
-    return unique;
+    return <SearchHistoryEntry>[for (final index in order) unique[index]];
   }
 
   Future<String?> _readRaw() async {

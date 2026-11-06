@@ -145,6 +145,20 @@ void main() {
       expect(package.strings.resolve(ThemeStringKey.navDiscover), '发现');
       expect(package.strings.resolve(ThemeStringKey.navLibrary), '内容库');
       expect(package.strings.resolve(ThemeStringKey.navSettings), '设置');
+      expect(package.strings.resolve(ThemeStringKey.navAbout), '关于');
+      expect(
+        package.strings.resolve(ThemeStringKey.navAboutTitle),
+        '关于 Robyne',
+      );
+      expect(
+        package.strings.resolve(ThemeStringKey.navAboutProject),
+        'GitHub 项目地址',
+      );
+      expect(
+        package.strings.resolve(ThemeStringKey.navAboutVersion),
+        '当前版本 {version}',
+      );
+      expect(package.strings.resolve(ThemeStringKey.navAboutClose), '关闭');
       expect(package.strings.resolve(ThemeStringKey.queueTitle), '当前播放');
       expect(package.strings.resolve(ThemeStringKey.playerVolume), '音量');
       expect(

@@ -41,44 +41,48 @@ void main() {
     });
   });
 
-  test('switching away and back reuses the cached rankings', () async {
+  test('re-syncing the same plugin reuses both cached sections', () async {
     final controller = container.read(discoverControllerProvider.notifier);
     await controller.syncPlugins(<PluginDefinition>[plugin]);
 
     expect(executor.topListCalls, 1, reason: 'the first load must fetch');
+    expect(executor.tagCalls, 1, reason: 'hot playlists load alongside');
     expect(
       container.read(discoverControllerProvider).topListGroups,
       isNotEmpty,
     );
-
-    // Leave the destination and come back: the data is still inside the TTL,
-    // so no second request is allowed.
-    await controller.selectSurface(DiscoverSurface.hotPlaylists);
-    await controller.selectSurface(DiscoverSurface.rankings);
-
     expect(
-      executor.topListCalls,
-      1,
-      reason: 'a tab switch inside the TTL must not refetch rankings',
-    );
-    expect(
-      container.read(discoverControllerProvider).topListGroups,
+      container.read(discoverControllerProvider).hotPlaylistItems,
       isNotEmpty,
-      reason: 'the cached rankings must still be painted',
     );
+
+    // Every rebuild asks the page to sync again. Inside the TTL that must be
+    // a no-op, not a second round trip per section.
+    await controller.syncPlugins(<PluginDefinition>[plugin]);
+
+    expect(executor.topListCalls, 1, reason: 'sync must not refetch rankings');
+    expect(executor.tagCalls, 1, reason: 'sync must not refetch the catalogue');
+    expect(executor.sheetCalls, 1, reason: 'sync must not refetch the page');
   });
 
-  test('the refresh button still forces a real request', () async {
+  test('the refresh action still forces real requests', () async {
     final controller = container.read(discoverControllerProvider.notifier);
     await controller.syncPlugins(<PluginDefinition>[plugin]);
     expect(executor.topListCalls, 1);
+    expect(executor.tagCalls, 1);
 
-    await controller.reloadCurrentSurface();
-
+    await controller.reloadRankings();
     expect(
       executor.topListCalls,
       2,
       reason: 'an explicit refresh must bypass the cache',
+    );
+
+    await controller.reloadHotPlaylists();
+    expect(
+      executor.tagCalls,
+      2,
+      reason: 'a section retry must bypass the cache too',
     );
   });
 
@@ -139,45 +143,24 @@ void main() {
     );
   });
 
-  test(
-    'seedHomeShelf tries each plugin until one serves hot playlists',
-    () async {
-      final rankingOnly = PluginDefinition(
-        id: 'plugin-rank-only',
-        platform: 'Rank Only',
-        sourcePath: plugin.sourcePath,
-        enabled: true,
-        installedAt: DateTime(2026),
-        updatedAt: DateTime(2026),
-      );
-      executor.failTagsFor = {'plugin-rank-only'};
-      final controller = container.read(discoverControllerProvider.notifier);
-      await controller.syncPlugins(<PluginDefinition>[rankingOnly, plugin]);
+  test('a ranking-only source still fills the rankings section', () async {
+    final rankingOnly = PluginDefinition(
+      id: 'plugin-rank-only',
+      platform: 'Rank Only',
+      sourcePath: plugin.sourcePath,
+      enabled: true,
+      installedAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    );
+    executor.failTagsFor = {'plugin-rank-only'};
+    final controller = container.read(discoverControllerProvider.notifier);
+    await controller.syncPlugins(<PluginDefinition>[rankingOnly]);
 
-      await controller.seedHomeShelf();
-
-      // The first plugin is probed and fails, the second succeeds and wins.
-      // The selected plugin is left on the winner so the browser shows the
-      // same shelf instead of an error.
-      expect(executor.tagPluginIds, ['plugin-rank-only', 'plugin-a']);
-      expect(controller.state.selectedPluginId, 'plugin-a');
-      expect(controller.state.hotPlaylistItems, isNotEmpty);
-    },
-  );
-
-  test(
-    'seedHomeShelf leaves the selection when the first plugin works',
-    () async {
-      final controller = container.read(discoverControllerProvider.notifier);
-      await controller.syncPlugins(<PluginDefinition>[plugin]);
-
-      await controller.seedHomeShelf();
-
-      expect(controller.state.selectedPluginId, 'plugin-a');
-      expect(controller.state.hotPlaylistItems, isNotEmpty);
-      expect(executor.tagCalls, 1);
-    },
-  );
+    // The sections fail independently: an unsupported recommend-sheet API
+    // must not take the rankings down with it.
+    expect(controller.state.topListGroups, isNotEmpty);
+    expect(controller.state.hotPlaylistsError, isNotNull);
+  });
 }
 
 class _CountingExecutor implements PluginDiscoveryExecutor {
@@ -188,10 +171,6 @@ class _CountingExecutor implements PluginDiscoveryExecutor {
   /// Plugin ids whose `getRecommendSheetTags` should fail, standing in for the
   /// real "plugin method not found" case (fixture-a has no recommend sheets).
   Set<String> failTagsFor = <String>{};
-
-  /// Each plugin id passed to `getRecommendSheetTags`, in call order, so a
-  /// test can pin down which plugins `seedHomeShelf` probed.
-  final List<String> tagPluginIds = <String>[];
 
   @override
   Future<Result<Object?>> getTopLists({
@@ -224,7 +203,6 @@ class _CountingExecutor implements PluginDiscoveryExecutor {
     required String source,
   }) async {
     tagCalls += 1;
-    tagPluginIds.add(plugin.id);
     if (failTagsFor.contains(plugin.id)) {
       return const Failure<Object?>(
         AppError(

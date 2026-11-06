@@ -821,6 +821,68 @@ MusicFree 的失败点（`THEME_LAYER_DESIGN.md:17` 已记录）正是：`.l-sid
   720 断点。
 - **测试基线**：`flutter test` → **393 passed, 8 skipped**（2026-09-28 复核）
 
+### 2026-10-14 手机搜索页的输入框回来了
+
+`c6dbe78` 拿掉搜索页自己的输入框，理由是「搜索入口已全部收进 shell 的顶栏」。
+这条在桌面上成立，在手机上不成立：移动端 arrangement 根本没有 `topBar`
+（设计稿 §2.2），全局搜索框在手机上不存在，于是**搜索页成了死路**——想换关键词
+只能退回首页头部重新输入。短窗口被 D7 第 2 步丢掉顶栏时同样中招。
+
+修法不是把旧输入框搬回来，而是让「现场该由谁画这个框」有唯一判据：
+
+- `ShellChrome`（`lib/app/shell_chrome.dart`）：shell 通过 `InheritedWidget`
+  告诉页它当前的 chrome；今天只有一个 `topBarVisible`，就是
+  `RobyneShellPlan.topBarVisible`。`maybeOf` 返回 null（页面不在 shell 里，
+  例如单页测试）按「没有顶栏」处理——默认值取安全的那一侧，正是这个默认值
+  写反才坑了手机端。
+- `KeywordSearchField`（`lib/shared/widgets/search_keyword_field.dart`）：
+  原先首页私有的 `_HomeSearchField` 提上来共用。首页头部和搜索页现在渲染的是
+  同一个 widget，提示文案 / 圆角 / 历史下拉不会再各长一套；它还会跟随
+  `searchControllerProvider` 的 keyword（正在输入时不覆盖），否则从首页搜完
+  切到已挂载的结果页，会看到旧关键词压在更新的结果上面。
+- 搜索页在 `topBarVisible != true` 时渲染这个框，桌面端行为完全不变（仍由
+  顶栏提供唯一输入框）。`SearchActionButton` 没有再回来：手机上是键盘
+  「搜索」键提交，符合移动习惯。
+- 回归测试：`shell_responsive_test.dart` 新增 4 条（结果页有框 / 框能跑新搜索 /
+  800×360 不溢出 / 桌面仍只有一个框），`search_page_test.dart` 重写为有顶栏 /
+  无顶栏 / 不在 shell 里三种状态，并覆盖「框跟随共享 keyword」。
+
+### 2026-10-30 发现页回到一级：来源 + 排行榜 + 热门歌单
+
+发现页此前是「首页 + 二级插件榜单浏览器」：hero 里的「每日电台」占着首屏，
+真正的榜单和热门歌单要再点一次「插件榜单」才看得到，而且一次只显示一个
+surface。设计与使用都把这两段当成同级内容，所以页面重新规划为：
+
+- 一级页固定组合：页头 → 来源条（搜索页同款描边 pill，按插件页顺序排列）→
+  排行榜 → 热门歌单。两段同时加载、同时在场；桌面可用宽度 ≥ 620dp 时分两栏，
+  否则在同一滚动列里上下堆叠（横屏手机也是这一路）。
+- 「每日电台」hero、四宫格快捷入口、为你推荐/最近入库/红心歌曲等旧首页区块一并
+  移除；发现 tab 直接渲染 `DiscoverPage`，`discoverBrowserProvider` 与二级浏览器
+  的返回按钮删除。
+- 来源切换一次拉两段：`syncPlugins` / `selectPlugin` 现在 `Future.wait` 排行榜与
+  热门歌单；`refreshAll`、`reloadRankings`、`reloadHotPlaylists` 取代按 surface
+  刷新的接口。两段各自有缓存与错误状态，一个插件缺 `getRecommendSheetTags`
+  不再连带清空排行榜。
+- 详情不再依赖 `detail != null` 猜测：`DiscoverState.selectedCollection` 在点击时
+  立即置位，请求中也能显示加载态与返回按钮。
+- 详情进入顶栏历史：`NavigationSnapshot` 增加 `discoverCollectionKey`（与
+  `playlistId` 同为 opaque id），点开榜单/歌单记一条，顶栏前进/后退与系统返回都能
+  退出；`DiscoverController.restoreCollection` 按 key 找回条目，找不到就回目录。
+- 详情页头改成始终渲染（封面 + 标题 + 刷新，加载中与失败态同样有内容）：此前整块
+  header 只在该集合已经加载完成时构建，慢源或报错会把用户关在详情里。返回键不再
+  放在详情里：顶栏、系统返回、再点一次「发现」三处都能退出；关闭详情会改写历史
+  条目而不是再压一条，免得返回键把刚关掉的榜单重新打开。
+- 两条选择器回归：详情响应里的 `sheetItem` / `topListItem` 常常只回 `id`+`title`，
+  `collectionDetailFromPluginValue` 现在用列表行补回缺失的封面与简介，详情不再
+  「点进去封面就没了」；卡片标题区的高度按字体实测（含 textScaler）计算，之前固定
+  55dp，CJK 行盒会溢出 3–6dp。
+- 皮肤字符串新增 `discover.pageTitle` / `discover.pageSubtitle`；`discover.*` 的
+  既有空态、重试、计数文案继续复用。`layout.home` 仍被解析以兼容旧皮肤，但
+  不再参与渲染（见 `THEME_AUTHORING.md`）。
+- 回归：`discover_controller_test` / `discover_cache_test` 改按「两段同时加载」
+  断言；`shell_responsive_test` 增加桌面/竖屏/横屏三种形态的发现页结构护栏；
+  手机溢出护栏继续覆盖 400×800 与 800×360。
+
 ## 7. 文档索引
 
 | 文档 | 状态 | 说明 |

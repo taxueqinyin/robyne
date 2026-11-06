@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell_chrome.dart';
+import '../../../core/debug/ime_trace.dart';
 import '../../../core/layout/window_size_class.dart';
 import '../../../core/theme/application/theme_providers.dart';
 import '../../../core/theme/domain/theme_strings.dart';
 import '../../../core/theme/infrastructure/token_resolver.dart';
+import '../../../shared/widgets/search_keyword_field.dart';
 import '../../../shared/widgets/song_actions_menu.dart';
 import '../../../shared/widgets/horizontal_wheel_scroll.dart';
 import '../../downloads/application/download_providers.dart';
@@ -23,8 +28,38 @@ class SearchPage extends ConsumerStatefulWidget {
 }
 
 class _SearchPageState extends ConsumerState<SearchPage> {
+  late final TextEditingController _keyword;
+  late final FocusNode _keywordFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    _keyword = TextEditingController(
+      text:
+          ref.read(search_state.searchControllerProvider).value?.keyword ?? '',
+    );
+    _keywordFocus = FocusNode();
+    attachImeTextControllerTrace(_keyword, 'search.keyword');
+  }
+
+  @override
+  void dispose() {
+    _keywordFocus.dispose();
+    _keyword.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    // The desktop shell owns the global search field in its top bar, and a
+    // second field here would be a second keyword to keep in sync. A phone
+    // shell has no top bar at all (`UI_DESIGN_SPEC.md` §2.2), and the top bar
+    // is also the first region a short window gives up (D7 step 2) — with no
+    // field anywhere on screen the only way to search again was to leave the
+    // results and find the home header. So the field belongs to whichever
+    // surface actually renders it.
+    final showsKeywordField =
+        ShellChrome.maybeOf(context)?.topBarVisible != true;
     final searchValue = ref.watch(search_state.searchControllerProvider);
     // Searched in the order the plugin page arranged, so the first result tab
     // and the first source searched are the ones the user put first.
@@ -60,6 +95,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             strings.resolve(ThemeStringKey.searchPageSubtitle),
             style: TextStyle(fontSize: 12, color: colors.textMuted),
           ),
+          if (showsKeywordField) ...<Widget>[
+            const SizedBox(height: 14),
+            KeywordSearchField(
+              controller: _keyword,
+              focusNode: _keywordFocus,
+              onSubmit: _search,
+            ),
+          ],
           const SizedBox(height: 18),
           if (state.error != null) ...<Widget>[
             const SizedBox(height: 12),
@@ -101,6 +144,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         ],
       ),
     );
+  }
+
+  void _search(String keyword) {
+    final controller = ref.read(search_state.searchControllerProvider.notifier);
+    controller.updateKeyword(keyword);
+    unawaited(controller.search(ref.read(orderedPluginsProvider)));
   }
 }
 

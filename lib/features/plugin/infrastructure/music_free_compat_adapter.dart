@@ -354,14 +354,16 @@ class MusicFreeCompatAdapter {
       OnlineCollectionDetail(
         collection: metadata == null
             ? collection
-            : _collectionItemFromRaw(
-                    metadata,
-                    pluginId: collection.pluginId,
-                    platform: collection.platform,
-                    kind: collection.kind,
-                    fallbackId: collection.id,
-                  ) ??
-                  collection,
+            : _mergeCollection(
+                original: collection,
+                parsed: _collectionItemFromRaw(
+                  metadata,
+                  pluginId: collection.pluginId,
+                  platform: collection.platform,
+                  kind: collection.kind,
+                  fallbackId: collection.id,
+                ),
+              ),
         items: items,
         page: _intValue(raw['page']) ?? page,
         isEnd:
@@ -512,6 +514,32 @@ class MusicFreeCompatAdapter {
       );
     }
     return groups;
+  }
+
+  /// Keeps what the row already knew when the detail metadata is partial.
+  ///
+  /// Several plugins echo only `id`/`title` in `sheetItem` or `topListItem`
+  /// and leave the cover out of the detail response. Replacing the row with
+  /// that fragment made the drill-down lose the cover the grid had just shown,
+  /// so anything the plugin did send wins and the gaps fall back to the row the
+  /// user clicked.
+  static OnlineCollectionItem _mergeCollection({
+    required OnlineCollectionItem original,
+    required OnlineCollectionItem? parsed,
+  }) {
+    if (parsed == null) {
+      return original;
+    }
+    final description = parsed.description?.trim();
+    final artworkUrl = parsed.artworkUrl?.trim();
+    return parsed.copyWith(
+      description: description == null || description.isEmpty
+          ? original.description
+          : parsed.description,
+      artworkUrl: artworkUrl == null || artworkUrl.isEmpty
+          ? original.artworkUrl
+          : parsed.artworkUrl,
+    );
   }
 
   static OnlineCollectionItem? _collectionItemFromRaw(

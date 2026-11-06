@@ -440,7 +440,10 @@ Robyne 的signature：换一首歌，整页的色温跟着换。关掉它就退�
 | `library.subtitle` / `library.importFiles` / `library.importFolder` / `library.empty` | 内容库页的副标题、导入按钮与空态 |
 | `player.back` / `player.nothingPlaying` / `nowPlaying.close` | 播放条返回提示与空态 |
 | `quality.*` | 音质 chip 的两个分类（`无损` / `标准`）与提示 |
-| `discover.more` / `discover.back` | 发现页的插件浏览器入口 |
+| `discover.pageTitle` / `discover.pageSubtitle` | 发现页标题与副标题 |
+| `discover.rankings` / `discover.hotPlaylists` / `discover.moreTags` | 发现页两段目录与标签入口的标题 |
+| `discover.emptyRankings` / `discover.emptyPlaylists` / `discover.retry` | 发现页空态与重试 |
+| `discover.play` / `discover.download` / `discover.trackCount` | 曲目行动作与详情计数（`{count}` 是占位符） |
 | `appearance.mode.*` | 外观面板的明暗选择 |
 
 ### 导航入口（`navigation`）
@@ -505,8 +508,7 @@ Robyne 的signature：换一首歌，整页的色温跟着换。关掉它就退�
 - 被隐藏的入口仍然可达：它重复的那个入口、快捷键、以及队列页等次级路径都还在
 - 未知名字被忽略
 
-`quickActions` / `categoryChips` 等首页区块里的**作者自定义文案**（如「每日电台」）不在其内：
-那些是内容位，不是壳层。
+插件返回的内容文案（榜单名、歌单标题、标签名等）不在其内：那些是内容，不是壳层。
 
 > 注意：这是**皮肤能力，不是多语言系统**。没有复数、没有日期/数字格式化，功能页面的文案也不在其中。
 > `queue.count` 只支持一个 `{count}` 占位符；语言有复数变化时，请写成不依赖单复数的说法
@@ -681,21 +683,13 @@ Robyne 的signature：换一首歌，整页的色温跟着换。关掉它就退�
 
 五个值都有真实分支，写哪个就渲染哪个——不存在「声明了但静默回退」的值。
 
-### 首页区块（`layout.home`）
+### 首页区块（`layout.home`，保留但不再渲染）
 
-首页不是写死的页面，而是一串**区块**。皮肤声明区块和顺序，应用负责给每个区块填数据；
-数据源没准备好时区块显示设计稿的占位形态，不会塌成空白。
+> **2026-10-30**：发现页改为固定的一级组合——页头、来源条、排行榜、热门歌单。
+> 旧的区块编排（`quickActions` / `hero` / …）不再渲染；`layout.home` 仍会被解析
+> 并保留在主题模型里，以兼容已有皮肤，新皮肤不需要声明它。下面只说明保留的取值。
 
-| 区块 | 内容 |
-|---|---|
-| `quickActions` | 手机端的四宫格快捷入口（每日电台 / 排行榜 / 分类歌单 / 我喜欢） |
-| `hero` | 渐变英雄横幅 + 主行动按钮 |
-| `recommendations` | 横向滚动的推荐卡片流 |
-| `recent` | 最近入库的本地曲目 |
-| `favorites` | 红心歌曲列表（手机设计稿的主列表） |
-| `queue` | 当前队列的精简列表 |
-
-`home` 和 `layout.<形态>.arrangement` 一样可以**只写你想改的形态**：
+`home` 和 `layout.<形态>.arrangement` 一样可以按形态分别声明：
 
 ```jsonc
 "home": {
@@ -705,8 +699,9 @@ Robyne 的signature：换一首歌，整页的色温跟着换。关掉它就退�
 }
 ```
 
-只写 `blocks` 就两形态共用；只写 `mobile` 时桌面自动用 `blocks`（再退回官方默认）。
-未知区块名被忽略，空列表不生效。
+保留的区块名：`quickActions` / `categoryChips` / `hero` / `recommendations` /
+`recent` / `favorites` / `queue`。只写 `blocks` 就两形态共用；只写 `mobile`
+时桌面自动用 `blocks`（再退回官方默认）。未知区块名被忽略，空列表不生效。
 
 ### 容错与自动降级
 

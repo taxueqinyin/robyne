@@ -1,73 +1,42 @@
-# Robyne 旗舰 UI 视觉稿
+# Robyne 设计板（生成物）
 
-可交互预览：
+`index.html` 不是画出来的。它由脚本从应用自己的输出合成：
 
-```text
-docs/design/mockups/index.html
+| 层 | 来源 | 为什么可信 |
+|---|---|---|
+| 底图 | `test/goldens/boards/*.png` | `flutter test` 用应用本身渲染，像素即真相 |
+| 区域标注 | `test/goldens/boards/*.plan.json` | `RobyneShellPlan.resolve()` 算出的 dp，与像素同源 |
+| 颜色变量 | `assets/themes/xuan/theme.json` | 皮肤 token，页面只引用不复制 |
+
+## 重新生成
+
+```bash
+# 1. 画板（PNG + plan.json）
+ROBYNE_BOARDS=1 flutter test test/design_boards_test.dart --tags boards --update-goldens
+
+# 2. 合成 HTML
+python tool/generate_design_html.py
 ```
 
-直接用浏览器打开后可滚动查看全部画板。地址末尾带 `#only=<id>` 时只显示指定画板（`body.solo` 会去掉画板外边距，适合单板截图）：
+改了 UI 就重跑一遍——重新生成即同步，没有手维护的第三份实现。
 
-桌面端截图建议 1360×900，手机竖屏 480×900，手机横屏 880×460。总览图按画板顺序渲染，建议 1400×3400。
+## 画板清单（44 块）
 
-当前 `index.html` 里的全部画板：
+**桌面 1360×900（13）**：发现 / 内容库 / 搜索 / 我喜欢 / 下载 / 插件 / 设置×4 tab / 队列停靠 / 队列浮层 / 沉浸播放页
 
-| 画板 | id |
-|---|---|
-| 桌面 · 发现 | `desktop-discover` |
-| 桌面 · 发现（带浏览器） | `desktop-discover-browser` |
-| 桌面 · 内容库 | `desktop-library` |
-| 桌面 · 搜索 | `desktop-search` |
-| 桌面 · 播放列表 | `desktop-playlists` |
-| 桌面 · 下载 | `desktop-downloads` |
-| 桌面 · 插件 | `desktop-plugins` |
-| 桌面 · 插件（从 URL 导入） | `desktop-plugin-import-url` |
-| 桌面 · 插件（配置用户变量） | `desktop-plugin-variables` |
-| 桌面 · 设置 | `desktop-settings` |
-| 桌面 · 设置（外观） | `desktop-settings-appearance` |
-| 桌面 · 设置（歌词） | `desktop-settings-lyrics` |
-| 桌面 · 设置（快捷键） | `desktop-settings-shortcuts` |
-| 桌面 · 桌面歌词 | `desktop-lyric` |
-| 手机 · 更多（溢出入口） | `mobile-overflow` |
-| 手机 · 竖屏 | `mobile-portrait` |
-| 手机 · 横屏 | `mobile-landscape` |
+**手机（6）**：竖屏 发现/内容库/搜索/我的、队列抽屉、横屏 800×360
 
-使用 Chrome headless 导出示例：
+**响应式 5 断点 × 5 页面（25）**：
+1360×900（expanded/expanded，侧栏 245dp 带标签）、960×700（expanded/medium，侧栏 173dp 带标签）、760×760（medium/expanded，侧栏塌成 72dp 胶囊）、400×800（手机竖屏）、800×360（compact 高度，D7 丢顶栏）
 
-```powershell
-# 在仓库根目录执行；用 $PWD 生成 file:// URL，避免把机器相关路径写进文档。
-$base = 'file:///' + ((Get-Location).Path -replace '\\','/') + '/docs/design/mockups/index.html'
-$chrome = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
-& $chrome --headless=new --disable-gpu --no-sandbox --hide-scrollbars `
-  --window-size=1360,900 `
-  --screenshot='docs\design\mockups\desktop-discover.png' "$base#only=desktop-discover"
-```
+每块画板下方有可展开的 `RobyneShellPlan` JSON：`topBarVisible`、`navSlot`、`queueOverlay`、各区域 dp 值。页首「开/关区域标注」按钮在底图上叠加区域框。
 
-静态导出：
+## fixture 数据
 
-| 文件 | 内容 |
-|---|---|
-| `overview.png` | 画板总览（2026-09-24 生成，只含前四块；新的 6 块画板尚未收录） |
-| `desktop-discover.png` | 桌面发现页 |
-| `desktop-discover-browser.png` | 桌面发现页（带浏览器外框） |
-| `desktop-library.png` | 桌面内容库 |
-| `desktop-search.png` | 桌面搜索页 |
-| `desktop-playlists.png` | 桌面播放列表页 |
-| `desktop-downloads.png` | 桌面下载页 |
-| `desktop-plugins.png` | 桌面插件页 |
-| `desktop-plugin-import-url.png` | 桌面插件 · 从 URL 导入弹窗 |
-| `desktop-plugin-variables.png` | 桌面插件 · 配置用户变量弹窗 |
-| `desktop-settings.png` | 桌面设置页 |
-| `desktop-settings-appearance.png` | 桌面设置 · 外观 |
-| `desktop-settings-lyrics.png` | 桌面设置 · 歌词 |
-| `desktop-settings-shortcuts.png` | 桌面设置 · 快捷键 |
-| `desktop-lyric.png` | 桌面歌词窗口 |
-| `mobile-overflow.png` | 手机 · 更多溢出面板 |
-| `mobile-portrait.png` | 手机竖屏 |
-| `mobile-landscape.png` | 手机横屏 |
+假数据在 `test/support/fixture_data.dart`（林俊杰曲库、两个搜索插件、六种下载状态），封面是运行时生成的渐变 PNG（`test/support/fixture_artwork.dart`，落在系统临时目录，不进仓库）。
 
-注意：桌面发现页当前展示「播放列表」面板停靠在内容区右侧，与播放条右区入口同侧；内容库画板展示播放页覆盖整个应用窗口的沉浸态。
+## 注意
 
-注意：`overview.png` 尚未重拍，新的搜索 / 播放列表 / 下载 / 插件 / 设置 / 桌面歌词画板只存在于 `index.html` 与各自的静态导出文件里。
-
-设计规格见 `docs/design/UI_DESIGN_SPEC.md`。
+- 裸 `flutter test` 会跳过画板（`skip` 门 + `boards` tag 双保险）；必须显式 `--tags boards` 加 `ROBYNE_BOARDS=1`
+- 画板对字体敏感：字体在测试里手动 `FontLoader` 注册。曾因 `ThemeManifestParser` 清空默认字体族导致整套画板 CJK 全变方块——已修（`copyWith(fontFamily: family ?? baseline.fontFamily)`）
+- 历史：2026-10-14 之前这里是手绘 HTML + 18 张静态 PNG，与实现漂移严重后整批废弃

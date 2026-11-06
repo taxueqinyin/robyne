@@ -43,9 +43,12 @@ enum ThemeStringKey {
   /// composition, so it belongs to the skin rather than to the widget.
   navSectionTools('nav.section.tools', 'Tools'),
 
-  /// The rail's footer lockup: the product line and its build marker.
-  navFooter('nav.footer', 'Robyne MVP'),
-  navFooterVersion('nav.footer.version', 'v0.1'),
+  /// The rail footer opens the app information dialog.
+  navAbout('nav.about', 'About'),
+  navAboutTitle('nav.about.title', 'About Robyne'),
+  navAboutProject('nav.about.project', 'Project repository'),
+  navAboutVersion('nav.about.version', 'Version {version}'),
+  navAboutClose('nav.about.close', 'Close'),
 
   /// The overflow entry's own label.
   navMore('nav.more', 'More'),
@@ -187,20 +190,22 @@ enum ThemeStringKey {
   qualityUnknown('quality.unknown', 'Unknown quality'),
   qualityTooltip('quality.tooltip', 'Quality: {quality}'),
 
-  // Discover / library shelf chrome that the shell frames.
+  // Discover page chrome. The first-level surface is the source strip plus
+  // the two catalogue sections, so these are page headings rather than one
+  // skin's home-shelf copy.
+  discoverPageTitle('discover.pageTitle', 'Discover'),
+  discoverPageSubtitle('discover.pageSubtitle', 'Rankings and hot playlists'),
   discoverMore('discover.more', 'Explore more'),
 
-  /// The design's labelled entry into the plugin rankings browser.
+  /// Legacy label of the old "插件榜单" entry pill.
   ///
-  /// The mockup puts a named pill ("插件榜单") on the home header rather than
-  /// a bare glyph, because a secondary surface needs a name to be
-  /// discoverable.
+  /// The discover page is the first-level surface now, so nothing renders
+  /// this; the slot stays declared so older skins keep parsing cleanly.
   discoverRankingEntry('discover.rankingEntry', 'Rankings'),
   discoverBack('discover.back', 'Back to home'),
 
-  // The plugin rankings browser's own chrome. It is a secondary surface, but
-  // its headings, tabs and empty states are still chrome text: a skin that
-  // writes its own language should not have to accept "Sources" for 来源.
+  // The discover page's sections. A skin that writes its own language should
+  // not have to accept "Sources" or "Hot playlists" verbatim.
   discoverSources('discover.sources', 'Sources'),
   discoverRankings('discover.rankings', 'Rankings'),
   discoverHotPlaylists('discover.hotPlaylists', 'Hot playlists'),
@@ -356,6 +361,46 @@ enum ThemeStringKey {
     'Remove "{track}" from "{playlist}"?',
   ),
   playlistsNameField('playlists.nameField', 'Name'),
+  playlistsPlay('playlists.play', 'Play'),
+  playlistsDownload('playlists.download', 'Download'),
+  playlistsBatch('playlists.batch', 'Batch'),
+  playlistsShare('playlists.share', 'Share'),
+  playlistsEdit('playlists.edit', 'Edit'),
+  playlistsEditTitle('playlists.editTitle', 'Edit playlist'),
+  playlistsDescriptionField('playlists.descriptionField', 'Description'),
+  playlistsCoverField('playlists.coverField', 'Cover URL'),
+  playlistsShareTitle('playlists.shareTitle', 'Share playlist'),
+  playlistsCopy('playlists.copy', 'Copy'),
+  playlistsCopied('playlists.copied', 'Playlist copied'),
+  playlistsSave('playlists.save', 'Save'),
+  playlistsExitBatchDownload(
+    'playlists.exitBatchDownload',
+    'Exit batch download',
+  ),
+  playlistsExitBatch('playlists.exitBatch', 'Exit batch mode'),
+  playlistsSelectAll('playlists.selectAll', 'Select all'),
+  playlistsSelectedCount('playlists.selectedCount', '{count} selected'),
+  playlistsDownloadLocation('playlists.downloadLocation', 'Save to: {path}'),
+  playlistsChangeDirectory('playlists.changeDirectory', 'Change'),
+  playlistsDownloadQuality('playlists.downloadQuality', 'Preferred quality'),
+  playlistsQualityStandard('playlists.quality.standard', 'Standard'),
+  playlistsQualityHigh('playlists.quality.high', 'HQ'),
+  playlistsQualityLossless('playlists.quality.lossless', 'SQ lossless'),
+  playlistsQualityHires('playlists.quality.hires', 'Hi-Res lossless'),
+  playlistsQualitySurround('playlists.quality.surround', 'Spatial audio'),
+  playlistsQualityMaster('playlists.quality.master', 'Master'),
+  playlistsBatchDownloadCount(
+    'playlists.batchDownloadCount',
+    'Selected {count} tracks',
+  ),
+  playlistsBatchAdd('playlists.batchAdd', 'Add'),
+  playlistsBatchDelete('playlists.batchDelete', 'Delete'),
+  playlistsBatchDeleteTitle('playlists.batchDeleteTitle', 'Remove tracks'),
+  playlistsBatchDeleteMessage(
+    'playlists.batchDeleteMessage',
+    'Remove {count} tracks from this playlist?',
+  ),
+  playlistsSourceLocal('playlists.source.local', 'Local'),
 
   // Plugin surface chrome.
   pluginsTitle('plugins.title', 'Plugins'),

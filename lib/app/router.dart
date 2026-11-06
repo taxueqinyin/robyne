@@ -24,7 +24,7 @@ import '../core/theme/presentation/theme_icon.dart';
 import '../core/theme/presentation/theme_material.dart';
 import '../features/player/presentation/artwork_view.dart';
 import '../features/discover/presentation/discover_page.dart';
-import '../features/discover/presentation/xuan_home_page.dart';
+import '../features/discover/application/discover_controller.dart';
 import '../features/lyrics/application/desktop_lyric_window_controller.dart';
 import '../features/lyrics/application/lyrics_providers.dart';
 import '../features/lyrics/domain/lyric_document.dart';
@@ -47,7 +47,9 @@ import '../features/player/application/player_providers.dart'
 import '../features/player/presentation/capsule_player_bar.dart';
 import '../features/player/presentation/capsule_playlist_panel.dart';
 import '../features/player/application/capsule_window.dart';
+import 'app_version.dart';
 import 'main_window_controller.dart';
+import 'shell_chrome.dart';
 import '../features/playlists/presentation/playlists_page.dart';
 import '../features/playlists/application/playlist_providers.dart';
 import '../features/playlists/domain/music_playlist.dart';
@@ -302,9 +304,17 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
     // The content material wraps the wash so a skin can frost or tint the
     // whole content plane, not just the chrome around it.
     final contentTokens = RobyneTheme.of(context).tokens;
-    Widget content = ThemeAmbient(
-      artworkUrl: ref.watch(currentPlaybackItemProvider)?.artworkUrl,
-      child: _buildTabStack(),
+    // Pages must be able to tell whether the shell is drawing the global
+    // search field: the phone arrangement has no top bar at all, and D7 drops
+    // the top bar before the content when a window is too short. Without this
+    // the search page assumed a field it could not see, and a phone user had
+    // to return to the home header to search again.
+    Widget content = ShellChrome(
+      topBarVisible: plan.topBarVisible,
+      child: ThemeAmbient(
+        artworkUrl: ref.watch(currentPlaybackItemProvider)?.artworkUrl,
+        child: _buildTabStack(),
+      ),
     );
     if (!contentTokens.materials.content.isTransparent) {
       content = MaterialSurface(
@@ -453,15 +463,30 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
         body = contentColumn;
     }
 
-    // The immersive player is not a Navigator route, so Android's predictive
-    // back gesture never sees it: from the system's point of view there is
-    // only the home route, and "back" means "leave the app". Intercepting the
-    // pop here closes the player instead of minimising the whole app.
+    // The immersive player and the discover drill-down are both page state
+    // rather than Navigator routes, so Android's predictive back gesture never
+    // sees them: from the system's point of view there is only the home route,
+    // and "back" means "leave the app". Intercepting the pop closes whichever
+    // one is open instead of minimising the whole app.
+    final discoverDrillDown =
+        !immersive &&
+        ref.watch(selectedTabProvider) == RobyneTab.discover &&
+        ref.watch(
+              discoverControllerProvider.select(
+                (state) => state.selectedCollectionKey,
+              ),
+            ) !=
+            null;
     return PopScope(
-      canPop: !immersive,
+      canPop: !immersive && !discoverDrillDown,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && immersive) {
+        if (didPop) {
+          return;
+        }
+        if (immersive) {
           immersiveClose();
+        } else if (discoverDrillDown) {
+          ref.read(discoverControllerProvider.notifier).closeDetail();
         }
       },
       child: Scaffold(
@@ -537,6 +562,11 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
             playlistId: next == RobyneTab.playlists
                 ? ref.read(selectedPlaylistIdProvider)
                 : null,
+            // Returning to the tab should land on the drill-down the user
+            // left, not silently pop them back to the catalogue.
+            discoverCollectionKey: next == RobyneTab.discover
+                ? ref.read(discoverControllerProvider).selectedCollectionKey
+                : null,
           );
     });
     ref.listen<String?>(selectedPlaylistIdProvider, (previous, next) {
@@ -549,6 +579,44 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
           .read(navigationHistoryProvider.notifier)
           .record(tab: RobyneTab.playlists, playlistId: next);
     });
+    // The discover drill-down lives inside the page, not in a route, so the
+    // shell's arrows would stay dark and a ranking would be a one-way trip.
+    // Recording the open collection as a history entry gives the top bar the
+    // same grammar it has for the playlist page.
+    ref.listen<String?>(
+      discoverControllerProvider.select((state) => state.selectedCollectionKey),
+      (previous, next) {
+        if (_restoringHistory ||
+            previous == next ||
+            ref.read(selectedTabProvider) != RobyneTab.discover) {
+          return;
+        }
+        final history = ref.read(navigationHistoryProvider);
+        final notifier = ref.read(navigationHistoryProvider.notifier);
+        final current = history.current;
+        final openedFrom = history.canGoBack
+            ? history.entries[history.index - 1]
+            : null;
+        if (next == null &&
+            current.tab == RobyneTab.discover &&
+            current.discoverCollectionKey != null) {
+          if (openedFrom != null &&
+              openedFrom.tab == RobyneTab.discover &&
+              openedFrom.discoverCollectionKey == null) {
+            // Leaving the drill-down is one step back, not a new destination:
+            // stepping back keeps the arrow from re-opening the page just
+            // closed, and leaves forward able to return to it.
+            _goBack();
+          } else {
+            // No catalogue entry underneath to step back to (the tab was
+            // re-entered from elsewhere) — rewrite instead of stacking.
+            notifier.replaceCurrent(tab: RobyneTab.discover);
+          }
+          return;
+        }
+        notifier.record(tab: RobyneTab.discover, discoverCollectionKey: next);
+      },
+    );
   }
 
   void _goBack() {
@@ -581,6 +649,16 @@ class _RobyneShellState extends ConsumerState<RobyneShell> {
           playlists.showOverview();
         } else {
           playlists.select(playlistId);
+        }
+      } else if (snapshot.tab == RobyneTab.discover) {
+        // Back out of a drill-down before the tab switch, so the page never
+        // paints the detail surface under a newly selected tab.
+        final key = snapshot.discoverCollectionKey;
+        final discover = ref.read(discoverControllerProvider.notifier);
+        if (key == null) {
+          discover.closeDetail();
+        } else {
+          unawaited(discover.restoreCollection(key));
         }
       }
       ref.read(selectedTabProvider.notifier).select(snapshot.tab);
@@ -770,7 +848,7 @@ class _TabContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return switch (tab) {
       RobyneTab.search => const SearchPage(),
-      RobyneTab.discover => const _DiscoverSurface(),
+      RobyneTab.discover => const DiscoverPage(),
       RobyneTab.library => const LibraryPage(),
       RobyneTab.nowPlaying => const NowPlayingPage(),
       RobyneTab.queue => const QueuePage(),
@@ -857,50 +935,6 @@ class _TabTransitionState extends State<_TabTransition>
         ).animate(progress),
         child: widget.child,
       ),
-    );
-  }
-}
-
-/// The discovery destination.
-///
-/// The flagship home is the first screen; the pre-existing plugin browser is
-/// kept one level down so rankings and hot-playlist tags remain available
-/// without competing with the design's hero and recommendation rails.
-class _DiscoverSurface extends ConsumerWidget {
-  const _DiscoverSurface();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final strings = ref.watch(activeThemeStringsProvider);
-    final showBrowser = ref.watch(discoverBrowserProvider);
-    if (showBrowser) {
-      return Stack(
-        children: <Widget>[
-          const Positioned.fill(child: DiscoverPage()),
-          Positioned(
-            top: 12,
-            left: 12,
-            child: IconButton.filledTonal(
-              tooltip: strings.resolve(ThemeStringKey.discoverBack),
-              onPressed: () =>
-                  ref.read(discoverBrowserProvider.notifier).close(),
-              icon: const ThemeIconView(
-                slot: ThemeIconKey.back,
-                fallback: Icons.arrow_back,
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-    return Stack(
-      children: <Widget>[
-        const Positioned.fill(child: XuanHomePage()),
-        // No floating button: the design has no such control, and the
-        // extended FAB covered the recommendation shelf on a 1280 window.
-        // The entry lives in the home header beside the search field, which
-        // is where the mockups put page-level actions.
-      ],
     );
   }
 }
@@ -1575,7 +1609,11 @@ class _SideNavState extends ConsumerState<_SideNav> {
     // The rail is allowed to become a true capsule when the user drags it
     // below the label threshold. Its floor keeps the 32dp targets from
     // crowding, while the ceiling leaves the content column usable.
-    final labelBesideIcon = width >= 168;
+    // The threshold is the plan's, not the rail's: `RobyneShellPlan.resolve`
+    // collapses a rail that lands below it, so a rail in the dead band
+    // never reaches this build. Sharing the constant keeps the two from
+    // drifting apart.
+    final labelBesideIcon = width >= RobyneShellPlan.navLabelMinWidth;
     final showLabel = !iconOnly && labelBesideIcon;
     final compactRail = !showLabel;
     // The rail is the desktop surface, so it reads the desktop declarations.
@@ -1701,9 +1739,7 @@ class _SideNavState extends ConsumerState<_SideNav> {
                                         )
                                         .showLiked();
                                   }
-                                  ref
-                                      .read(selectedTabProvider.notifier)
-                                      .select(entry.tab);
+                                  _selectShellTab(ref, entry.tab);
                                 },
                                 trailing: countFor(entry) == null
                                     ? null
@@ -1801,17 +1837,13 @@ class _SideNavState extends ConsumerState<_SideNav> {
                         showLabel: showLabel,
                         labelBesideIcon: labelBesideIcon,
                         tokens: tokens,
-                        onTap: () => ref
-                            .read(selectedTabProvider.notifier)
-                            .select(entry.tab),
+                        onTap: () => _selectShellTab(ref, entry.tab),
                       ),
                     SizedBox(height: compactRail ? 3 : 8),
                     if (labelBesideIcon)
-                      _SideNavFooter(
-                        label: strings.resolve(ThemeStringKey.navFooter),
-                        version: strings.resolve(
-                          ThemeStringKey.navFooterVersion,
-                        ),
+                      _AboutNavFooter(
+                        label: strings.resolve(ThemeStringKey.navAbout),
+                        version: shortAppVersion,
                         tokens: tokens,
                       ),
                   ],
@@ -1867,9 +1899,9 @@ class _SideNavState extends ConsumerState<_SideNav> {
   }
 }
 
-/// Brand lockup at the top of the rail.
-class _SideNavFooter extends ConsumerWidget {
-  const _SideNavFooter({
+/// Clickable footer entry that opens the app information dialog.
+class _AboutNavFooter extends ConsumerWidget {
+  const _AboutNavFooter({
     required this.label,
     required this.version,
     required this.tokens,
@@ -1882,35 +1914,106 @@ class _SideNavFooter extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = tokens.color;
+    final strings = ref.watch(activeThemeStringsProvider);
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 2),
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: colors.borderSubtle)),
       ),
-      child: Row(
+      child: InkWell(
+        key: const Key('about-button'),
+        onTap: () => showDialog<void>(
+          context: context,
+          builder: (_) => _AboutDialog(
+            title: strings.resolve(ThemeStringKey.navAboutTitle),
+            versionLabel: strings
+                .resolve(ThemeStringKey.navAboutVersion)
+                .replaceAll('{version}', appDisplayVersion),
+            projectLabel: strings.resolve(ThemeStringKey.navAboutProject),
+            closeLabel: strings.resolve(ThemeStringKey.navAboutClose),
+          ),
+        ),
+        borderRadius: BorderRadius.circular(tokens.radius.sm),
+        hoverColor: colors.surfaceHover.withValues(alpha: 0.5),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 2),
+          child: Row(
+            children: <Widget>[
+              ThemeIconView(
+                slot: ThemeIconKey.nowPlaying,
+                fallback: Icons.info_outline,
+                size: 15,
+                color: colors.brandBase,
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: colors.textSecondary),
+                ),
+              ),
+              Text(
+                version,
+                style: TextStyle(fontSize: 11, color: colors.textDisabled),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AboutDialog extends StatelessWidget {
+  const _AboutDialog({
+    required this.title,
+    required this.versionLabel,
+    required this.projectLabel,
+    required this.closeLabel,
+  });
+
+  final String title;
+  final String versionLabel;
+  final String projectLabel;
+  final String closeLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = RobyneTheme.of(context).tokens;
+    final colors = tokens.color;
+    return AlertDialog(
+      key: const Key('about-dialog'),
+      title: Text(title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          ThemeIconView(
-            slot: ThemeIconKey.nowPlaying,
-            fallback: Icons.album_outlined,
-            size: 15,
-            color: colors.brandBase,
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12.5, color: colors.textSecondary),
-            ),
-          ),
           Text(
-            version,
-            style: TextStyle(fontSize: 11, color: colors.textDisabled),
+            versionLabel,
+            style: TextStyle(fontSize: 13, color: colors.textSecondary),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            projectLabel,
+            style: TextStyle(fontSize: 12, color: colors.textMuted),
+          ),
+          const SizedBox(height: 5),
+          SelectableText(
+            robyneRepositoryUrl,
+            key: const Key('about-repository-url'),
+            style: TextStyle(fontSize: 13, color: colors.accentBase),
           ),
         ],
       ),
+      actions: <Widget>[
+        TextButton(
+          key: const Key('about-close'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(closeLabel),
+        ),
+      ],
     );
   }
 }
@@ -2152,6 +2255,12 @@ class _SideNavPlaylistGroup extends ConsumerWidget {
             ?.where((playlist) => !playlist.isFavorites)
             .toList(growable: false) ??
         const <MusicPlaylist>[];
+    // A remembered playlist id outlives the destination: without this guard
+    // the rail kept the playlist row lit after the user moved to 发现 /
+    // 内容库 / 下载管理, so two rows looked selected at once. Destinations are
+    // exclusive, and so is the highlight.
+    final playlistsDestination =
+        ref.watch(selectedTabProvider) == RobyneTab.playlists;
     final selectedPlaylistId = ref.watch(selectedPlaylistIdProvider);
     if (playlists.isEmpty) {
       return Padding(
@@ -2169,7 +2278,8 @@ class _SideNavPlaylistGroup extends ConsumerWidget {
         for (final playlist in playlists)
           Builder(
             builder: (context) {
-              final selected = playlist.id == selectedPlaylistId;
+              final selected =
+                  playlistsDestination && playlist.id == selectedPlaylistId;
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
                 child: Material(
@@ -2528,9 +2638,7 @@ class _MoreTab extends ConsumerWidget {
                         selected: entry.tab == selected,
                         onTap: () {
                           Navigator.of(sheetContext).pop();
-                          sheetRef
-                              .read(selectedTabProvider.notifier)
-                              .select(entry.tab);
+                          _selectShellTab(sheetRef, entry.tab);
                         },
                       ),
                     const SizedBox(height: 12),
@@ -2624,9 +2732,7 @@ class _CompactTabBar extends ConsumerWidget {
                                   .read(selectedPlaylistIdProvider.notifier)
                                   .showLiked();
                             }
-                            ref
-                                .read(selectedTabProvider.notifier)
-                                .select(entry.tab);
+                            _selectShellTab(ref, entry.tab);
                           },
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -3056,4 +3162,17 @@ class _QueueRow extends ConsumerWidget {
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
   }
+}
+
+/// Sends the shell to [tab], landing on the destination's root.
+///
+/// Tapping 发现 always means "the catalogue". The drill-down is page state
+/// rather than a route, the rank page deliberately carries no back button, and
+/// a phone in short landscape has no top bar to hang an arrow on — so the nav
+/// entry is the one way out that is always on screen.
+void _selectShellTab(WidgetRef ref, RobyneTab tab) {
+  if (tab == RobyneTab.discover) {
+    ref.read(discoverControllerProvider.notifier).closeDetail();
+  }
+  ref.read(selectedTabProvider.notifier).select(tab);
 }

@@ -61,7 +61,7 @@
 }
 ```
 
-`topBar` 在移动端完全不出现。搜索入口收进内容区顶部。
+`topBar` 在移动端完全不出现。搜索入口收进内容区顶部：首页头部一条（`mobile-portrait.png` 的 `.msearch`），**搜索结果页正文再一条**。后者不是重复——手机没有 `topBar`，全局搜索框在屏幕上根本不存在，结果页若不自带输入框，用户想换关键词就只能退回首页头部；桌面端不渲染这一条，因为 `topBar` 已经提供了唯一输入框（`ShellChrome.topBarVisible` 是这里的判据）。
 
 ### 2.3 桌面 compact-height 退化
 
@@ -71,6 +71,19 @@
 2. `topBar` 压到 0.04
 3. `playerBar` 降为 mini bar
 4. `navBar` 收成图标条（labelMode=none）
+
+### 2.3.1 侧栏的“死区”必须塌成胶囊
+
+比例换 dp 是应用的事（D7），不是皮肤的。侧栏有一条皮肤比例恰好落不进去的带：
+
+| 解析出的侧栏宽 | 该画什么 | 该占多少 |
+|---|---|---|
+| ≥ 168dp | 图标 + 标签 | 皮肤声明的比例 |
+| < 168dp | 只画图标 | **72dp 胶囊，不是比例值** |
+
+落在中间带的宽度是纯浪费：旗舰皮肤 0.18 的比例在 760dp 窗口上算出 137dp，比它实际画的 22dp 图标宽了 65dp，那 65dp 只是居中图标两侧的空白。所以解析侧栏时若宽度低于标签阈值，就同时设 `navIconOnly = true` 并把该侧压到 72dp——把省下的宽度还给 `content`。
+
+只压 nav 所在的一侧。另一侧可能是停靠的 queue，它的 240dp 是队列自己的内容，不该被侧栏的胶囊规则挤掉。
 
 ### 2.4 区域集合就是这 5 个
 
@@ -205,14 +218,25 @@ Robyne 的标志性识别不是固定色块，而是「封面驱动氛围」：
 
 ### 4.2 桌面 · 发现
 
+发现页是**一级页面**：排行榜与热门歌单同时在场，不再藏进二级的「插件榜单」
+浏览器，也没有「每日电台」区块。
+
 `content` 从上到下：
 
-1. 区块标题「为你推荐」
-2. `banner`：横向封面卡片流
-3. 区块标题「排行榜」
-4. `grid`：3-5 列自适应
-5. 区块标题「热门歌单」
-6. `card`：3-6 列自适应
+1. 页头：标题「发现」+ 副标题「排行榜与热门歌单」+ 刷新
+2. `sources`：插件来源描边 pill 行，横向滚动；形态与搜索结果页的来源条一致
+3. 双栏（可用宽度 ≥ 620dp 且高度不是 compact）：
+   - 左栏「排行榜」：分组标题 + `grid`，3-5 列自适应
+   - 右栏「热门歌单」：标签 pill 行 + `grid`/`card`，3-6 列自适应，滚动到底加载下一页
+
+可用宽度不足（窄桌面、手机）时，两栏改为同一滚动列内的上下两段，顺序不变。
+点击任一榜单或歌单，整页切到曲目详情；返回按钮回到这两段。
+
+### 4.2.1 桌面 · 发现（窄窗口与手机）
+
+- 竖屏：页头占一行标题 + 副标题，来源条在其下；两段上下堆叠，来源条横向滚动
+- 横屏（compact height）：页头压成单行——标题、来源条、刷新同一行；两段继续堆叠
+- 详情页在所有形态下都是整页，不再保留二栏 master/detail；页头是封面 + 标题 + 刷新，**没有自己的返回键**——退出走顶栏前进/后退、系统返回，或再点一次「发现」（任何一种都会回到排行榜 + 热门歌单）
 
 ### 4.3 桌面 · 播放页
 
@@ -331,18 +355,15 @@ Robyne 的标志性识别不是固定色块，而是「封面驱动氛围」：
 
 视觉稿文件：
 
-可交互 HTML：`docs/design/mockups/index.html`（可在浏览器打开，或用 Chrome headless 按画板截图）
-画板清单与静态导出文件见 `docs/design/mockups/README.md`。
+`docs/design/mockups/index.html` —— **由应用生成，不是画出来的**。每个画板的底图是应用自己渲染的 PNG，区域标注是 `RobyneShellPlan.resolve()` 算出的真实 dp，颜色变量直接读 `assets/themes/xuan/theme.json`。
 
-主要静态导出：
+重新生成：
 
-- `docs/design/mockups/desktop-discover.png`
-- `docs/design/mockups/desktop-library.png`
-- `docs/design/mockups/desktop-search.png`
-- `docs/design/mockups/desktop-playlists.png`
-- `docs/design/mockups/desktop-downloads.png`
-- `docs/design/mockups/desktop-plugins.png`
-- `docs/design/mockups/desktop-settings.png`
-- `docs/design/mockups/desktop-lyric.png`
-- `docs/design/mockups/mobile-portrait.png`
-- `docs/design/mockups/mobile-landscape.png`
+```bash
+ROBYNE_BOARDS=1 flutter test test/design_boards_test.dart --tags boards --update-goldens
+python tool/generate_design_html.py
+```
+
+画板清单见 `docs/design/mockups/README.md`，生成物在 `test/goldens/boards/`（PNG + 同名的 `.plan.json`）。
+
+> 2026-10-14：此前的手绘 HTML/PNG 与实现漂移严重（品牌色 `#FF6B4A` vs 实际 `#FF6B3D`、侧栏 profile 块已移除、Now Playing 已反相为浅色），已整批替换为生成物。旧 PNG 已删除。

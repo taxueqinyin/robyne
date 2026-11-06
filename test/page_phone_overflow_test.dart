@@ -43,7 +43,7 @@ void main() {
     // was handed unbounded width and every chip landed on one line. At 800x360
     // a long platform name pushed the row 48px past the pane. The row is a
     // `Row` on the scroll axis now; this pins that down.
-    testWidgets('discover browser fits $size', (tester) async {
+    testWidgets('discover page fits $size', (tester) async {
       await _pumpSurface(
         tester,
         size,

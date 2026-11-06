@@ -1,0 +1,17 @@
+{
+  "topBarVisible": true,
+  "topExtent": 54.0,
+  "bottomExtent": 94.5,
+  "leftExtent": 244.79999999999998,
+  "rightExtent": 299.2,
+  "navSlot": "left",
+  "navIconOnly": false,
+  "queueSlot": "right",
+  "queueSideExtent": 299.2,
+  "queueOverlay": false,
+  "playerBarHeight": 94.5,
+  "playerMini": false,
+  "navBarBottomHeight": 0.0,
+  "contentWidth": 816.0,
+  "contentHeight": 751.5
+}

@@ -54,7 +54,6 @@ void main() {
     await controller.syncPlugins(<PluginDefinition>[
       _plugin('plugin-a', 'Source A', pluginPath),
     ]);
-    await controller.selectSurface(DiscoverSurface.hotPlaylists);
 
     var state = container.read(discoverControllerProvider);
     expect(state.selectedSheetTag?.title, 'Mood');
@@ -104,7 +103,6 @@ void main() {
     await controller.syncPlugins(<PluginDefinition>[
       _plugin('plugin-a', 'fixture-a', pluginPath),
     ]);
-    await controller.selectSurface(DiscoverSurface.hotPlaylists);
 
     final error = container.read(discoverControllerProvider).hotPlaylistsError;
     expect(error?.code, 'plugin.method_unsupported');

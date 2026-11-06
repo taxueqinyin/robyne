@@ -439,6 +439,26 @@ class RobyneShellPlan {
   static const double _queueMin = 240;
   static const double _queueMax = 420;
 
+  /// Narrowest rail that can put a label beside its icon.
+  ///
+  /// The threshold is the *rail's own content*, not a taste: a labelled row
+  /// is an 22dp glyph, a 12dp gap and the longest destination name, inside
+  /// the rail's 12dp row inset. Below it the rail has no choice but to
+  /// stack, so a width in this band is pure padding around centred glyphs.
+  ///
+  /// The shell's rail reads this constant (`router.dart`) instead of
+  /// re-declaring the number, which is what lets the plan collapse a rail
+  /// that lands in the dead band: if the two ever disagreed the rail would
+  /// draw icons while reserving a label's worth of window.
+  static const double navLabelMinWidth = 168;
+
+  /// The width an icon-only rail actually needs.
+  ///
+  /// A capsule a little wider than the brand mark (34dp) and the destination
+  /// glyph (22dp), so the rail reads as a strip of targets rather than as a
+  /// column with something missing.
+  static const double navSideCapsule = 72;
+
   final RobyneArrangement arrangement;
 
   /// Resolved dp extents. Zero means "this slot is not in use".
@@ -646,18 +666,46 @@ class RobyneShellPlan {
     // gives up its labels — the rail itself never disappears, because it is
     // the only way back to every page.
     var navIconOnly = compactHeight;
-    if (!navIconOnly &&
-        ((leftExtent > 0 &&
-                safeWidth - leftExtent - rightExtent < minContentWidth) ||
-            (rightExtent > 0 &&
-                safeWidth - leftExtent - rightExtent < minContentWidth))) {
+
+    // A rail can land in the band between the capsule and the label
+    // threshold, and that band is dead space: the flagship skin's 0.18 ratio
+    // resolves to 137dp on a 760dp window, which is too narrow for a label
+    // and 60dp wider than the glyphs it actually draws. The ratio is the
+    // skin's, but turning it into dp is this function's job (D7), so the
+    // collapse happens here rather than in the rail.
+    //
+    // Only the side carrying the nav is measured: the other side may hold a
+    // docked queue, whose 240dp is its own content and must not be clamped
+    // to a rail's capsule.
+    // The side the nav owns, if any. Only that side may be clamped to the
+    // capsule: the other side can be carrying a docked queue, whose 240dp is
+    // the queue's own content and would be squeezed into uselessness by a
+    // clamp that did not check who lives there.
+    final navSide = switch (navSlot) {
+      RobyneSlot.left => RobyneSlot.left,
+      RobyneSlot.right => RobyneSlot.right,
+      _ => null,
+    };
+    void collapseNav() {
       navIconOnly = true;
-      if (leftExtent > 0) {
-        leftExtent = math.min(leftExtent, _navSideMin + 8);
+      if (navSide == RobyneSlot.left) {
+        leftExtent = math.min(leftExtent, navSideCapsule);
+      } else if (navSide == RobyneSlot.right) {
+        rightExtent = math.min(rightExtent, navSideCapsule);
       }
-      if (rightExtent > 0) {
-        rightExtent = math.min(rightExtent, _navSideMin + 8);
+    }
+
+    if (navSide != null) {
+      final navExtent = navSide == RobyneSlot.left ? leftExtent : rightExtent;
+      if (navExtent > 0 && navExtent < navLabelMinWidth) {
+        collapseNav();
       }
+    }
+
+    if (!navIconOnly &&
+        (leftExtent > 0 || rightExtent > 0) &&
+        safeWidth - leftExtent - rightExtent < minContentWidth) {
+      collapseNav();
     }
 
     // An overlay floats, so it is sized from the queue ratio but capped so a

@@ -111,6 +111,8 @@ class CollectionActions extends ConsumerWidget {
       await playlists.saveCollectionAsPlaylist(
         collectionKey: collection.uniqueKey,
         name: collection.title,
+        description: collection.description ?? '',
+        coverUrl: collection.artworkUrl,
         items: tracks.map(PlaybackItem.fromMusicItem).toList(growable: false),
       );
     } catch (error) {
